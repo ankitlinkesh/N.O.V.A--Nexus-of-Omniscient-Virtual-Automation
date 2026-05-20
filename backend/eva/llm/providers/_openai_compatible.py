@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import json
 import os
 
 import httpx
@@ -47,7 +48,7 @@ class OpenAICompatibleProvider:
                 provider=self.name,
                 model=self.model,
                 ok=False,
-                error=response.text[:500],
+                error=self._error_text(response),
                 status_code=response.status_code,
                 rate_limited=response.status_code == 429,
                 retry_after_seconds=retry_after_from_headers(raw_headers),
@@ -60,6 +61,17 @@ class OpenAICompatibleProvider:
             return LLMResponse(provider=self.name, model=self.model, ok=False, error=f"invalid_response:{exc}", status_code=response.status_code, raw_headers=self._safe_headers(raw_headers))
         return LLMResponse(provider=self.name, model=self.model, text=text, ok=bool(text), error=None if text else "empty_response", status_code=response.status_code, raw_headers=self._safe_headers(raw_headers))
 
+
+    def _error_text(self, response: httpx.Response) -> str:
+        try:
+            data = response.json()
+            error = data.get("error") if isinstance(data, dict) else None
+            if isinstance(error, dict):
+                safe = {key: error.get(key) for key in ("message", "type", "code", "status", "param") if error.get(key) is not None}
+                return json.dumps({"error": safe}, ensure_ascii=False)[:500]
+        except Exception:
+            pass
+        return response.text[:500]
     def _safe_headers(self, headers: dict[str, str]) -> dict[str, str]:
         keep = {
             "retry-after",
@@ -75,3 +87,4 @@ class OpenAICompatibleProvider:
             "x-ratelimit-reset-tokens",
         }
         return {k: v for k, v in headers.items() if k in keep}
+

@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import time
 from typing import Iterable
 
@@ -11,7 +12,7 @@ from .providers.gemini import GeminiProvider
 from .providers.groq import GroqEmergencyProvider, GroqProvider
 from .providers.ollama import OllamaProvider
 from .providers.openrouter import OpenRouterProvider
-from .rate_limiter import LLMRateLimiter, provider_limits
+from .rate_limiter import LLMRateLimiter, provider_limits, provider_token_limits
 from .types import LLMAttempt, LLMProvider, LLMResponse, Message, RoutedLLMResponse
 
 DEFAULT_PROVIDER_ORDER = ["gemini", "groq", "openrouter", "clod"]
@@ -54,7 +55,7 @@ def _is_retryable_failure(response: LLMResponse) -> bool:
         return True
     if response.status_code >= 500:
         return True
-    if response.error in {"empty_response", "missing_api_key"}:
+    if response.error in {"empty_response", "missing_api_key", "invalid_planner_json"}:
         return True
     return False
 
@@ -70,18 +71,78 @@ def _json_is_valid(text: str) -> bool:
         return False
 
 
+def _normalized_attempt_error(response: LLMResponse) -> str | None:
+    if response.ok:
+        return response.error
+    if response.rate_limited or response.status_code == 429:
+        return "rate_limited_429"
+    if response.error in {"missing_api_key", "empty_response", "invalid_planner_json"}:
+        return response.error
+    if response.error and response.error.startswith("soft_limit_exhausted"):
+        return "soft_limit_exhausted"
+    if response.error and response.error.startswith("blocked_until:"):
+        return response.error
+    if response.status_code is None and response.error:
+        return "network_error"
+    if response.status_code is not None and response.status_code >= 500:
+        return "provider_error"
+    return response.error or "provider_error"
+
+
 def _attempt_from_response(response: LLMResponse, purpose: str, *, selected_provider: str | None = None, fallback_used: bool = False) -> LLMAttempt:
     return LLMAttempt(
         provider=response.provider,
         model=response.model,
         purpose=purpose,
         ok=response.ok,
-        error=response.error,
+        error=_normalized_attempt_error(response),
         status_code=response.status_code,
         rate_limited=response.rate_limited,
         fallback_used=fallback_used,
         selected_provider=selected_provider,
     )
+
+
+def _estimated_tokens(messages: list[Message], max_tokens: int) -> int:
+    chars = sum(len(str(item.get("content", ""))) for item in messages)
+    return max(1, chars // 4 + max_tokens)
+
+
+async def _call_provider(
+    provider: LLMProvider,
+    limiter: LLMRateLimiter,
+    messages: list[Message],
+    *,
+    purpose: str,
+    temperature: float,
+    max_tokens: int,
+) -> tuple[LLMResponse, bool]:
+    estimate = _estimated_tokens(messages, max_tokens)
+    response = await provider.complete(messages, temperature=temperature, max_tokens=max_tokens)
+    if response.ok and purpose == "planner" and not _json_is_valid(response.text):
+        response = LLMResponse(
+            provider=response.provider,
+            model=response.model,
+            text=response.text,
+            ok=False,
+            error="invalid_planner_json",
+            status_code=response.status_code,
+            rate_limited=False,
+            raw_headers=response.raw_headers,
+        )
+    if response.ok:
+        limiter.record_success(provider.name, provider.model, estimated_tokens=estimate)
+    else:
+        limiter.record_failure(
+            provider.name,
+            response.error or "unknown_error",
+            model=provider.model,
+            rate_limited=response.rate_limited,
+            retry_after_seconds=response.retry_after_seconds,
+            count_attempt=True,
+            estimated_tokens=estimate,
+        )
+    return response, _is_retryable_failure(response)
 
 
 async def complete_with_fallback(
@@ -94,7 +155,7 @@ async def complete_with_fallback(
 ) -> RoutedLLMResponse:
     limiter = LLMRateLimiter()
     attempts: list[LLMAttempt] = []
-    tried_cloud_count = 0
+    estimate = _estimated_tokens(messages, max_tokens)
 
     for name in provider_order():
         provider = build_provider(name, settings)
@@ -106,34 +167,25 @@ async def complete_with_fallback(
             attempts.append(_attempt_from_response(response, purpose, fallback_used=bool(attempts)))
             continue
 
-        allowed, reason = limiter.can_call(name)
+        allowed, reason = limiter.can_call(name, getattr(provider, "model", None), estimated_tokens=estimate)
         if not allowed:
             response = LLMResponse(provider=name, model=getattr(provider, "model", ""), ok=False, error=reason)
             attempts.append(_attempt_from_response(response, purpose, fallback_used=bool(attempts)))
+            if name == "groq":
+                emergency = GroqEmergencyProvider(settings)
+                if emergency.available() and emergency.model != provider.model:
+                    allowed_emergency, emergency_reason = limiter.can_call("groq", emergency.model, estimated_tokens=estimate)
+                    if allowed_emergency:
+                        emergency_response, _ = await _call_provider(emergency, limiter, messages, purpose=purpose, temperature=temperature, max_tokens=max_tokens)
+                        if emergency_response.ok and emergency_response.text.strip():
+                            attempts.append(_attempt_from_response(emergency_response, purpose, selected_provider="groq", fallback_used=True))
+                            return RoutedLLMResponse(response=emergency_response, attempts=attempts, fallback_occurred=True)
+                        attempts.append(_attempt_from_response(emergency_response, purpose, fallback_used=True))
+                    else:
+                        attempts.append(LLMAttempt(provider="groq", model=emergency.model, purpose=purpose, ok=False, error=emergency_reason, fallback_used=True))
             continue
 
-        if name != "ollama":
-            tried_cloud_count += 1
-
-        response = await provider.complete(messages, temperature=temperature, max_tokens=max_tokens)
-        if response.ok:
-            limiter.record_success(name)
-        else:
-            limiter.record_failure(name, response.error or "unknown_error", rate_limited=response.rate_limited, retry_after_seconds=response.retry_after_seconds)
-
-        if response.ok and purpose == "planner" and not _json_is_valid(response.text):
-            response = LLMResponse(
-                provider=response.provider,
-                model=response.model,
-                text=response.text,
-                ok=False,
-                error="invalid_planner_json",
-                status_code=response.status_code,
-                rate_limited=False,
-                raw_headers=response.raw_headers,
-            )
-            limiter.record_failure(name, "invalid_planner_json")
-
+        response, retryable = await _call_provider(provider, limiter, messages, purpose=purpose, temperature=temperature, max_tokens=max_tokens)
         if response.ok and response.text.strip():
             selected = response.provider
             attempts.append(_attempt_from_response(response, purpose, selected_provider=selected, fallback_used=bool(attempts)))
@@ -141,18 +193,12 @@ async def complete_with_fallback(
 
         attempts.append(_attempt_from_response(response, purpose, fallback_used=bool(attempts)))
 
-        if name == "groq" and provider.model == os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile") and _is_retryable_failure(response):
+        if name == "groq" and provider.model == os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile") and retryable:
             emergency = GroqEmergencyProvider(settings)
             if emergency.available() and emergency.model != provider.model:
-                allowed, reason = limiter.can_call("groq")
+                allowed, reason = limiter.can_call("groq", emergency.model, estimated_tokens=estimate)
                 if allowed:
-                    emergency_response = await emergency.complete(messages, temperature=temperature, max_tokens=max_tokens)
-                    if emergency_response.ok:
-                        limiter.record_success("groq")
-                    else:
-                        limiter.record_failure("groq", emergency_response.error or "unknown_error", rate_limited=emergency_response.rate_limited, retry_after_seconds=emergency_response.retry_after_seconds)
-                    if emergency_response.ok and purpose == "planner" and not _json_is_valid(emergency_response.text):
-                        emergency_response = LLMResponse(provider="groq", model=emergency.model, text=emergency_response.text, ok=False, error="invalid_planner_json", status_code=emergency_response.status_code)
+                    emergency_response, _ = await _call_provider(emergency, limiter, messages, purpose=purpose, temperature=temperature, max_tokens=max_tokens)
                     if emergency_response.ok and emergency_response.text.strip():
                         attempts.append(_attempt_from_response(emergency_response, purpose, selected_provider="groq", fallback_used=True))
                         return RoutedLLMResponse(response=emergency_response, attempts=attempts, fallback_occurred=True)
@@ -172,10 +218,33 @@ def _env_has_key(name: str) -> bool:
     return bool(os.environ.get(name, "").strip())
 
 
+
+def _sanitize_status_error(error: object) -> str:
+    text = str(error or "")[:500]
+    try:
+        data = json.loads(text)
+        err = data.get("error") if isinstance(data, dict) else None
+        if isinstance(err, dict):
+            safe = {key: err.get(key) for key in ("message", "type", "code", "status", "param") if err.get(key) is not None}
+            return json.dumps({"error": safe}, ensure_ascii=False)[:500]
+    except Exception:
+        pass
+    return re.sub(r'[,\s]*"user_id"\s*:\s*"[^"]*"', "", text)
+
+def _sanitize_usage_state(usage: dict) -> dict:
+    sanitized = {}
+    for key, entry in usage.items():
+        if not isinstance(entry, dict):
+            continue
+        clean = entry.copy()
+        if clean.get("last_error"):
+            clean["last_error"] = _sanitize_status_error(clean.get("last_error"))
+        sanitized[key] = clean
+    return sanitized
 def get_llm_status(settings: ModelSettings | None = None) -> dict:
     settings = settings or ModelSettings()
     limiter = LLMRateLimiter()
-    usage = limiter.status()
+    usage = _sanitize_usage_state(limiter.status())
     models = {
         "gemini": os.environ.get("GEMINI_MODEL", settings.smart_model or "gemini-2.5-flash"),
         "groq": os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
@@ -193,12 +262,26 @@ def get_llm_status(settings: ModelSettings | None = None) -> dict:
     }
     now = int(time.time())
     blocked = {
-        provider: int(entry.get("blocked_until") or 0)
-        for provider, entry in usage.items()
-        if int(entry.get("blocked_until") or 0) > now
+        key: int(entry.get("blocked_until") or 0)
+        for key, entry in usage.items()
+        if isinstance(entry, dict) and int(entry.get("blocked_until") or 0) > now
     }
-    last_errors = {provider: entry.get("last_error") for provider, entry in usage.items() if entry.get("last_error")}
-    limits = {provider: {"soft_rpm": provider_limits(provider)[0], "soft_rpd": provider_limits(provider)[1]} for provider in ["gemini", "groq", "openrouter", "clod"]}
+    last_errors = {key: _sanitize_status_error(entry.get("last_error")) for key, entry in usage.items() if isinstance(entry, dict) and entry.get("last_error")}
+    limits = {}
+    for provider, model in {
+        "gemini": models["gemini"],
+        "groq": models["groq"],
+        "groq_fallback": models["groq_fallback"],
+        "openrouter": models["openrouter"],
+        "clod": models["clod"],
+    }.items():
+        base_provider = "groq" if provider == "groq_fallback" else provider
+        rpm, rpd = provider_limits(base_provider, model)
+        tpm, tpd = provider_token_limits(base_provider, model)
+        limits[provider] = {"soft_rpm": rpm, "soft_rpd": rpd, "soft_tpm": tpm, "soft_tpd": tpd}
+    warnings = []
+    if models["openrouter"] and not str(models["openrouter"]).endswith(":free"):
+        warnings.append("OpenRouter model does not end with :free and may use paid credits.")
     return {
         "provider_order": provider_order(),
         "configured_keys": keys,
@@ -207,9 +290,14 @@ def get_llm_status(settings: ModelSettings | None = None) -> dict:
         "blocked_providers": blocked,
         "last_errors": last_errors,
         "limits": limits,
+        "warnings": warnings,
         "allow_cloud_fallback": os.environ.get("EVA_ALLOW_CLOUD_FALLBACK", "true").strip().lower() not in {"0", "false", "no", "off"},
     }
 
 
 def attempts_as_dicts(attempts: Iterable[LLMAttempt]) -> list[dict]:
     return [attempt.__dict__.copy() for attempt in attempts]
+
+
+
+

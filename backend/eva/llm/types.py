@@ -65,4 +65,14 @@ def retry_after_from_headers(headers: dict[str, str]) -> int | None:
         seconds = float(value)
         return max(1, min(3600, int(seconds)))
     except ValueError:
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
+        import time
+
+        parsed = parsedate_to_datetime(value)
+        seconds = int(parsed.timestamp() - time.time())
+        return max(1, min(3600, seconds))
+    except Exception:
         return None
+
