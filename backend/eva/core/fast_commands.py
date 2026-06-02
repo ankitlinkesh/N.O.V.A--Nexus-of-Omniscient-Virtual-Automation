@@ -370,6 +370,26 @@ def _handle_resource_registry_command(normalized: str, original: str) -> tuple[s
 
         return format_resource_registry_status(), "fast-command"
 
+    if normalized == "resources safe":
+        from ..resources.status import format_resources_by_status
+
+        return format_resources_by_status("safe"), "fast-command"
+
+    if normalized == "resources experimental":
+        from ..resources.status import format_resources_by_status
+
+        return format_resources_by_status("experimental"), "fast-command"
+
+    if normalized == "resources blocked":
+        from ..resources.status import format_resources_by_status
+
+        return format_resources_by_status("blocked"), "fast-command"
+
+    if normalized in {"resource categories", "resources categories"}:
+        from ..resources.status import format_resource_categories
+
+        return format_resource_categories(), "fast-command"
+
     if normalized in {"mcp status", "mcp policy status"}:
         from ..resources.status import format_mcp_policy_status
 
@@ -965,6 +985,38 @@ def maybe_handle_fast_command(
     if preview:
         return preview
 
+    if normalized in {"eva release status", "eva public status", "eva community status"}:
+        from ..release.status import format_release_status
+
+        return format_release_status(), "fast-command"
+
+    if normalized == "eva public checklist":
+        from ..release.status import format_public_release_checklist
+
+        return format_public_release_checklist(), "fast-command"
+
+    if normalized == "eva demo scenarios":
+        from ..demo.runner import format_demo_scenarios
+
+        return format_demo_scenarios(), "fast-command"
+
+    demo_run = _after_prefix(original, ("eva demo run ",))
+    if demo_run:
+        from ..demo.runner import format_demo_run
+
+        return format_demo_run(demo_run), "fast-command"
+
+    safety_request = _after_prefix(original, ("eva safety test ",))
+    if safety_request:
+        from ..demo.safety_simulator import simulate_public_safety
+
+        return simulate_public_safety(safety_request).as_text(), "fast-command"
+
+    if normalized in {"eva doctor", "eva doctor public"}:
+        from ..release.doctor import format_public_doctor
+
+        return format_public_doctor(), "fast-command"
+
     resource_command = _handle_resource_registry_command(normalized, original)
     if resource_command:
         return resource_command
@@ -1032,6 +1084,36 @@ def maybe_handle_fast_command(
             return _format_research_status(tools.run("research_status"), raw=True), "research-tool"
         except Exception as exc:
             return _json_debug({"ok": False, "error": str(exc)}), "research-tool"
+
+    if normalized == "research memory help":
+        from ..research_memory.help import format_research_memory_help
+
+        return format_research_memory_help(), "fast-command"
+
+    if normalized == "research memory commands":
+        from ..research_memory.help import format_research_memory_command_reference
+
+        return format_research_memory_command_reference(), "fast-command"
+
+    if normalized == "research memory examples":
+        from ..research_memory.help import format_research_memory_examples
+
+        return format_research_memory_examples(), "fast-command"
+
+    if normalized == "research memory safety":
+        from ..research_memory.help import format_research_memory_safety
+
+        return format_research_memory_safety(), "fast-command"
+
+    if normalized == "research memory phase summary":
+        from ..research_memory.help import format_research_memory_phase_summary
+
+        return format_research_memory_phase_summary(), "fast-command"
+
+    if normalized == "research memory import demo":
+        from ..research_memory.demo_pack import format_demo_import_result, import_demo_research_pack
+
+        return format_demo_import_result(import_demo_research_pack()), "fast-command"
 
     if normalized in {"research memory status", "research memory v2 status"}:
         from ..research_memory.status import format_research_memory_status
@@ -1183,7 +1265,7 @@ def maybe_handle_fast_command(
 
         return clear_research_memory_topic(clear_topic_match.group(1).strip(), confirmed=bool(clear_topic_match.group(2))), "fast-command"
 
-    if normalized in {"recent research", "recent research memory"}:
+    if normalized in {"recent research", "recent research memory", "research memory recent"}:
         from ..research_memory.status import format_recent_research
 
         return format_recent_research(limit=10), "fast-command"
@@ -1217,7 +1299,7 @@ def maybe_handle_fast_command(
 
         return format_research_search(research_memory_query), "fast-command"
 
-    research_topic = _after_prefix(original, ("research topic ", "summarize research topic ", "summarise research topic "))
+    research_topic = _after_prefix(original, ("research memory topic ", "research topic ", "summarize research topic ", "summarise research topic "))
     if research_topic:
         from ..research_memory.status import format_research_topic_summary
 
@@ -1245,6 +1327,14 @@ def maybe_handle_fast_command(
             ),
             "fast-command",
         )
+
+    save_research_memory_match = re.match(
+        r"^\s*research memory save\s+topic\s+(.+?)\s+note\s+(.+)$",
+        original,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if save_research_memory_match:
+        return _save_research_memory_note(save_research_memory_match.group(1), save_research_memory_match.group(2)), "fast-command"
 
     if normalized in {"copy current url", "copy current link", "copy this url", "copy this page url"}:
         return _run_tool(tools, "chrome_copy_current_url", session_context)

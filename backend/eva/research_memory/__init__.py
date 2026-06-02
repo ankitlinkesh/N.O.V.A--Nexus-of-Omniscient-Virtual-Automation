@@ -9,6 +9,14 @@ from .io import (
     format_research_memory_stats,
     import_research_note,
 )
+from .help import (
+    format_research_memory_command_reference,
+    format_research_memory_examples,
+    format_research_memory_help,
+    format_research_memory_phase_summary,
+    format_research_memory_safety,
+)
+from .demo_pack import format_demo_import_result, import_demo_research_pack
 from .quality import format_duplicates_preview, format_quality_report, format_research_tags
 from .retrieval import (
     explain_retrieval_plan,
@@ -71,6 +79,13 @@ __all__ = [
     "format_research_topic_summary",
     "format_retrieval_results",
     "format_research_context_for_state",
+    "format_research_memory_command_reference",
+    "format_research_memory_examples",
+    "format_research_memory_help",
+    "format_research_memory_phase_summary",
+    "format_research_memory_safety",
+    "format_demo_import_result",
+    "import_demo_research_pack",
     "format_vector_index_preview",
     "format_vector_search",
     "format_vector_status",

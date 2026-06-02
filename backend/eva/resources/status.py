@@ -100,3 +100,40 @@ def format_resource_detail(resource_id: str) -> str:
             f"Notes: {resource.notes}",
         ]
     )
+
+
+def format_resources_by_status(status: str) -> str:
+    wanted = str(status or "").strip().lower()
+    labels = {
+        "safe": "Safe resources",
+        "experimental": "Experimental resources",
+        "blocked": "Blocked resources",
+    }
+    if wanted == "safe":
+        resources = [resource for resource in get_all_resources() if evaluate_resource_by_id(resource.id).allowed and resource.risk_level == "low"]
+    elif wanted == "experimental":
+        resources = [resource for resource in get_all_resources() if resource.status == "experimental"]
+    elif wanted == "blocked":
+        resources = [resource for resource in get_all_resources() if not evaluate_resource_by_id(resource.id).allowed]
+    else:
+        resources = []
+    lines = [labels.get(wanted, "Resources"), "", f"Count: {len(resources)}"]
+    if resources:
+        for resource in sorted(resources, key=lambda item: (item.category, item.id))[:40]:
+            decision = evaluate_resource_by_id(resource.id)
+            lines.append(f"- {resource.id}: {resource.name} ({resource.category}, risk {decision.risk_level}, {decision.status})")
+    else:
+        lines.append("No matching resources are currently cataloged.")
+    lines.extend(["", "Explorer scope: catalog view only; no tools were run and no network call was made."])
+    return "\n".join(lines)
+
+
+def format_resource_categories() -> str:
+    counts: dict[str, int] = {}
+    for resource in get_all_resources():
+        counts[resource.category] = counts.get(resource.category, 0) + 1
+    lines = ["Resource categories", "", f"Categories: {len(counts)}"]
+    for category, count in sorted(counts.items()):
+        lines.append(f"- {category}: {count}")
+    lines.extend(["", "Explorer scope: catalog view only; no tools were run and no network call was made."])
+    return "\n".join(lines)

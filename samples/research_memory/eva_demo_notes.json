@@ -1,0 +1,48 @@
+{
+  "schema": "eva_research_memory_demo_pack_v1",
+  "source": "demo_fake_public_release_pack",
+  "notes": [
+    {
+      "topic": "Eva v2 runtime demo",
+      "title": "demo_fake Eva v2 runtime skeleton",
+      "tags": ["eva", "runtime", "v2"],
+      "text": "Eva v2 has a typed runtime skeleton for explicit dry-run, route, plan, and safe execution previews. Normal chat routing remains unchanged."
+    },
+    {
+      "topic": "Eva Research Memory demo",
+      "title": "demo_fake Research Memory local notes",
+      "tags": ["research", "memory", "local"],
+      "text": "Research Memory stores sanitized local notes and supports lexical search, retrieval, topic summaries, tags, quality warnings, and exports."
+    },
+    {
+      "topic": "Eva MCP policy demo",
+      "title": "demo_fake MCP policy",
+      "tags": ["mcp", "policy", "safety"],
+      "text": "MCP resources are cataloged for future connector work but disabled by default. Public demos do not execute MCP tools."
+    },
+    {
+      "topic": "Eva Resource Registry demo",
+      "title": "demo_fake Resource Registry",
+      "tags": ["resources", "registry", "policy"],
+      "text": "The resource registry records tool categories, risk levels, default-enabled state, and policy notes without installing packages or running tools."
+    },
+    {
+      "topic": "Eva Browser Safety demo",
+      "title": "demo_fake browser automation safety",
+      "tags": ["browser", "chrome", "safety"],
+      "text": "Browser automation must be visible, user-commanded, and must not read cookies, tokens, localStorage, sessionStorage, passwords, or private pages."
+    },
+    {
+      "topic": "Eva Desktop Safety demo",
+      "title": "demo_fake desktop automation safety",
+      "tags": ["desktop", "safety", "ui"],
+      "text": "Desktop control is bounded by permission gates and target confidence. Public release demos do not run PyAutoGUI or raw coordinate clicks."
+    },
+    {
+      "topic": "Eva Vector Search demo",
+      "title": "demo_fake vector search disabled",
+      "tags": ["vector", "search", "disabled"],
+      "text": "Research Memory vector search has an optional local interface but remains disabled by default. Lexical retrieval remains the baseline."
+    }
+  ]
+}
