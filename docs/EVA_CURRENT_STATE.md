@@ -55,7 +55,7 @@ This is a repo-local handoff for future Codex runs. Treat the working tree as ac
 From the repo root:
 
 ```powershell
-cd "C:\Users\HP\Documents\Codex\eva-agent"
+cd <repo-root>
 .\.venv\Scripts\python.exe -m uvicorn backend.eva.main:app --host 0.0.0.0 --port 8765
 ```
 

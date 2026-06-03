@@ -6,6 +6,8 @@ Eva Research Memory is the local saved-research system for Eva. It stores saniti
 
 Research Memory data is local runtime data. Eva may still use API-backed LLM providers elsewhere when configured, so this document only describes the Research Memory storage and command surface.
 
+For public/community releases, Eva is source-available under the PolyForm Noncommercial License 1.0.0. Public release artifacts must not include `.env`, `.env.local`, API keys, personal Research Memory database files, screenshots, private browser/session data, local model files, or runtime traces.
+
 ## Current Capability Summary
 
 - Research Memory v2 local note store with clean status, recent, topics, save, search, and topic-summary output.

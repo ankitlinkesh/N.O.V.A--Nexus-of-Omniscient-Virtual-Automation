@@ -9,6 +9,8 @@ __pycache__/
 .env
 *.env
 .env.local
+.env.*
+!.env.example
 .env.*.local
 *.secrets
 *.secret
@@ -28,6 +30,11 @@ logs/
 screenshots/
 screen_frames/
 node_modules/
+.pytest_cache/
+exports/
+traces/
+*.trace
+*.cache
 
 .DS_Store
 Thumbs.db

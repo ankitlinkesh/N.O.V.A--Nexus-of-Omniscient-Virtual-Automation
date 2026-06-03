@@ -46,7 +46,7 @@ Known intentional limitations after Phases 1-6:
 
 ## EVA-005: Technical terms are pronounced badly
 
-- command: Ask Eva to speak text with terms such as `OS`, `.exe`, `C:\Users\HP\Documents`, `OpenRouter`, `NVIDIA NIM`, or Windows paths.
+- command: Ask Eva to speak text with terms such as `OS`, `.exe`, repo-relative paths, `OpenRouter`, `NVIDIA NIM`, or Windows paths.
 - actual: Speech-safe replacements were added for common technical text; keep as a regression test for new voice paths.
 - expected: Voice output should normalize common technical tokens into speakable text without changing the on-screen reply.
 - likely area: TTS text normalization in `frontend/app.js` and/or `backend/eva/voice/piper.py`; add coverage to `scripts/verify_voice_ui.py`.

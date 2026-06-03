@@ -45,13 +45,16 @@ Examples:
 
 Use `research memory import demo` to import fake sample notes into the local Research Memory runtime store. The sample pack does not include private data and is not imported automatically.
 
-## Source-Available / Non-Commercial Placeholder
+## License
 
-Public release licensing is not finalized in this phase. Add the final source-available or non-commercial license text before distribution.
+Eva is source-available, not open-source. The public/community release is licensed under the PolyForm Noncommercial License 1.0.0 for non-commercial use.
+
+Commercial use, resale, paid redistribution, hosted commercial services, or selling modified versions requires separate written permission from the author.
 
 ## Do Not Commit
 
 - API keys.
+- `.env`.
 - `.env.local`.
 - Runtime data.
 - Personal Research Memory database files.

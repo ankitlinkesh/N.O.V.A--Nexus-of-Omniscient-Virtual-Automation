@@ -995,6 +995,16 @@ def maybe_handle_fast_command(
 
         return format_public_release_checklist(), "fast-command"
 
+    if normalized in {"eva public hardening status", "eva public release audit"}:
+        from ..release.hardening import format_public_release_hardening_status
+
+        return format_public_release_hardening_status(), "fast-command"
+
+    if normalized == "eva public ready check":
+        from ..release.hardening import format_public_ready_check
+
+        return format_public_ready_check(), "fast-command"
+
     if normalized == "eva demo scenarios":
         from ..demo.runner import format_demo_scenarios
 
