@@ -73,6 +73,7 @@ from .app_control_tools import app_close_request, app_focus, app_open, browser_o
 from .desktop import close_app, media_key, open_app, open_folder, open_url, system_power, system_status, web_search
 from .message_tools import message_confirm_send, message_prepare, message_send_via_ui
 from .safe_file_tools import file_copy, file_delete, file_list_dir, file_move, file_patch_text, file_read_text, file_write_text
+from ..security import tool_gate
 
 SafetyLevel = Literal["safe", "sensitive", "dangerous"]
 
@@ -280,36 +281,39 @@ class ToolRegistry:
                 name="screen.type_text",
                 description="Type text into the focused visible UI during an active task.",
                 args_schema=_schema({"text": {"type": "string"}, "reason": {"type": "string"}}, ["text", "reason"]),
-                safety_level="safe",
+                safety_level="sensitive",
                 handler=lambda text, reason: screen_type_text(str(text), str(reason)),
                 category="screen",
-                risk="low",
+                risk="medium",
                 action_type="SAFE_LOCAL_UI",
                 risk_categories=("SAFE_LOCAL_UI",),
+                requires_confirmation=True,
                 verification_method="text_field_contains",
             ),
             "screen.hotkey": ToolSpec(
                 name="screen.hotkey",
                 description="Send a bounded hotkey to the visible UI during an active task.",
                 args_schema=_schema({"keys": {"type": "array"}, "reason": {"type": "string"}}, ["keys", "reason"]),
-                safety_level="safe",
+                safety_level="sensitive",
                 handler=lambda keys, reason: screen_hotkey(list(keys or []), str(reason)),
                 category="screen",
-                risk="low",
+                risk="medium",
                 action_type="SAFE_LOCAL_UI",
                 risk_categories=("SAFE_LOCAL_UI",),
+                requires_confirmation=True,
                 verification_method="screen_state_changed",
             ),
             "screen.press": ToolSpec(
                 name="screen.press",
                 description="Press one key in the visible UI during an active task.",
                 args_schema=_schema({"key": {"type": "string"}, "reason": {"type": "string"}}, ["key", "reason"]),
-                safety_level="safe",
+                safety_level="sensitive",
                 handler=lambda key, reason: screen_press(str(key), str(reason)),
                 category="screen",
-                risk="low",
+                risk="medium",
                 action_type="SAFE_LOCAL_UI",
                 risk_categories=("SAFE_LOCAL_UI",),
+                requires_confirmation=True,
                 verification_method="screen_state_changed",
             ),
             "screen.scroll": ToolSpec(
@@ -354,7 +358,7 @@ class ToolRegistry:
                 description="Write a local text file after override; creates checkpoint and verifies read-back.",
                 args_schema=_schema({"path": {"type": "string"}, "content": {"type": "string"}, "confirmed": {"type": "boolean"}}, ["path", "content"]),
                 safety_level="sensitive",
-                handler=lambda path, content, confirmed=False: file_write_text(str(path), str(content), bool(confirmed)),
+                handler=lambda path, content: file_write_text(str(path), str(content)),
                 category="file",
                 risk="high",
                 action_type="DESTRUCTIVE_FILE_ACTION",
@@ -368,7 +372,7 @@ class ToolRegistry:
                 description="Patch a local text file after override; creates checkpoint and verifies read-back.",
                 args_schema=_schema({"path": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"}, "confirmed": {"type": "boolean"}}, ["path", "old", "new"]),
                 safety_level="sensitive",
-                handler=lambda path, old, new, confirmed=False: file_patch_text(str(path), str(old), str(new), bool(confirmed)),
+                handler=lambda path, old, new: file_patch_text(str(path), str(old), str(new)),
                 category="file",
                 risk="high",
                 action_type="DESTRUCTIVE_FILE_ACTION",
@@ -379,14 +383,16 @@ class ToolRegistry:
             ),
             "file.copy": ToolSpec(
                 name="file.copy",
-                description="Copy a local file.",
+                description="Copy a local file after confirmation; can overwrite an existing destination.",
                 args_schema=_schema({"src": {"type": "string"}, "dst": {"type": "string"}, "confirmed": {"type": "boolean"}}, ["src", "dst"]),
-                safety_level="safe",
-                handler=lambda src, dst, confirmed=False: file_copy(str(src), str(dst), bool(confirmed)),
+                safety_level="sensitive",
+                handler=lambda src, dst: file_copy(str(src), str(dst)),
                 category="file",
-                risk="low",
-                action_type="SAFE_LOCAL_READ",
-                risk_categories=("SAFE_LOCAL_READ",),
+                risk="medium",
+                action_type="DESTRUCTIVE_FILE_ACTION",
+                risk_categories=("DESTRUCTIVE_FILE_ACTION",),
+                requires_confirmation=True,
+                supports_rollback=False,
                 verification_method="file_exists",
             ),
             "file.move": ToolSpec(
@@ -394,7 +400,7 @@ class ToolRegistry:
                 description="Move a local file after override; creates checkpoint when possible.",
                 args_schema=_schema({"src": {"type": "string"}, "dst": {"type": "string"}, "confirmed": {"type": "boolean"}}, ["src", "dst"]),
                 safety_level="sensitive",
-                handler=lambda src, dst, confirmed=False: file_move(str(src), str(dst), bool(confirmed)),
+                handler=lambda src, dst: file_move(str(src), str(dst)),
                 category="file",
                 risk="high",
                 action_type="DESTRUCTIVE_FILE_ACTION",
@@ -408,7 +414,7 @@ class ToolRegistry:
                 description="Delete a local file only after override; creates checkpoint when possible.",
                 args_schema=_schema({"path": {"type": "string"}, "confirmed": {"type": "boolean"}}, ["path"]),
                 safety_level="dangerous",
-                handler=lambda path, confirmed=False: file_delete(str(path), bool(confirmed)),
+                handler=lambda path: file_delete(str(path)),
                 category="file",
                 risk="high",
                 action_type="DESTRUCTIVE_FILE_ACTION",
@@ -1223,8 +1229,81 @@ class ToolRegistry:
         spec = self._tools.get(name)
         if spec is None:
             raise KeyError(f"Unknown tool: {name}")
-        result = spec.handler(**kwargs)
+
+        # The `confirmed`/`_approved` flags carry no authority. Approval only
+        # ever comes from a ledger-confirmed pending action via run_approved().
+        # Strip them so a planner LLM or HTTP client cannot self-approve.
+        call_args = {key: value for key, value in kwargs.items() if key not in {"confirmed", "_approved"}}
+
+        decision = tool_gate.classify_tool_call(spec)
+        if decision == "hard_block":
+            return {
+                "ok": False,
+                "hard_blocked": True,
+                "message": f"{name} is blocked by policy and cannot be overridden.",
+            }
+        if decision in {"override", "confirm"}:
+            return self._create_gated_pending(name, spec, decision, call_args)
+
+        return self._invoke(spec, call_args)
+
+    def run_approved(self, pending_id: str) -> dict[str, Any]:
+        from ..permissions.ledger import get_pending_action
+
+        pending_id = str(pending_id or "").strip()
+        action = get_pending_action(pending_id)
+        if action is None:
+            return {"ok": False, "error": f"No pending action `{pending_id}`."}
+        if action.status not in {"confirmed", "confirmed_but_executor_unavailable"}:
+            return {"ok": False, "error": f"Pending action `{pending_id}` is {action.status}, not confirmed."}
+
+        stored = tool_gate.get_pending_call(pending_id)
+        if stored is None:
+            return {"ok": False, "error": f"No in-memory call registered for `{pending_id}` (it may have already run)."}
+
+        spec = self._tools.get(stored["tool"])
+        if spec is None:
+            return {"ok": False, "error": f"Unknown tool for pending action: {stored['tool']}."}
+
+        tool_gate.pop_pending_call(pending_id)
+        return self._invoke(spec, dict(stored["args"]))
+
+    def _invoke(self, spec: ToolSpec, args: dict[str, Any]) -> Any:
+        result = spec.handler(**args)
         return asdict(result) if hasattr(result, "__dataclass_fields__") else result
+
+    def _create_gated_pending(self, name: str, spec: ToolSpec, decision: str, args: dict[str, Any]) -> dict[str, Any]:
+        from ..permissions.ledger import create_pending_action
+        from ..permissions.pending_actions import EvaPendingAction
+
+        requires_override = decision == "override"
+        risk_level = "high" if spec.safety_level == "dangerous" else "medium"
+        target = str(args.get("path") or args.get("target") or args.get("dst") or args.get("recipient") or "")
+        action = EvaPendingAction.new(
+            action_type=name,
+            risk_level=risk_level,
+            risk_category=spec.action_type,
+            summary=f"{name}: {spec.description}",
+            target=target or None,
+            payload_summary=", ".join(f"{key}={value}" for key, value in args.items()) or None,
+            requires_confirmation=not requires_override,
+            requires_override=requires_override,
+            source="tool_gate",
+            executor_available=True,
+            executor_name=name,
+            safety_reason=f"{name} is classified as {decision}-class by the tool gate.",
+            redacted_payload=args,
+        )
+        create_pending_action(action)
+        tool_gate.register_pending_call(action.id, name, args)
+        phrase = f"confirm override {action.id}" if requires_override else f"confirm {action.id}"
+        return {
+            "ok": False,
+            "requires_confirmation": True,
+            "pending_id": action.id,
+            "risk_class": decision,
+            "message": f"{name} needs approval before it runs. Say `{phrase}` to approve this exact action.",
+        }
 
     def _public_spec(self, spec: ToolSpec) -> dict[str, Any]:
         risk = spec.risk or ("high" if spec.safety_level == "dangerous" else "medium" if spec.safety_level == "sensitive" else "low")

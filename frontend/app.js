@@ -475,7 +475,7 @@ function speakWithBrowser(speech, speechId = speechSequence, retryCount = 0) {
 async function speakWithPiper(speech, speechId = speechSequence) {
   const response = await fetch("/api/tts/piper", {
     method: "POST",
-    headers: {"Content-Type": "application/json"},
+    headers: {"Content-Type": "application/json", "X-Eva-Client": "1"},
     body: JSON.stringify({text: speech}),
   });
   if (!response.ok) {
@@ -711,7 +711,7 @@ async function sendStreamingChat(message) {
 
   const response = await fetch("/api/chat/stream", {
     method: "POST",
-    headers: {"Content-Type": "application/json"},
+    headers: {"Content-Type": "application/json", "X-Eva-Client": "1"},
     body: JSON.stringify({message, session_id: sessionId}),
   });
 

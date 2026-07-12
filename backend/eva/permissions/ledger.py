@@ -122,7 +122,7 @@ def confirm_pending_action(action_id: str, override: bool = False) -> EvaPending
     action.status = "confirmed" if action.executor_available else "confirmed_but_executor_unavailable"
     _append(action, note="confirmed")
     if action.executor_available:
-        message = f"Confirmed pending action `{action.id}`. Execution handoff is available, but this phase did not run it from the ledger."
+        message = f"Confirmed pending action `{action.id}`. Ready to execute via the approved tool-gate handoff."
     else:
         message = f"Confirmed pending action `{action.id}`, but this build does not yet have a verified executor for it, so I did not execute anything."
     return EvaPendingActionResult(True, action.id, action.status, message, action)

@@ -39,7 +39,10 @@ flowchart LR
 
 ## Phone Control Flow
 
-1. Eva starts on the laptop at `0.0.0.0:8765`.
+Eva binds to `127.0.0.1:8765` by default; phone control requires explicitly
+setting `[server] host = "0.0.0.0"` in `config/eva.toml` on a trusted network.
+
+1. Eva starts on the laptop at `<configured-host>:8765`.
 2. The phone opens `http://<laptop-ip>:8765`.
 3. The UI connects to `/ws` and calls `/api/chat` for commands.
 4. Screen viewing uses `/api/screen/snapshot`, which captures the laptop screen only when the user presses the screen button.

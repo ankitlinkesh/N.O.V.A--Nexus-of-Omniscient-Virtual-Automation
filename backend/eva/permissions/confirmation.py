@@ -42,13 +42,42 @@ def handle_confirmation_command(text: str) -> str:
         return format_pending_action_result(cancel_pending_action(cancel_id))
     override_id = parse_override_action_id(clean)
     if override_id:
-        return format_pending_action_result(confirm_pending_action(override_id, override=True))
+        result = confirm_pending_action(override_id, override=True)
+        return _with_execution(override_id, result)
     confirm_id = parse_confirmation_action_id(clean)
     if confirm_id:
-        return format_pending_action_result(confirm_pending_action(confirm_id, override=False))
+        result = confirm_pending_action(confirm_id, override=False)
+        return _with_execution(confirm_id, result)
     if clean in {"yes", "yes send", "send it", "do it", "confirm", "approve", "confirm send", "open and send it", "open and send the message"}:
         return "I need a specific pending action ID. Use `pending actions` to see active actions, then say `confirm <id>`. I did not send or execute anything."
     return ""
+
+
+def _with_execution(action_id: str, result: Any) -> str:
+    """After a successful ledger confirm, execute the gated call for real.
+
+    Only tool-gate-created actions are registered in the in-memory call store,
+    so legacy pending actions (executor_available=False) fall through unchanged.
+    """
+    base = format_pending_action_result(result)
+    if not getattr(result, "success", False):
+        return base
+
+    from ..security import tool_gate
+
+    if tool_gate.get_pending_call(action_id) is None:
+        return base
+
+    # Lazy import to avoid a circular import at module load.
+    from ..tools.registry import ToolRegistry
+
+    executed = ToolRegistry().run_approved(action_id)
+    if isinstance(executed, dict) and executed.get("ok"):
+        return f"{base}\n\nExecuted `{action_id}` successfully."
+    reason = ""
+    if isinstance(executed, dict):
+        reason = str(executed.get("error") or executed.get("message") or "")
+    return f"{base}\n\nI confirmed `{action_id}`, but execution did not complete{': ' + reason if reason else '.'}"
 
 
 def handle_pending_action_status_command(text: str) -> str:

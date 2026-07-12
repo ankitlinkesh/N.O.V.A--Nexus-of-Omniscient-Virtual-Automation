@@ -1,5 +1,7 @@
 ﻿[server]
-host = "0.0.0.0"
+# Localhost only. Set to "0.0.0.0" only on a trusted network if you need
+# phone/LAN access; that exposes Eva's API to every device on the network.
+host = "127.0.0.1"
 port = 8765
 
 [security]

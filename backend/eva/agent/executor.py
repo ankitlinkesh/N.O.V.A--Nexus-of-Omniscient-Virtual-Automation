@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from .planner import PlannedToolCall
-from .action_model import AgentAction
-from ..security.permission_gate import PermissionContext, evaluate_action
 from ..tools.registry import ToolRegistry
 
 
@@ -54,33 +52,27 @@ class ToolExecutor:
         if validation_error:
             return ToolExecutionResult(ok=False, tool=call.tool, error=validation_error)
 
-        if call.tool == "guarded_power_action" and not bool(args.get("confirmed")):
-            action = str(args.get("action") or "power action")
-            return ToolExecutionResult(
-                ok=False,
-                tool=call.tool,
-                error=f"Confirmation required before {action}.",
-                requires_confirmation=True,
-                action=action,
-            )
-
-        permission = self._permission_decision(spec, call.tool, args)
-        if permission.decision in {"ask_confirmation", "ask_override"}:
-            return ToolExecutionResult(
-                ok=False,
-                tool=call.tool,
-                error=permission.reason,
-                requires_confirmation=True,
-                action=call.tool,
-            )
-        if permission.decision == "hard_block":
-            return ToolExecutionResult(ok=False, tool=call.tool, error=permission.reason)
-
+        # All permission enforcement lives in ToolRegistry.run(). The gate
+        # strips `confirmed` from args, so a planned call can never approve
+        # itself; a gated tool comes back as a requires_confirmation dict.
         try:
             result = self.registry.run(call.tool, **args)
-            return ToolExecutionResult(ok=True, tool=call.tool, result=result)
         except Exception as exc:
             return ToolExecutionResult(ok=False, tool=call.tool, error=str(exc))
+
+        if isinstance(result, dict) and result.get("requires_confirmation"):
+            return ToolExecutionResult(
+                ok=False,
+                tool=call.tool,
+                result=result,
+                error=result.get("message") or "This action requires confirmation.",
+                requires_confirmation=True,
+                action=result.get("pending_id") or call.tool,
+            )
+        if isinstance(result, dict) and result.get("hard_blocked"):
+            return ToolExecutionResult(ok=False, tool=call.tool, result=result, error=result.get("message"))
+
+        return ToolExecutionResult(ok=True, tool=call.tool, result=result)
 
     def _validate_args(self, schema: dict[str, Any], args: dict[str, Any]) -> str | None:
         properties = schema.get("properties", {}) or {}
@@ -110,22 +102,3 @@ class ToolExecutor:
                 return f"Argument {key} has unsupported value: {value}"
 
         return None
-
-    def _permission_decision(self, spec, tool_name: str, args: dict[str, Any]):
-        confirmed = bool(args.get("confirmed"))
-        action = AgentAction(
-            tool_name=tool_name,
-            action_type=getattr(spec, "action_type", "SAFE_LOCAL_READ"),
-            description=getattr(spec, "description", tool_name),
-            params=args,
-            risk_categories=list(getattr(spec, "risk_categories", ("SAFE_LOCAL_READ",))),
-            destructive=getattr(spec, "action_type", "") in {"DESTRUCTIVE_FILE_ACTION", "SYSTEM_CHANGE"},
-            privacy_sensitive=getattr(spec, "action_type", "") in {"PRIVACY_SCREEN_READ", "PRIVACY_FILE_READ", "PRIVACY_CHAT_READ"},
-            external_visible=getattr(spec, "action_type", "") in {"EXTERNAL_MESSAGE_SEND", "EXTERNAL_POST"},
-            verification={"method": getattr(spec, "verification_method", "command_result_success")},
-        )
-        context = PermissionContext(
-            user_confirmed=confirmed,
-            override_granted=confirmed,
-        )
-        return evaluate_action(action, context)

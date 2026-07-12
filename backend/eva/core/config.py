@@ -8,7 +8,9 @@ import tomllib
 
 @dataclass(frozen=True)
 class ServerSettings:
-    host: str = "0.0.0.0"
+    # Localhost by default. LAN access (e.g. phone control) is an explicit
+    # opt-in via [server] host = "0.0.0.0" in config/eva.toml.
+    host: str = "127.0.0.1"
     port: int = 8765
 
 
@@ -83,7 +85,7 @@ def load_settings(path: Path) -> Settings:
 
     return Settings(
         server=ServerSettings(
-            host=str(server.get("host", "0.0.0.0")),
+            host=str(server.get("host", "127.0.0.1")),
             port=int(server.get("port", 8765)),
         ),
         security=SecuritySettings(
