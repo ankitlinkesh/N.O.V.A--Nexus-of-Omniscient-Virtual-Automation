@@ -13,4 +13,10 @@ SAFETY_PROOF = (
 
 
 def safety_proof_text() -> str:
-    return "\n".join(("Eva public demo safety proof", *[f"- {item}" for item in SAFETY_PROOF]))
+    return "\n".join(
+        (
+            "Eva public demo safety proof",
+            *[f"- {item}" for item in SAFETY_PROOF],
+            "- For the exact, code-derived execution boundary (which tools run, which need confirmation), run `eva capability truth`.",
+        )
+    )

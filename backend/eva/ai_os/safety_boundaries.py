@@ -23,5 +23,7 @@ def safety_boundaries_text() -> str:
             "Arbitrary filesystem reads and writes remain blocked.",
             "Raw WorkSession and memory database dumps remain blocked.",
             "Dashboard output is report/status metadata and grants no authority.",
+            "The boundary lines above describe this dashboard. For the exact, code-derived",
+            "picture of which tools Eva executes and which require confirmation, run `eva capability truth`.",
         ]
     )
