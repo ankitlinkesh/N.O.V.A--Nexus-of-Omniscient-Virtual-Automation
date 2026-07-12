@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal
@@ -127,6 +127,24 @@ KNOWN_APPS = {
     "powerpoint",
 }
 KNOWN_FOLDERS = {"desktop", "documents", "downloads", "pictures", "videos", "music", "eva", "eva folder"}
+
+# Tools that perform a UI / navigation / media action, not a read. They were
+# historically labeled SAFE_LOCAL_READ; the honest action_type is SAFE_LOCAL_UI.
+# Both are allow-class in the gate, so this changes labels, not gate behavior.
+_UI_ACTION_TOOLS = frozenset({
+    "open_app", "close_app", "open_folder", "open_url",
+    "browser_open_url", "browser_save_page_to_research", "browser_open_result_and_verify",
+    "chrome_open_web_app", "chrome_open_web_app_and_verify", "chrome_search_site",
+    "chrome_search_site_and_verify", "chrome_activate_top_youtube_result", "chrome_copy_current_url",
+    "chrome_new_tab", "chrome_close_tab", "chrome_reload", "chrome_back", "chrome_forward",
+    "chrome_focus_address_bar", "media_control", "media_key",
+    "spotify_play_desktop", "spotify_play_query", "spotify_pause", "spotify_next",
+    "spotify_previous", "spotify_search", "spotify_search_desktop", "spotify_restart_current",
+    "window_focus", "window_close_safe", "window_minimize", "window_maximize", "lock_laptop",
+})
+# Power tools whose honest action_type is POWER_ACTION. They stay override-class
+# in the gate via safety_level="dangerous" (override is checked before confirm).
+_POWER_TOOLS = frozenset({"system_power", "guarded_power_action"})
 
 
 def _schema(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -1141,6 +1159,20 @@ class ToolRegistry:
                 failure_recovery="Ask for explicit confirmation before guarded power actions.",
             ),
         }
+        self._normalize_action_types()
+
+    def _normalize_action_types(self) -> None:
+        """Correct action_type metadata so it honestly reflects what each tool
+        does. Gate class is preserved: SAFE_LOCAL_UI is allow-class like the old
+        SAFE_LOCAL_READ, and POWER_ACTION tools stay override-class via their
+        dangerous safety_level."""
+        for name, spec in list(self._tools.items()):
+            if spec.action_type != "SAFE_LOCAL_READ":
+                continue
+            if name in _UI_ACTION_TOOLS:
+                self._tools[name] = replace(spec, action_type="SAFE_LOCAL_UI", risk_categories=("SAFE_LOCAL_UI",))
+            elif name in _POWER_TOOLS:
+                self._tools[name] = replace(spec, action_type="POWER_ACTION", risk_categories=("POWER_ACTION",))
 
     def list_tools(self) -> list[dict[str, Any]]:
         return [self._public_spec(spec) for spec in self._tools.values()]
