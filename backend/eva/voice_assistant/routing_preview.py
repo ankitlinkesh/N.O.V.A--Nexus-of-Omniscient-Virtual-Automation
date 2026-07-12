@@ -56,5 +56,5 @@ def build_voice_route_preview(transcript: str = "show voice assistant status") -
         no_live_asr_tts_statement="No live ASR/TTS happened.",
         no_live_llm_call_statement="No live LLM call was made.",
         no_tool_execution_statement="Voice commands cannot execute tools.",
-        no_new_write_path_statement="Phase 12L remains the only real write path.",
+        no_new_write_path_statement="Phase 12L remains a gated write path.",
     )

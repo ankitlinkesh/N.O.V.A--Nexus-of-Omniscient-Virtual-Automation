@@ -54,7 +54,7 @@ def run_agent_loop_preview(request: str = "run agent loop preview", *, max_steps
             "Actions are preview-only.",
             "Secrets/config/session data are blocked.",
             "Browser/desktop/shell/cloud/MCP execution remains locked.",
-            "Phase 12L narrow approved new .md/.txt creation remains the only real write path.",
+            "Phase 12L narrow approved new .md/.txt creation remains a gated write path.",
             f"Context threat preview: {threat_summary}",
             f"Request threat preview: {request_threat_report.blocked}; findings={len(request_threat_report.findings)}.",
         ),

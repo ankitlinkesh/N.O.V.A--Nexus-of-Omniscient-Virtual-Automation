@@ -68,7 +68,7 @@ def assert_human_safe(output: str, label: str) -> None:
     check("secrets/config/session data are blocked" in lowered, f"missing secret/session boundary in {label}")
     check("arbitrary file reads/writes are blocked" in lowered, f"missing file read/write boundary in {label}")
     check("browser/desktop/shell/cloud/mcp execution remains locked" in lowered, f"missing execution lock boundary in {label}")
-    check("phase 12l remains the only real write path" in lowered, f"missing Phase 12L boundary in {label}")
+    check("phase 12l remains a gated write path" in lowered, f"missing Phase 12L boundary in {label}")
 
 
 def _step_types(plan: object) -> set[str]:
@@ -264,7 +264,7 @@ def main() -> int:
         "workflow planner cannot execute tools",
         "browser/desktop/shell/cloud/MCP execution remains locked",
         "workflow dependency validation, precondition checks, approval previews, rollback previews, and verification plans are implemented",
-        "Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path",
+        "Phase 12L narrow approved new `.md`/`.txt` creation remains a gated write path",
         "Phase 20 Controlled Execution Gates",
     )
     for doc in DOCS:

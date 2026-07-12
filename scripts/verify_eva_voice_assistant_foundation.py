@@ -70,7 +70,7 @@ def assert_human_safe(output: str, label: str) -> None:
         "voice commands cannot execute tools",
         "secrets/config/session data are blocked",
         "browser/desktop/shell/cloud/mcp execution remains locked",
-        "phase 12l remains the only real write path",
+        "phase 12l remains a gated write path",
     ):
         check(phrase in lowered, f"missing boundary '{phrase}' in {label}")
 
@@ -305,7 +305,7 @@ def main() -> int:
         "secrets/config/session reads remain blocked",
         "arbitrary file reads/writes remain blocked",
         "browser/desktop execution remains locked",
-        "Phase 12L narrow real-create remains the only real file write path",
+        "Phase 12L narrow real-create remains a gated file write path",
         "Phase 23 AI OS / Control Center Upgrade is next",
     ):
         check(phrase.lower() in review.lower(), f"team review missing: {phrase}")
@@ -322,7 +322,7 @@ def main() -> int:
         "voice commands cannot execute tools",
         "transcript safety, provider policy, wake/listen state policy, and confirmation preview are implemented",
         "browser/desktop/shell/cloud/MCP execution remains locked",
-        "Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path",
+        "Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path",
         "Phase 23 AI OS / Control Center Upgrade",
     )
     for doc in DOCS:

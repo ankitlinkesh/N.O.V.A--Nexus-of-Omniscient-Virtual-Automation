@@ -114,7 +114,7 @@ def format_agent_loop_readiness() -> str:
             "No .env, .env.local, secrets, tokens, cookies, passwords, browser sessions, or config secrets are read.",
             "Arbitrary file reads are blocked.",
             "All actions are preview-only; agent loop cannot execute tools.",
-            "Phase 12L narrow approved new .md/.txt creation remains the only real write path.",
+            "Phase 12L narrow approved new .md/.txt creation remains a gated write path.",
             "Next phase: Phase 19 Agentic Workflow Planner.",
         ]
     )

@@ -45,7 +45,7 @@ def main() -> int:
         "hallucinated capabilities are flagged/rejected",
         "secret-like and private-path-like outputs are flagged",
         "browser/desktop execution remains locked",
-        "phase 12l narrow approved new `.md`/`.txt` creation remains the only real write path",
+        "phase 12l narrow approved new `.md`/`.txt` creation remains a gated write path",
         "next phase is 15d llm router red-team/failure tests",
     ):
         assert_true(phrase in combined, f"Phase 15C closeout documentation missing: {phrase}")

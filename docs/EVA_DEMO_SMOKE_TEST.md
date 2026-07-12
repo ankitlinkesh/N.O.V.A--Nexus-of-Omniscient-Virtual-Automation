@@ -55,7 +55,7 @@ git diff --check
 - No secrets, tokens, cookies, passwords, browser sessions, or config contents are read.
 - Browser/desktop/shell/cloud/MCP execution remains locked.
 - CodingAgent remains preview/report/status only.
-- Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.
+- Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path.
 - No new write path was added.
 
 Blocking issues: none after the focused and master verifier sweep passes.

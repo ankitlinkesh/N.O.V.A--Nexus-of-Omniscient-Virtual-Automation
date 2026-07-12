@@ -262,7 +262,7 @@ def main() -> int:
         "raw memory DB dumps remain blocked",
         "arbitrary file reads/writes remain blocked",
         "browser/desktop execution remains locked",
-        "Phase 12L narrow real-create remains the only real file write path",
+        "Phase 12L narrow real-create remains a gated file write path",
         "Phase 22 Voice Assistant is next",
     ):
         check(phrase.lower() in review.lower(), f"team review missing: {phrase}")
@@ -282,7 +282,7 @@ def main() -> int:
         "sensitive, injected, stale, conflicting, or ungrounded memories are excluded or marked",
         "context injection is preview/policy only",
         "browser/desktop/shell/cloud/MCP execution remains locked",
-        "Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path",
+        "Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path",
         "Phase 22 Voice Assistant",
     )
     for doc in DOCS:

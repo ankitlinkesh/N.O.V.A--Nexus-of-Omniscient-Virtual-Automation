@@ -9,7 +9,7 @@ def boundary_lines() -> tuple[str, ...]:
         "Tools are not executed.",
         "Browser/desktop/shell/cloud/MCP execution remains locked.",
         "Secrets/config/session data are blocked.",
-        "Phase 12L remains the only real write path.",
+        "Phase 12L remains a gated write path.",
     )
 
 

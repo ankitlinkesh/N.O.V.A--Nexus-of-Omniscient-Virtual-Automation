@@ -42,5 +42,5 @@ def build_release_candidate_report() -> ReleaseCandidateReport:
         no_publish_statement="No publishing/uploading was performed for Phase 30.",
         no_secret_read_statement="No secrets were read or exposed.",
         no_runtime_execution_unlock_statement="No runtime execution feature was unlocked.",
-        no_new_write_path_statement="Phase 12L remains the only real write path.",
+        no_new_write_path_statement="Phase 12L remains a gated write path.",
     )

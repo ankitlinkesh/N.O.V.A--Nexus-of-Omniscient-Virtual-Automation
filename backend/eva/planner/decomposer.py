@@ -181,7 +181,7 @@ def decompose_goal(goal_text: str) -> list[EvaTaskStep]:
                 _preview_step(
                     intent,
                     title,
-                    "Local deterministic roadmap/report/status only; no new execution path is enabled and Phase 12L remains the only real write boundary.",
+                    "Local deterministic roadmap/report/status only; no new execution path is enabled and Phase 12L remains a gated write boundary.",
                     capability,
                     normalized,
                     "SafetyAgent",

@@ -46,7 +46,7 @@ BOUNDARY_STATEMENTS = {
     "no_source_edit_statement": "No CodingAgent source editing is enabled.",
     "no_shell_execution_through_eva_statement": "No shell/test/package/git execution is enabled through Eva.",
     "no_unrestricted_crawler_statement": "No unrestricted crawler is enabled.",
-    "no_new_write_path_statement": "No new write path was added; Phase 12L remains the only real write path.",
+    "no_new_write_path_statement": "No new write path was added; Phase 12L remains a gated write path.",
 }
 
 

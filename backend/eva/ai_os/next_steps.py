@@ -12,7 +12,7 @@ def next_safe_step_text() -> str:
             "Phase 33 through Phase 42 are safety/catalog/quality hardening phases.",
             "Phase 41 safe real-capability pilot remains blocked until a later explicit approval phase.",
             "Phase 42 Release Candidate v2 Hardening is documentation/verification hardening only.",
-            "No new execution path is enabled; Phase 12L remains the only real write boundary.",
+            "No new execution path is enabled; Phase 12L remains a gated write boundary.",
             "The dashboard recommendation is metadata only and starts no work automatically.",
         ]
     )

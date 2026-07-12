@@ -90,7 +90,7 @@ def main() -> int:
         assert_true("locked" in lower or "not enabled" in lower, f"{label} missing locked/not-enabled wording")
         assert_true("read-only" in lower or "readiness" in lower or "proof" in lower, f"{label} missing proof/readiness wording")
         assert_true("no network" in lower or "network" in lower, f"{label} missing network boundary")
-        assert_true("phase 12l" in lower or "only real write path" in lower, f"{label} missing Phase 12L boundary")
+        assert_true("phase 12l" in lower or "gated write path" in lower, f"{label} missing Phase 12L boundary")
 
     commands = [
         "eva browser read only readiness",

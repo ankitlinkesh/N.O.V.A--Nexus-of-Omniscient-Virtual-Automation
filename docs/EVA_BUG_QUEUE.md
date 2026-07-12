@@ -1,7 +1,7 @@
 # Eva Bug Queue
 
 > **Current-state correction (2026-07-12).** Entries below that say "Phase 12L
-> ... only real write path" or "execution remains locked" are historical and no
+> ... gated write path" or "execution remains locked" are historical and no
 > longer accurate. Eva executes whitelisted tools and gates destructive/privacy/
 > external ones behind explicit user approval via `ToolRegistry.run()`. Run
 > `eva capability truth` for the code-derived boundary.
@@ -25,13 +25,13 @@ Known intentional limitations after Phases 1-6:
 Phase 28 regression boundary:
 
 - CodingAgent is preview/report/status only. Source edits, patch application, shell/test/package/git execution, arbitrary file access, live provider calls, and tool execution remain intentionally unavailable.
-- Coding plans, reviews, test plans, risk reviews, and handoffs must remain deterministic previews, and Phase 12L remains the only real file write path.
+- Coding plans, reviews, test plans, risk reviews, and handoffs must remain deterministic previews, and Phase 12L remains a gated file write path.
 
 Phase 29 regression boundary:
 
 - Public demo/release commands are documentation/report/status/profile only and must never publish, upload, package, commit, tag, push, or execute external actions.
 - Public-facing output must remain honest about locked browser/desktop control, preview-only CodingAgent behavior, local/mock News and Voice foundations, and checkout-specific verifier evidence.
-- Phase 12L remains the only real file write path; Release Candidate Hardening or commit planning requires separate user approval.
+- Phase 12L remains a gated file write path; Release Candidate Hardening or commit planning requires separate user approval.
 
 ## EVA-001: Architecture answer still needs more grounding
 
@@ -93,7 +93,7 @@ Phase 30 Release Candidate Hardening / Commit Planning is complete after this pa
 
 For Phase 30, no git add/commit/tag/push was performed and no publishing/uploading was performed. No provider SDKs or package installs were added. No real LLM/API/provider calls happen. Arbitrary file reads/writes remain blocked; browser/desktop/shell/cloud/MCP and tool execution remain locked.
 
-No secrets, tokens, cookies, passwords, browser sessions, or config contents are read. CodingAgent remains preview/report/status only. News remains local/mock or safe-read-only. Voice remains a locked/mock foundation. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path.
+No secrets, tokens, cookies, passwords, browser sessions, or config contents are read. CodingAgent remains preview/report/status only. News remains local/mock or safe-read-only. Voice remains a locked/mock foundation. Phase 12L narrow approved new `.md`/`.txt` creation remains a gated write path.
 
 ## Phase 32 post-push/demo-smoke audit
 
@@ -105,7 +105,7 @@ Phase 32 Post-Push Sync + Demo Smoke Test Hardening is complete after this pass.
 
 No commit/push/tag/release was performed in Phase 32. Demo smoke test is report/status/checklist only. No provider SDKs or package installs. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. No secrets, tokens, cookies, passwords, browser sessions, or config contents are read.
 
-Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.
+Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path.
 
 ## Phase 33-42 roadmap audit
 
@@ -118,4 +118,4 @@ Phase 33 Execution Boundary Audit is complete as a foundation after this pass.
 
 Execution boundary audit status: no new execution path is enabled. Phase 41 remains blocked until a later explicit approval phase. Phase 42 Release Candidate v2 Hardening is documentation/verification hardening only and does not tag, release, upload, publish, package, deploy, or push anything.
 
-No provider SDKs or package installs were added. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.
+No provider SDKs or package installs were added. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path.

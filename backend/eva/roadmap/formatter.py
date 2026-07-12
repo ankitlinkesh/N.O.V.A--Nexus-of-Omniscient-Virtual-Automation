@@ -15,7 +15,7 @@ from .models import ExecutionClass
 BOUNDARY_FOOTER = (
     "Roadmap scope: Phase 33 through Phase 42 are safety/catalog/quality hardening phases.",
     "No new execution path is enabled by these roadmap commands.",
-    "Phase 12L remains the only real project write boundary.",
+    "Phase 12L remains a gated project write boundary.",
     "No secrets, cookies, passwords, browser sessions, config secrets, package publishing, tag, release, push, or upload is performed.",
 )
 

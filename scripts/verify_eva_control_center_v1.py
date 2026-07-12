@@ -80,7 +80,7 @@ def main() -> int:
     assert_true("browser control: locked" in locked.lower(), "locked features explain browser control")
     assert_true("mcp: locked" in locked.lower(), "locked features explain MCP")
     assert_true("12L narrow real create" in enabled, "enabled features name 12L narrow real create")
-    assert_true("only real write path" in enabled.lower(), "enabled features states only real write path")
+    assert_true("gated write path" in enabled.lower(), "enabled features states gated write path")
     assert_true("Recommended next safe step" in next_step, "next safe step formatter exists")
 
     tools = ToolRegistry()

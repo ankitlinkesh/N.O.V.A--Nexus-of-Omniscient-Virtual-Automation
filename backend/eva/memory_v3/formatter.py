@@ -67,7 +67,7 @@ def format_memory_v3_readiness() -> str:
             "Memory is source-aware, trust-aware, freshness-aware, privacy-aware, conflict-aware, and grounding-aware.",
             "Sensitive, injected, stale, conflicting, or ungrounded memories are excluded or marked.",
             "Browser/desktop/shell/cloud/MCP execution remains locked.",
-            "Phase 12L narrow approved new .md/.txt creation remains the only real file write path.",
+            "Phase 12L narrow approved new .md/.txt creation remains a gated file write path.",
             "Next phase: Phase 22 Voice Assistant.",
         ]
     )

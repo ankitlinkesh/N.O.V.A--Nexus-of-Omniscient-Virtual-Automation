@@ -22,7 +22,7 @@ BOUNDARY_LINES = (
     "No shell/test/package/git execution is enabled through Eva.",
     "No unrestricted crawler is enabled.",
     "No arbitrary file read/write or tool execution is enabled.",
-    "Phase 12L remains the only real write path.",
+    "Phase 12L remains a gated write path.",
 )
 
 

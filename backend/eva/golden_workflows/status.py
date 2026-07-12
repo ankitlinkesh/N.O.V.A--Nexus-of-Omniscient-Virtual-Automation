@@ -55,7 +55,7 @@ def format_golden_workflow_proof() -> str:
         f"Verification state: {state.latest_real_create.message}",
         f"Rollback availability: {'yes' if status.rollback_available else 'no'}",
         f"Rollback exact phrase: {rollback_phrase}",
-        "Only real write path: Phase 12L narrow real create for approved new .md/.txt files under docs/ or samples/.",
+        "Gated write path: Phase 12L narrow real create for approved new .md/.txt files under docs/ or samples/.",
         "",
         "Latest WorkSession evidence:",
         summarize_recent_work_sessions(limit=3),

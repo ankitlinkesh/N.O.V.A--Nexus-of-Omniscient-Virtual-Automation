@@ -82,7 +82,7 @@ BOUNDARIES = (
     "no codingagent source editing is enabled",
     "no shell/test/package/git execution is enabled",
     "no unrestricted crawler is enabled",
-    "phase 12l remains the only real write path",
+    "phase 12l remains a gated write path",
 )
 
 
@@ -234,7 +234,7 @@ def main() -> int:
         "no live LLM/API calls are made",
         "no arbitrary file reads/writes happen",
         "no secret/config/session reads happen",
-        "Phase 12L narrow real-create remains the only real file write path",
+        "Phase 12L narrow real-create remains a gated file write path",
         "user-approved commit execution outside Eva",
     ):
         check(phrase.lower() in review.lower(), f"team review release boundary missing: {phrase}")

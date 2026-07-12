@@ -44,5 +44,5 @@ def build_desktop_control_dry_run(
         no_app_control_statement="No app control.",
         no_window_control_statement="No window control.",
         no_tool_execution_statement="No tool execution.",
-        no_new_write_path_statement="Phase 12L remains the only real write path.",
+        no_new_write_path_statement="Phase 12L remains a gated write path.",
     )

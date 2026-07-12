@@ -162,6 +162,6 @@ def _observation(
         no_screenshot_save_statement="No screenshots are saved to disk.",
         no_cookie_session_profile_statement="No cookies, sessions, browser profiles, or password-manager data are available.",
         no_tool_execution_statement="No tool execution is enabled by a desktop observation.",
-        no_new_write_path_statement="Phase 12L remains the only real write path.",
+        no_new_write_path_statement="Phase 12L remains a gated write path.",
         safety_notes=boundary_lines(),
     )

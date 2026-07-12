@@ -39,7 +39,7 @@ BOUNDARY_LINES = (
     "No git operations happened.",
     "No live LLM call was made.",
     "No tool execution happened.",
-    "Phase 12L remains the only real write path.",
+    "Phase 12L remains a gated write path.",
 )
 
 

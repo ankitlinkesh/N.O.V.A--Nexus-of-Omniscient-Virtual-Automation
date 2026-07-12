@@ -65,7 +65,7 @@ REQUIRED_BOUNDARIES = (
     "no shell/test/package/git execution is enabled through eva",
     "no unrestricted crawler is enabled",
     "no new write path was added",
-    "phase 12l remains the only real write path",
+    "phase 12l remains a gated write path",
 )
 
 FORBIDDEN_OUTPUT_TOKENS = (

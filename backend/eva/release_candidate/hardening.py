@@ -6,7 +6,7 @@ HARDENING_FINDINGS = (
     "Browser and desktop control remain unavailable; observation foundations do not imply control.",
     "CodingAgent remains preview/report/status only and cannot edit source or run tools.",
     "Voice remains a locked/mock foundation; News remains local/mock or safe-read-only.",
-    "Phase 12L narrow approved new .md/.txt creation remains the only real write path.",
+    "Phase 12L narrow approved new .md/.txt creation remains a gated write path.",
     "Release-candidate and commit-plan surfaces do not stage, commit, tag, push, publish, or upload.",
 )
 

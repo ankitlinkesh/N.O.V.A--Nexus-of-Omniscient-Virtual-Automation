@@ -13,4 +13,4 @@ During the demo, do not claim browser or desktop control, source editing, unrest
 
 No publishing, uploading, commit, tag, push, package installation, or external action is part of this script.
 
-Phase 12L narrow approved text-file creation remains Eva's only real write path.
+Phase 12L narrow approved text-file creation remains Eva's gated write path.

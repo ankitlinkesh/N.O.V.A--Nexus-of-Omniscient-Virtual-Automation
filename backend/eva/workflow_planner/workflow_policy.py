@@ -46,7 +46,7 @@ def workflow_policy_text() -> str:
             "Secrets/config/session data are blocked.",
             "Arbitrary file reads/writes are blocked.",
             "Browser/desktop/shell/cloud/MCP execution remains locked.",
-            "Phase 12L remains the only real write path.",
+            "Phase 12L remains a gated write path.",
             "Risk behavior: low status previews; medium planning/verification previews; high future approval required; critical and forbidden blocked/refusal previews.",
             "Dependency validation, precondition checks, approval previews, rollback previews, and verification plans are local metadata only.",
         ]

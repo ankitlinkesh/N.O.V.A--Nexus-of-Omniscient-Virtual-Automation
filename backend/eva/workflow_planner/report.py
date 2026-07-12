@@ -13,7 +13,7 @@ def format_workflow_report(plan: WorkflowPlanPreview) -> str:
         "Secrets/config/session data are blocked.",
         "Arbitrary file reads/writes are blocked.",
         "Browser/desktop/shell/cloud/MCP execution remains locked.",
-        "Phase 12L remains the only real write path.",
+        "Phase 12L remains a gated write path.",
         "",
         f"Workflow ID: {plan.workflow_id}",
         f"Workflow name: {plan.workflow_name}",

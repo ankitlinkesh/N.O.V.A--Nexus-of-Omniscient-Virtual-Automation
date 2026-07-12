@@ -67,7 +67,7 @@ def get_execution_boundary_catalog() -> tuple[ExecutionBoundary, ...]:
             ExecutionClass.PHASE12L_WRITE,
             "exact approval and new docs/samples text file only",
             "verify_eva_file_agent_real_create_gate.py",
-            "Phase 12L remains the only real project write path: new .md/.txt under docs or samples.",
+            "Phase 12L remains a gated project write path: new .md/.txt under docs or samples.",
         ),
         ExecutionBoundary(
             "file.write_text",

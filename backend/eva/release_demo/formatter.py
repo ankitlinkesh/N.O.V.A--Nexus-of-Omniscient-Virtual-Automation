@@ -21,7 +21,7 @@ BOUNDARY_LINES = (
     "No CodingAgent source editing is enabled.",
     "No shell/test/package/git execution is enabled.",
     "No unrestricted crawler is enabled.",
-    "Phase 12L remains the only real write path.",
+    "Phase 12L remains a gated write path.",
 )
 
 

@@ -1733,7 +1733,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "eva.phase12_limits": {
         "name": "Eva Phase 12 Limits",
-        "description": "Show locked execution areas and the only real write path.",
+        "description": "Show locked execution areas and a gated write path.",
         "parameters": [],
         "execution_status": "read_only_metadata",
     },
@@ -1769,7 +1769,7 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "eva.enabled_features": {
         "name": "Eva Enabled Features",
-        "description": "Show enabled safe/status features and the only real write path.",
+        "description": "Show enabled safe/status features and a gated write path.",
         "parameters": [],
         "execution_status": "read_only_metadata",
     },

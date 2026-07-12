@@ -29,7 +29,7 @@ def action_classifier_text() -> str:
             "Confirmation alone does not execute unless an existing implemented gate accepts it.",
             "Browser/desktop/shell/cloud/MCP/package execution remains locked.",
             "Secrets/config/session data are blocked.",
-            "Phase 12L narrow real-create remains the only real write path.",
+            "Phase 12L narrow real-create remains a gated write path.",
             "Classification is deterministic string-policy metadata only.",
         ]
     )

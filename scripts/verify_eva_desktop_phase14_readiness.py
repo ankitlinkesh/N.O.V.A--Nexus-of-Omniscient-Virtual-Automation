@@ -63,7 +63,7 @@ def main() -> int:
     def assert_proof_text(text: str, label: str) -> None:
         assert_clean(text, label)
         lower = text.lower()
-        for phrase in ("phase 14", "real desktop observation is not enabled", "real desktop control is not enabled", "approvals do not unlock execution", "phase 12l narrow real create remains the only real write path"):
+        for phrase in ("phase 14", "real desktop observation is not enabled", "real desktop control is not enabled", "approvals do not unlock execution", "phase 12l narrow real create remains a gated write path"):
             assert_true(phrase in lower, f"{label} missing {phrase}")
         assert_true("no desktop" in lower or "execution:" in lower, f"{label} missing no-execution proof")
 

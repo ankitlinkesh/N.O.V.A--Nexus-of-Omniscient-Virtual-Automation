@@ -60,7 +60,7 @@ def assemble_context_preview(user_request: str = "show context assembly status")
         _section(
             "safety_policy",
             "Safety boundaries",
-            "Secrets/config/session reads, arbitrary filesystem reads, live LLM calls, tool execution, browser execution, desktop execution, shell/package/cloud/MCP/PyAutoGUI/Playwright execution are blocked. Phase 12L narrow approved new .md/.txt creation remains the only real write path.",
+            "Secrets/config/session reads, arbitrary filesystem reads, live LLM calls, tool execution, browser execution, desktop execution, shell/package/cloud/MCP/PyAutoGUI/Playwright execution are blocked. Phase 12L narrow approved new .md/.txt creation remains a gated write path.",
             "safety_policy",
             "Permission and safety metadata",
             "trusted_local_policy",

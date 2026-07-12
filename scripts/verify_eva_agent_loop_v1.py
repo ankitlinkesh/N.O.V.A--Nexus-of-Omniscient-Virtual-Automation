@@ -244,7 +244,7 @@ def main() -> int:
         "agent loop cannot execute tools",
         "browser/desktop/shell/cloud/MCP execution remains locked",
         "step limits, runaway detection, repeated-step detection, and no-progress stop behavior are enforced",
-        "Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path",
+        "Phase 12L narrow approved new `.md`/`.txt` creation remains a gated write path",
         "Phase 19 Agentic Workflow Planner",
     )
     for doc in DOCS:

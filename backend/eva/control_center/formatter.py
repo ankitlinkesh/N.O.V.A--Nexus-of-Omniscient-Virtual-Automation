@@ -588,7 +588,7 @@ def format_enabled_features(status: ControlCenterStatus | None = None) -> str:
             "- FileAgent inspection, drafts, approval metadata, and sandbox verification",
             "- 12L narrow real create: create one approved new .md/.txt file under docs/ or samples/ after exact confirmation",
             "",
-            "Only real write path: 12L narrow real create. Broad file editing is still locked.",
+            "Gated write path: 12L narrow real create. Broad file editing is still locked.",
             f"Current eligible approvals: {_value(status.real_apply_summary, 'pending_eligible_approvals')}",
             "Execution: status only. No task was executed.",
         ]

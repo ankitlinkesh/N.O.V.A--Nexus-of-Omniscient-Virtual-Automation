@@ -49,7 +49,7 @@ The report is human-readable and status-only. It does not perform Git operations
 - No secrets, tokens, cookies, passwords, browser sessions, or config contents are read.
 - Browser/desktop/shell/cloud/MCP execution remains locked.
 - CodingAgent remains preview/report/status only.
-- Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.
+- Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path.
 - No new write path was added.
 
 Known warning: network or authentication can make `git fetch --dry-run origin` fail without changing files. Treat that as a remote-check blocker, not a reason to pull automatically.

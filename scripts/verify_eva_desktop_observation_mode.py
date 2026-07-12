@@ -60,7 +60,7 @@ BOUNDARIES = (
     "no saved screenshots",
     "no cookies, sessions, or browser profiles",
     "no tool execution",
-    "phase 12l remains the only real write path",
+    "phase 12l remains a gated write path",
 )
 
 
@@ -344,7 +344,7 @@ def main() -> int:
         "arbitrary file reads/writes remain blocked",
         "browser control remains locked",
         "desktop control remains locked",
-        "Phase 12L narrow real-create remains the only real file write path",
+        "Phase 12L narrow real-create remains a gated file write path",
         "Phase 26 Real Desktop Control Gate is next",
     ):
         check(phrase.lower() in review.lower(), f"team review missing: {phrase}")
@@ -362,7 +362,7 @@ def main() -> int:
         "desktop control remains locked",
         "browser control remains locked",
         "shell/cloud/MCP execution remains locked",
-        "Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path",
+        "Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path",
         "Phase 26 Real Desktop Control Gate",
     )
     for doc in DOCS:

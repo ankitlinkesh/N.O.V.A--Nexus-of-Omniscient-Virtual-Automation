@@ -14,7 +14,7 @@ Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains pr
 
 News remains local/mock or safe-read-only, and voice remains a locked/mock foundation.
 
-Phase 12L narrow approved text-file creation remains the only real file write path.
+Phase 12L narrow approved text-file creation remains a gated file write path.
 
 Phase 29 handed off to the Phase 30 release-candidate readiness review below.
 
@@ -28,7 +28,7 @@ For Phase 30, no git add/commit/tag/push was performed and no publishing/uploadi
 
 Arbitrary file reads/writes remain blocked. Browser/desktop/shell/cloud/MCP and tool execution remain locked. CodingAgent remains preview/report/status only. News remains local/mock or safe-read-only. Voice remains a locked/mock foundation.
 
-Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path.
+Phase 12L narrow approved new `.md`/`.txt` creation remains a gated write path.
 
 Next safe step: user-approved commit execution outside Eva or a separate explicit commit-approval phase.
 
@@ -46,7 +46,7 @@ Use `eva release smoke test` and `eva release post push sync` before a demo. Run
 
 No commit/push/tag/release was performed in Phase 32. Demo smoke test is report/status/checklist only. No provider SDKs or package installs. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. No secrets, tokens, cookies, passwords, browser sessions, or config contents are read.
 
-Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.
+Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path.
 
 ## Phase 33-42 roadmap readiness
 
@@ -66,4 +66,4 @@ Safe review commands:
 - `eva voice reliability status`
 - `eva verifier dashboard status`
 
-No provider SDKs or package installs were added. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.
+No provider SDKs or package installs were added. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path.

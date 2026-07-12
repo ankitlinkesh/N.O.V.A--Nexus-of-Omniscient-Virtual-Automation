@@ -71,7 +71,7 @@ def assert_human_safe(output: str, label: str) -> None:
         "tools are not executed",
         "browser/desktop/shell/cloud/mcp execution remains locked",
         "secrets/config/session data are blocked",
-        "phase 12l remains the only real write path",
+        "phase 12l remains a gated write path",
     ):
         check(phrase in lowered, f"missing boundary '{phrase}' in {label}")
 
@@ -292,7 +292,7 @@ def main() -> int:
         "secrets/config/session reads remain blocked",
         "arbitrary file reads/writes remain blocked",
         "browser/desktop execution remains locked",
-        "Phase 12L narrow real-create remains the only real file write path",
+        "Phase 12L narrow real-create remains a gated file write path",
         "Phase 24 Real Browser Read-Only Mode is next",
     ):
         check(phrase.lower() in review.lower(), f"team review missing: {phrase}")
@@ -309,7 +309,7 @@ def main() -> int:
         "preview-only features remain preview-only",
         "locked future gates remain locked",
         "browser/desktop/shell/cloud/MCP execution remains locked",
-        "Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path",
+        "Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path",
         "Phase 24 Real Browser Read-Only Mode",
     )
     for doc in DOCS:

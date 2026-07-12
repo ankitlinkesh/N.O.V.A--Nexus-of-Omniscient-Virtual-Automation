@@ -61,7 +61,7 @@ BOUNDARIES = (
     "no shell/package/cloud/mcp execution",
     "approval alone does not execute",
     "confirmation alone does not execute",
-    "phase 12l remains the only real write path",
+    "phase 12l remains a gated write path",
 )
 
 
@@ -247,7 +247,7 @@ def main() -> int:
         "no clipboard access happens", "no app/window control happens",
         "approval alone does not execute", "confirmation alone does not execute",
         "desktop observation remains observation-only",
-        "Phase 12L narrow real-create remains the only real file write path",
+        "Phase 12L narrow real-create remains a gated file write path",
         "Phase 27 News/Web Intelligence Dashboard is next",
     ):
         check(phrase.lower() in review.lower(), f"team review missing: {phrase}")

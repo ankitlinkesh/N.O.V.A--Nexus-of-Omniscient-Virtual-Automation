@@ -233,7 +233,7 @@ def main() -> int:
         "prompt-injection-like content is treated as untrusted data",
         "defended context cannot execute tools",
         "exfiltration and tool-request attempts fail safely",
-        "Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path",
+        "Phase 12L narrow approved new `.md`/`.txt` creation remains a gated write path",
         "Phase 18 Agent Loop v1",
     )
     for doc in DOCS:

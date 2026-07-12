@@ -68,7 +68,7 @@ def assert_human_safe(output: str, label: str) -> None:
     check("confirmation alone does not execute unless an existing implemented gate accepts it" in lowered, f"missing confirmation boundary in {label}")
     check("browser/desktop/shell/cloud/mcp/package execution remains locked" in lowered, f"missing execution lock boundary in {label}")
     check("secrets/config/session data are blocked" in lowered, f"missing secret boundary in {label}")
-    check("phase 12l narrow real-create remains the only real write path" in lowered, f"missing Phase 12L boundary in {label}")
+    check("phase 12l narrow real-create remains a gated write path" in lowered, f"missing Phase 12L boundary in {label}")
 
 
 def main() -> int:
@@ -269,7 +269,7 @@ def main() -> int:
         "secrets/config/session reads remain blocked",
         "arbitrary file reads/writes remain blocked",
         "browser/desktop/shell/cloud/MCP execution remains locked",
-        "Phase 12L narrow real-create remains the only real write path",
+        "Phase 12L narrow real-create remains a gated write path",
         "Phase 21 Memory v3 is next",
     ):
         check(phrase.lower() in review.lower(), f"team review missing: {phrase}")
@@ -286,7 +286,7 @@ def main() -> int:
         "confirmation alone does not execute unless an existing implemented gate accepts it",
         "browser/desktop/shell/cloud/MCP execution remains locked",
         "future gates are described but locked",
-        "Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path",
+        "Phase 12L narrow approved new `.md`/`.txt` creation remains a gated write path",
         "Phase 21 Memory v3",
     )
     for doc in DOCS:

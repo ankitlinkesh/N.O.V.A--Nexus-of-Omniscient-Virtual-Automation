@@ -70,7 +70,7 @@ def format_reality_check(result: RealityCheckResult | None = None) -> str:
             "Recommended next step:",
             result.recommended_next_step,
             "",
-            "Execution: read-only reality check. No task was executed.",
+            "Execution: read-gatedity check. No task was executed.",
         ]
     )
 

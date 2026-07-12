@@ -57,7 +57,7 @@ def boundary_lines() -> tuple[str, ...]:
         "No saved screenshots.",
         "No cookies, sessions, or browser profiles.",
         "No tool execution.",
-        "Phase 12L remains the only real write path.",
+        "Phase 12L remains a gated write path.",
     )
 
 

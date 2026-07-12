@@ -95,7 +95,7 @@ BOUNDARIES = (
     "no git operations happened",
     "no live llm call was made",
     "no tool execution happened",
-    "phase 12l remains the only real write path",
+    "phase 12l remains a gated write path",
 )
 
 
@@ -278,7 +278,7 @@ def main() -> int:
         "no tool execution happens",
         "no live LLM/API calls are made",
         "no arbitrary file reads/writes happen",
-        "Phase 12L narrow real-create remains the only real file write path",
+        "Phase 12L narrow real-create remains a gated file write path",
         "Phase 29 Public Demo / Release is next",
     ):
         check(phrase.lower() in review.lower(), f"team review boundary missing: {phrase}")

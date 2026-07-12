@@ -49,7 +49,7 @@ def assert_final_proof_text(text: str, label: str) -> None:
     assert_true("real browser control is not enabled" in lower, f"{label} missing control locked boundary")
     assert_true("network/dns/live page read/dom/screenshot/action execution are locked" in lower, f"{label} missing locked execution summary")
     assert_true("separate approved gate" in lower, f"{label} missing future approved gate wording")
-    assert_true("phase 12l narrow real create remains the only real write path" in lower, f"{label} missing Phase 12L boundary")
+    assert_true("phase 12l narrow real create remains a gated write path" in lower, f"{label} missing Phase 12L boundary")
     assert_true("no browser" in lower and "no network" in lower, f"{label} missing no browser/network execution proof")
 
 
@@ -126,7 +126,7 @@ def main() -> int:
     assert_true("Browser Read-Only Readiness Proof" in control, "Control Center missing readiness proof panel")
     assert_true("Phase 13 final proof" in control, "Control Center missing Phase 13 final proof wording")
     assert_true("separate approved gate" in control.lower(), "Control Center missing separate approved gate wording")
-    assert_true("Phase 12L narrow real create remains the only real write path" in control, "Control Center missing Phase 12L boundary")
+    assert_true("Phase 12L narrow real create remains a gated write path" in control, "Control Center missing Phase 12L boundary")
 
     for capability_id in (
         "browser.phase13_status",

@@ -4,7 +4,7 @@ from __future__ import annotations
 RELEASE_CANDIDATE_CHECKLIST = (
     "Dirty tree grouped by milestone and module.",
     "Public demo claims checked for locked browser, desktop, shell, provider, and source-edit boundaries.",
-    "Phase 12L documented as the only real write path.",
+    "Phase 12L documented as a gated write path.",
     "Commit plan kept text-only with no staging or Git execution.",
     "Control Center, AI OS, capability, planner, and team-review states aligned.",
     "Release-candidate docs contain no user-specific private paths.",

@@ -89,7 +89,7 @@ def main() -> int:
         "live LLM calls remain locked",
         "repair does not execute or rewrite user intent",
         "browser/desktop execution remains locked",
-        "Phase 12L narrow real create remains the only real write path",
+        "Phase 12L narrow real create remains a gated write path",
     ):
         assert_true(boundary.lower() in review.lower(), f"team review boundary missing: {boundary}")
 

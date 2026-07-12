@@ -463,7 +463,7 @@ _LINKS: tuple[CapabilityResourceLink, ...] = (
             agent="SafetyAgent",
             execution_path="fast_command",
             preview_only=True,
-            notes="Phase 33-42 report/status/catalog only; no new execution path is available and Phase 12L remains the only real write boundary.",
+            notes="Phase 33-42 report/status/catalog only; no new execution path is available and Phase 12L remains a gated write boundary.",
         )
         for name in (
             "execution_boundary_audit",

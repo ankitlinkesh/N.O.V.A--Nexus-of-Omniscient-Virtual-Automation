@@ -141,7 +141,7 @@ def eligibility_policy_text() -> str:
             "Confirmation alone does not execute unless an existing implemented gate accepts it.",
             "Browser/desktop/shell/cloud/MCP/package execution remains locked.",
             "Secrets/config/session data are blocked.",
-            "Phase 12L narrow real-create remains the only real write path.",
+            "Phase 12L narrow real-create remains a gated write path.",
             "Eligibility maps preview actions to preview_only, Phase 12L candidates to eligible_existing_phase12l_gate, future candidates to requires_future_gate, and unsafe requests to denied states.",
         ]
     )

@@ -13,6 +13,6 @@ def build_verification_plan() -> WorkflowVerificationPlan:
             "Confirm secrets/config/session data are blocked.",
             "Confirm arbitrary file reads/writes are blocked.",
             "Confirm browser/desktop/shell/cloud/MCP execution remains locked.",
-            "Confirm Phase 12L remains the only real write path.",
+            "Confirm Phase 12L remains a gated write path.",
         ),
     )

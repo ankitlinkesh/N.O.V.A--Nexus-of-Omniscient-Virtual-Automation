@@ -78,7 +78,7 @@ To verify Eva without enabling unsafe features:
 .\.venv\Scripts\python.exe scripts\verify_eva_all.py --full --timeout 90
 ```
 
-No provider SDKs or package installs are needed. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path.
+No provider SDKs or package installs are needed. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains a gated write path.
 
 ## Phase 33-42 Roadmap Foundations
 
@@ -96,7 +96,7 @@ eva voice reliability status
 eva verifier dashboard status
 ```
 
-These commands are report/status/catalog only. They classify existing runtime surfaces, document risky tool boundaries, and expose the next phase plan without enabling a new execution path. Phase 12L remains the only real project write boundary.
+These commands are report/status/catalog only. They classify existing runtime surfaces, document risky tool boundaries, and expose the next phase plan without enabling a new execution path. Phase 12L remains a gated project write boundary.
 
 Additional established safety demonstrations remain available:
 

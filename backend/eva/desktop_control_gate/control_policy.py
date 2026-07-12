@@ -17,7 +17,7 @@ BOUNDARY_LINES = (
     "No shell/package/cloud/MCP execution.",
     "Approval alone does not execute.",
     "Confirmation alone does not execute.",
-    "Phase 12L remains the only real write path.",
+    "Phase 12L remains a gated write path.",
 )
 
 

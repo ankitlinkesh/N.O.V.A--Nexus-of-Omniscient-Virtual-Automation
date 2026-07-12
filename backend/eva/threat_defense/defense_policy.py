@@ -16,7 +16,7 @@ def defense_policy_text() -> str:
             "Exfiltration and tool-request attempts fail safely.",
             "Defended context cannot execute tools.",
             "Arbitrary file reads, browser execution, desktop execution, shell/package/cloud/MCP execution, and new write paths remain blocked.",
-            "Phase 12L narrow approved new .md/.txt creation remains the only real application write path.",
+            "Phase 12L narrow approved new .md/.txt creation remains a gated application write path.",
             "No live LLM call was made.",
         ]
     )

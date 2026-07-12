@@ -22,7 +22,7 @@ def build_post_push_sync_report() -> PostPushSyncReport:
         no_push_statement="No push was made by Phase 32.",
         no_tag_release_statement="No tag or release was created by Phase 32.",
         no_secret_read_statement="No secrets were read: `.env`, `.env.local`, tokens, cookies, passwords, browser sessions, and config contents stay untouched.",
-        no_execution_unlock_statement="Browser/desktop/shell/cloud/MCP execution remains locked; CodingAgent remains preview/report/status only; Phase 12L remains the only real write path.",
+        no_execution_unlock_statement="Browser/desktop/shell/cloud/MCP execution remains locked; CodingAgent remains preview/report/status only; Phase 12L remains a gated write path.",
     )
 
 
@@ -69,7 +69,7 @@ def post_push_sync_text() -> str:
             "No CodingAgent source editing is enabled.",
             "No shell/test/package/git execution is enabled through Eva.",
             "No unrestricted crawler is enabled.",
-            "No new write path was added; Phase 12L remains the only real write path.",
+            "No new write path was added; Phase 12L remains a gated write path.",
             report.no_execution_unlock_statement,
         )
     )

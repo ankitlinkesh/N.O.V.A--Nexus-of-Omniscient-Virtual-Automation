@@ -177,6 +177,6 @@ def _observation(
         no_download_statement="No downloads or uploads are available or performed.",
         no_cookie_session_profile_statement="No cookies, sessions, browser profiles, or logged-in browser access are available.",
         no_tool_execution_statement="No tool execution is enabled by an observation.",
-        no_new_write_path_statement="Phase 12L remains the only real write path.",
+        no_new_write_path_statement="Phase 12L remains a gated write path.",
         safety_notes=boundary_lines(),
     )

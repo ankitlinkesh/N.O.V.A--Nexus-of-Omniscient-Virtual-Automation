@@ -59,5 +59,5 @@ def build_coding_report(request: str = "plan a code change") -> CodingSpecialist
         no_git_operation_statement="No git operations happened.",
         no_live_llm_call_statement="No live LLM call was made.",
         no_tool_execution_statement="No tool execution happened.",
-        no_new_write_path_statement="Phase 12L remains the only real write path.",
+        no_new_write_path_statement="Phase 12L remains a gated write path.",
     )

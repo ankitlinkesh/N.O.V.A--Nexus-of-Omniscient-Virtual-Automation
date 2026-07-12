@@ -13,7 +13,7 @@
 
 No broad real execution, secret/config/session access, shell/cloud/MCP execution, or new write path is part of the public profile.
 
-Phase 12L narrow approved text-file creation remains the only real file write path.
+Phase 12L narrow approved text-file creation remains a gated file write path.
 
 ## Phase 30 release-candidate capabilities
 
@@ -30,7 +30,7 @@ Phase 30 Release Candidate Hardening / Commit Planning is complete after this pa
 
 For Phase 30, no git add/commit/tag/push was performed and no publishing/uploading was performed. No provider SDKs or package installs were added. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read.
 
-Arbitrary file reads/writes and browser/desktop/shell/cloud/MCP/tool execution remain blocked. CodingAgent remains preview/report/status only. News remains local/mock or safe-read-only. Voice remains a locked/mock foundation. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path.
+Arbitrary file reads/writes and browser/desktop/shell/cloud/MCP/tool execution remain blocked. CodingAgent remains preview/report/status only. News remains local/mock or safe-read-only. Voice remains a locked/mock foundation. Phase 12L narrow approved new `.md`/`.txt` creation remains a gated write path.
 
 Next safe step: user-approved commit execution outside Eva or a separate explicit commit-approval phase.
 
@@ -49,6 +49,6 @@ Phase 33 Execution Boundary Audit is complete as a foundation after this pass. I
 - Phase 41 `roadmap.safe_real_pilot`: blocked until later explicit approval.
 - Phase 42 `roadmap.release_candidate_v2`: report-only release-candidate v2 hardening status.
 
-Execution boundary audit status: no new execution path is enabled. Roadmap commands classify and report existing surfaces only. Phase 12L narrow approved text-file creation remains the only real file write path.
+Execution boundary audit status: no new execution path is enabled. Roadmap commands classify and report existing surfaces only. Phase 12L narrow approved text-file creation remains a gated file write path.
 
 Phase 42 does not tag, release, upload, publish, package, deploy, or push anything. Browser/desktop/shell/cloud/MCP execution remains locked. Secret/config/session reads remain blocked.

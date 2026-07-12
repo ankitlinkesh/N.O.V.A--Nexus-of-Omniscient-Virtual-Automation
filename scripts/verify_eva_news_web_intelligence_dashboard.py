@@ -24,7 +24,7 @@ BOUNDARIES = (
     "no login/session/cookie/profile access", "no browser control",
     "no background monitoring unless a future explicit scheduler gate exists",
     "no live llm call was made", "no tool execution",
-    "phase 12l remains the only real write path",
+    "phase 12l remains a gated write path",
 )
 
 

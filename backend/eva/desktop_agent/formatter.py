@@ -329,7 +329,7 @@ def format_desktop_action_readiness() -> str:
             "- human confirmation for click/type/hotkey/clipboard/app/file-dialog actions",
             "- WorkSession audit, target-aware verification, and rollback/repair design",
             "",
-            "Phase 12L boundary still stands: the only real write path is approved new .md/.txt creation under docs/ or samples/.",
+            "Phase 12L boundary still stands: a gated write path is approved new .md/.txt creation under docs/ or samples/.",
             "Execution: readiness status only. No desktop action was executed.",
         ]
     )
@@ -439,7 +439,7 @@ def format_desktop_risk_readiness() -> str:
             "- forbidden_no_approval_available",
             "",
             f"Next phase: {matrix.next_phase}",
-            "Phase 12L boundary still stands: the only real write path is approved new .md/.txt creation under docs/ or samples/.",
+            "Phase 12L boundary still stands: a gated write path is approved new .md/.txt creation under docs/ or samples/.",
             "Execution: readiness status only. No desktop action was executed.",
         ]
     )
@@ -1001,7 +1001,7 @@ def _phase14_common_lines() -> list[str]:
         "Real desktop control is not enabled.",
         "Approvals do not unlock execution.",
         proof.future_gate,
-        "Phase 12L narrow real create remains the only real write path.",
+        "Phase 12L narrow real create remains a gated write path.",
         proof.phase12_boundary,
         "No desktop, browser, network, shell, package, MCP, PyAutoGUI, Playwright, or cloud action was executed.",
     ]
@@ -1077,7 +1077,7 @@ def format_desktop_locked_status() -> str:
 
     summary = get_locked_desktop_capability_summary()
     return "\n".join([
-        "DesktopAgent Locked Status", "", "Phase 14 locked safety/readiness foundation.", summary.summary, "Real desktop observation is not enabled.", "Real desktop control is not enabled.", "Approvals do not unlock execution.", "", "Locked now:", *_bullets(summary.locked_actions), "", "Phase 12L narrow real create remains the only real write path.", "No desktop action was executed.",
+        "DesktopAgent Locked Status", "", "Phase 14 locked safety/readiness foundation.", summary.summary, "Real desktop observation is not enabled.", "Real desktop control is not enabled.", "Approvals do not unlock execution.", "", "Locked now:", *_bullets(summary.locked_actions), "", "Phase 12L narrow real create remains a gated write path.", "No desktop action was executed.",
     ])
 
 
@@ -1086,5 +1086,5 @@ def format_desktop_readiness_gaps() -> str:
 
     lines = ["DesktopAgent Readiness Gaps", "", "Phase 14 locked safety/readiness foundation.", "Real desktop observation is not enabled.", "Real desktop control is not enabled.", "Approvals do not unlock execution.", "", "What is missing:"]
     lines.extend(f"- {gap.name}: {gap.reason} Required: {gap.required_before_enablement}" for gap in get_desktop_readiness_gaps())
-    lines.extend(["", "Phase 12L narrow real create remains the only real write path.", "No desktop action was executed."])
+    lines.extend(["", "Phase 12L narrow real create remains a gated write path.", "No desktop action was executed."])
     return "\n".join(lines)

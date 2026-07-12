@@ -65,7 +65,7 @@ def build_browser_readiness_proof() -> BrowserReadOnlyReadinessProof:
         locked_execution=get_locked_browser_execution_summary(),
         future_requirements=get_future_readonly_requirements(),
         next_phase="Future BrowserAgent read-only gate with explicit user command, domain policy, observation source limits, redaction, verification, and audit.",
-        phase12_boundary="Phase 12L narrow real create remains the only real write path: approved brand-new .md/.txt files under docs/ or samples/ with exact confirmation.",
+        phase12_boundary="Phase 12L narrow real create remains a gated write path: approved brand-new .md/.txt files under docs/ or samples/ with exact confirmation.",
         summary="BrowserAgent is ready for design/proof status only. Real browser read-only mode is not enabled.",
     )
 

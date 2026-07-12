@@ -12,6 +12,6 @@ Browser behavior is public-URL read-only observation only. Desktop behavior is o
 
 News remains local/mock or safe-read-only. CodingAgent remains preview/report/status only. Voice remains a locked/mock foundation.
 
-Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.
+Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path.
 
 The current next safe step is user-approved commit execution outside Eva or a separate explicit commit-approval phase.

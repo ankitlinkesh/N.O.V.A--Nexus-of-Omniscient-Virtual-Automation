@@ -79,7 +79,7 @@ def build_desktop_readiness_proof() -> DesktopLockedReadinessProof:
         locked_capabilities=get_locked_desktop_capability_summary(),
         future_requirements=get_future_desktop_requirements(),
         next_phase="Phase 15 LLM Router + Structured Reasoning Core. Phase 16 Context Assembly Engine, Phase 17 LLM Threat Defense + Prompt Injection Guard, and Phase 18 Agent Loop v1 are core architecture phases.",
-        phase12_boundary="Phase 12L narrow real create remains the only real write path: approved brand-new .md/.txt files under docs/ or samples/ with exact confirmation.",
+        phase12_boundary="Phase 12L narrow real create remains a gated write path: approved brand-new .md/.txt files under docs/ or samples/ with exact confirmation.",
         summary="DesktopAgent Phase 14 is complete as a locked safety/readiness foundation. Real desktop observation and real desktop control are not enabled.",
     )
 

@@ -30,7 +30,7 @@ def evaluate_execution_gate(request: str = "show execution gates status", reques
         final_readiness_status=eligibility.final_readiness_status,
         no_live_llm_call_statement="No live LLM call was made.",
         no_tool_execution_statement="Tools are not executed.",
-        no_new_write_path_statement="Phase 12L narrow real-create remains the only real write path.",
+        no_new_write_path_statement="Phase 12L narrow real-create remains a gated write path.",
     )
 
 

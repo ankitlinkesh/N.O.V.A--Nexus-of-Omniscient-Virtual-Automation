@@ -58,7 +58,7 @@ def run_workflow_preview(request: str = "plan a workflow preview") -> WorkflowPl
         final_readiness_status=final,
         no_live_llm_call_statement="No live LLM call was made.",
         no_tool_execution_statement="Tools are not executed.",
-        no_real_write_statement="Phase 12L remains the only real write path.",
+        no_real_write_statement="Phase 12L remains a gated write path.",
         safety_notes=(
             "Workflow planner is local/mock preview only.",
             "Workflow steps are preview-only.",

@@ -16,7 +16,7 @@ All user-facing reports include explicit no-action and no-secret boundaries.
 
 Verification is performed by the focused Phase 29 verifier and both master profiles.
 
-Phase 12L narrow approved text-file creation remains Eva's only real file write path.
+Phase 12L narrow approved text-file creation remains Eva's gated file write path.
 
 ## Phase 30 safety proof
 
@@ -30,4 +30,4 @@ No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, 
 
 CodingAgent remains preview/report/status only. News remains local/mock or safe-read-only. Voice remains a locked/mock foundation. Browser/desktop/shell/cloud/MCP execution and tool execution remain locked.
 
-Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path. The next safe step is user-approved commit execution outside Eva or a separate explicit commit-approval phase.
+Phase 12L narrow approved new `.md`/`.txt` creation remains a gated write path. The next safe step is user-approved commit execution outside Eva or a separate explicit commit-approval phase.

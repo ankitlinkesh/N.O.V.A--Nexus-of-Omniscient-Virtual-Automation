@@ -203,7 +203,7 @@ def main() -> int:
         "no live LLM/API/provider calls",
         "arbitrary file reads are blocked",
         "assembled context cannot execute tools",
-        "Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path",
+        "Phase 12L narrow approved new `.md`/`.txt` creation remains a gated write path",
         "Phase 17 LLM Threat Defense + Prompt Injection Guard",
     )
     for doc in DOCS:

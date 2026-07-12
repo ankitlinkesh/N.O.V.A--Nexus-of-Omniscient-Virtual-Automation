@@ -338,7 +338,7 @@ def _file_agent_capabilities() -> list[Capability]:
 
 def _browser_agent_capabilities() -> list[Capability]:
     notes = "Phase 13A-13F BrowserAgent safety foundation only. Status, policy, domain/site-risk policy, readiness proof, action-safety, session-preview, page/text/DOM summary design, and action dry-run previews do not launch, navigate, click, type, submit, read browser sessions, observe live pages, control pages, use MCP, or call Playwright/PyAutoGUI/cloud."
-    read_notes = "Phase 24 Real Browser Read-Only Mode: validated public-URL observation/report output only; sessionless, credentialless, no-cookie, no-profile, no click/type/forms/download/upload/login/control, no arbitrary file reads/writes, no tool execution, and Phase 12L remains the only real write path."
+    read_notes = "Phase 24 Real Browser Read-Only Mode: validated public-URL observation/report output only; sessionless, credentialless, no-cookie, no-profile, no click/type/forms/download/upload/login/control, no arbitrary file reads/writes, no tool execution, and Phase 12L remains a gated write path."
     verifier = "verify_eva_browser_agent_safety.py"
     session_verifier = "verify_eva_browser_session_preview.py"
     observation_verifier = "verify_eva_browser_page_summary_design.py"
@@ -399,8 +399,8 @@ def _browser_agent_capabilities() -> list[Capability]:
 
 def _desktop_agent_capabilities() -> list[Capability]:
     notes = "Phase 14A-14G DesktopAgent locked safety foundation only. Status, policy, previews, screen observation policy, action dry runs, risk scoring, human approval model, and final readiness proof do not observe screens, inspect windows/apps, launch apps, move/click/type, use hotkeys, use clipboard, automate file dialogs, run terminal/package commands, use MCP/PyAutoGUI/Playwright, or call cloud services."
-    observe_notes = "Phase 25 Real Desktop Observation Mode: explicit one-shot redacted observation/report output only; no click/type/hotkey/app/window control, continuous monitoring, screenshot saving, cookies/sessions/browser profiles, arbitrary file reads/writes, or tool execution. Phase 12L remains the only real write path."
-    control_gate_notes = "Phase 26 Real Desktop Control Gate: local/mock policy and dry-run reports only; no click/type/hotkey/clipboard/app/window control, shell/package/cloud/MCP, secret/config/session reads, arbitrary file reads/writes, or tool execution. Phase 12L remains the only real write path."
+    observe_notes = "Phase 25 Real Desktop Observation Mode: explicit one-shot redacted observation/report output only; no click/type/hotkey/app/window control, continuous monitoring, screenshot saving, cookies/sessions/browser profiles, arbitrary file reads/writes, or tool execution. Phase 12L remains a gated write path."
+    control_gate_notes = "Phase 26 Real Desktop Control Gate: local/mock policy and dry-run reports only; no click/type/hotkey/clipboard/app/window control, shell/package/cloud/MCP, secret/config/session reads, arbitrary file reads/writes, or tool execution. Phase 12L remains a gated write path."
     news_notes = "Phase 27 local/mock dashboard/report/status only; Phase 24 public-URL policy integration, no crawler, login/session/cookie/profile access, browser control, network in tests, tool execution, arbitrary file reads/writes, or new write path."
     verifier = "verify_eva_desktop_agent_safety.py"
     session_verifier = "verify_eva_desktop_session_preview.py"
@@ -528,7 +528,7 @@ def _release_demo_capabilities() -> list[Capability]:
         "Phase 29 and Phase 32 deterministic report/status/demo profile only. No publishing, upload, package release, "
         "commit/tag/push, shell/package/cloud/MCP execution, browser/desktop control, source edits, "
         "arbitrary filesystem access, secret/config/session reads, live provider calls, tool execution, "
-        "or new write path. Phase 12L remains the only real file-write boundary."
+        "or new write path. Phase 12L remains a gated file-write boundary."
     )
     definitions = (
         ("release.status", "Release Demo Status", "Show the local Phase 29 release profile status."),
@@ -584,7 +584,7 @@ def _release_candidate_capabilities() -> list[Capability]:
         "No staging, commit, tag, push, publish, upload, shell/package/cloud/MCP execution, "
         "browser/desktop control, source edits, arbitrary filesystem access, secret/config/session "
         "reads, live LLM/API/provider calls, tool execution, or new write path. Phase 12L remains "
-        "the only real file-write boundary."
+        "a gated file-write boundary."
     )
     definitions = (
         ("rc.status", "Release Candidate Status", "Show Phase 30 readiness and locked state."),
@@ -637,7 +637,7 @@ def _roadmap_capabilities() -> list[Capability]:
                 verifier_name=descriptor.verifier,
                 safety_notes=(
                     "Phase 33-42 roadmap report/status/catalog metadata only. "
-                    "No new execution path is enabled; Phase 12L remains the only real write boundary."
+                    "No new execution path is enabled; Phase 12L remains a gated write boundary."
                 ),
             )
         )
@@ -658,7 +658,7 @@ def _eva_core_capabilities() -> list[Capability]:
     threat_notes = "Phase 17 local/mock threat-defense preview only; no live LLM/API/provider calls, provider SDKs, secret/config/session reads, arbitrary file reads, tool execution, browser/desktop/shell/cloud/MCP execution, or new write paths."
     agent_loop_notes = "Phase 18 Agent Loop v1 local/mock preview only; no live LLM/API/provider calls, provider SDKs, secret/config/session reads, arbitrary file reads, tool execution, browser/desktop/shell/cloud/MCP execution, or new write paths."
     workflow_planner_notes = "Phase 19 Agentic Workflow Planner local/mock preview only; no live LLM/API/provider calls, provider SDKs, secret/config/session reads, arbitrary file reads/writes, tool execution, browser/desktop/shell/cloud/MCP execution, or new write paths."
-    execution_gates_notes = "Phase 20 Controlled Execution Gates local/mock policy preview only; no live LLM/API/provider calls, provider SDKs, secret/config/session reads, arbitrary file reads/writes, tool execution, browser/desktop/shell/cloud/MCP/package execution, or new write paths. Phase 12L narrow real-create remains the only real write path."
+    execution_gates_notes = "Phase 20 Controlled Execution Gates local/mock policy preview only; no live LLM/API/provider calls, provider SDKs, secret/config/session reads, arbitrary file reads/writes, tool execution, browser/desktop/shell/cloud/MCP/package execution, or new write paths. Phase 12L narrow real-create remains a gated write path."
     memory_v3_notes = "Phase 21 Memory v3 local-only policy/status/preview; no live LLM/API/provider calls, provider SDKs, cloud memory, remote sync, secret/config/session reads, arbitrary file reads/writes, raw memory DB dumps, tool execution, browser/desktop/shell/cloud/MCP execution, or new write paths."
     voice_notes = "Phase 22 Voice Assistant Foundation local/mock preview only; no microphone, recording, audio playback, live ASR/TTS, provider SDK, live LLM/API call, secret/config/session read, arbitrary file read/write, tool execution, browser/desktop/shell/cloud/MCP execution, or new write path."
     ai_os_notes = "Phase 23 AI OS / Control Center Upgrade local/status only; no live LLM/API/provider call, provider SDK, server, UI launch, daemon, secret/config/session read, arbitrary file read/write, tool execution, browser/desktop/shell/cloud/MCP execution, or new write path."
@@ -768,13 +768,13 @@ def _eva_core_capabilities() -> list[Capability]:
         _cap("eva.phase12_status", "Eva Phase 12 Status", "Show completed Phase 12 surfaces and locked future modules.", "eva_core", "verification", verifier_name="verify_eva_phase12_stabilization.py", safety_notes=verification_notes),
         _cap("eva.phase12_ready", "Eva Phase 12 Ready", "Show final Phase 12 checkpoint readiness and proof requirements.", "eva_core", "verification", verifier_name="verify_eva_phase12_ready.py", safety_notes=verification_notes),
         _cap("eva.phase12_summary", "Eva Phase 12 Summary", "Summarize Phase 12 systems and current safety posture.", "eva_core", "verification", verifier_name="verify_eva_phase12_ready.py", safety_notes=verification_notes),
-        _cap("eva.phase12_limits", "Eva Phase 12 Limits", "Show locked execution areas and the only real write path.", "eva_core", "verification", verifier_name="verify_eva_phase12_ready.py", safety_notes=verification_notes),
+        _cap("eva.phase12_limits", "Eva Phase 12 Limits", "Show locked execution areas and a gated write path.", "eva_core", "verification", verifier_name="verify_eva_phase12_ready.py", safety_notes=verification_notes),
         _cap("eva.phase12_proof", "Eva Phase 12 Proof", "Show verifier proof surfaces without running them.", "eva_core", "verification", verifier_name="verify_eva_phase12_ready.py", safety_notes=verification_notes),
         _cap("eva.ux_status", "Eva UX Status", "Show the Phase 12K command UX and response-formatting status.", "eva_core", "verification", verifier_name="verify_eva_phase12_stabilization.py", safety_notes=verification_notes),
         _cap("eva.control_center_status", "Control Center Status", "Show the local Eva Control Center status summary.", "eva_core", "control_center", verifier_name="verify_eva_control_center.py", safety_notes=control_notes),
         _cap("eva.control_center_summary", "Control Center Summary", "Show a compact Control Center status summary.", "eva_core", "control_center", verifier_name="verify_eva_control_center_v1.py", safety_notes=control_notes),
         _cap("eva.locked_features", "Locked Features", "Explain locked features and planned modules without executing them.", "eva_core", "control_center", verifier_name="verify_eva_control_center_v1.py", safety_notes=control_notes),
-        _cap("eva.enabled_features", "Enabled Features", "Show currently enabled safe/status features and the only real write path.", "eva_core", "control_center", verifier_name="verify_eva_control_center_v1.py", safety_notes=control_notes),
+        _cap("eva.enabled_features", "Enabled Features", "Show currently enabled safe/status features and a gated write path.", "eva_core", "control_center", verifier_name="verify_eva_control_center_v1.py", safety_notes=control_notes),
         _cap("eva.next_safe_step", "Next Safe Step", "Show the recommended next safe phase from Control Center metadata.", "eva_core", "control_center", verifier_name="verify_eva_control_center_v1.py", safety_notes=control_notes),
         _cap("eva.control_center_dashboard", "Control Center Dashboard", "Serve the read-only local dashboard at /control.", "eva_core", "control_center", verifier_name="verify_eva_control_center.py", safety_notes=control_notes),
         _cap("eva.control_center_status_json", "Control Center Status JSON", "Serve safe read-only dashboard status data at /control/status.json.", "eva_core", "control_center", verifier_name="verify_eva_control_center.py", safety_notes=control_notes),

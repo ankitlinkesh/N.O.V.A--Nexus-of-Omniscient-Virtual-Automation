@@ -6,7 +6,7 @@ from .safety_boundaries import boundary_lines
 
 def build_system_map() -> tuple[SystemMapEntry, ...]:
     rows = (
-        ("FileAgent / Phase 12 safety gates", "Phase 12", "available_existing_narrow_gate", "read/status plus narrow approved create", "Phase 12L is the only real write boundary."),
+        ("FileAgent / Phase 12 safety gates", "Phase 12", "available_existing_narrow_gate", "read/status plus narrow approved create", "Phase 12L is a gated write boundary."),
         ("BrowserAgent safety foundation", "Phase 13", "available_status_only", "policy/status/preview", "Historical safety foundation; browser control remains locked."),
         ("Real Browser Read-Only Mode", "Phase 24", "available_readonly_observation", "public-URL observation/report only", "URL policy and mock/unavailable-safe observation are available; no browser control."),
         ("Browser control", "Future", "locked_future_gate", "status only", "Clicking, typing, forms, downloads, uploads, sessions, profiles, and control remain locked."),

@@ -769,7 +769,7 @@ def _browser_readiness_proof_summary(warnings: list[str]) -> dict[str, object]:
             "phase13_final_proof": "Phase 13 final proof: Phase 13 is safety/readiness only; real browser read-only mode is not enabled; real browser control is not enabled.",
             "phase13_final_limits": "network/DNS/live page read/DOM/screenshot/action execution are locked",
             "future_gate": final.future_gate,
-            "phase12_boundary": "Phase 12L narrow real create remains the only real write path.",
+            "phase12_boundary": "Phase 12L narrow real create remains a gated write path.",
         }
     except Exception:
         warnings.append("Browser read-only readiness proof unavailable.")

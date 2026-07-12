@@ -23,6 +23,6 @@ For Phase 30, no git add/commit/tag/push was performed and no publishing/uploadi
 
 No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Arbitrary file reads/writes are blocked. Browser/desktop/shell/cloud/MCP execution and tool execution remain locked.
 
-CodingAgent remains preview/report/status only. News remains local/mock or safe-read-only. Voice remains a locked/mock foundation. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path.
+CodingAgent remains preview/report/status only. News remains local/mock or safe-read-only. Voice remains a locked/mock foundation. Phase 12L narrow approved new `.md`/`.txt` creation remains a gated write path.
 
 Next safe step: user-approved commit execution outside Eva or a separate explicit commit-approval phase.

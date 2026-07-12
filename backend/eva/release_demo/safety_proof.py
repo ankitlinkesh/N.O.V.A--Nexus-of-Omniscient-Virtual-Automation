@@ -8,7 +8,7 @@ SAFETY_PROOF = (
     "Browser control, desktop control, shell, cloud, MCP, and unrestricted crawling remain unavailable.",
     "CodingAgent cannot edit source or apply patches.",
     "Publishing, uploading, packaging, and git release operations are unavailable.",
-    "Phase 12L remains the only real file-write boundary.",
+    "Phase 12L remains a gated file-write boundary.",
 )
 
 

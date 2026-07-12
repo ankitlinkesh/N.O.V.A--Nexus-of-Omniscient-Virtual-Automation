@@ -60,7 +60,7 @@ BOUNDARIES = (
     "no logged-in browser access",
     "no browser control",
     "no tool execution",
-    "phase 12l remains the only real write path",
+    "phase 12l remains a gated write path",
 )
 
 
@@ -347,7 +347,7 @@ def main() -> int:
         "secrets/config/session reads remain blocked",
         "arbitrary file reads/writes remain blocked",
         "desktop execution remains locked",
-        "Phase 12L narrow real-create remains the only real file write path",
+        "Phase 12L narrow real-create remains a gated file write path",
         "Phase 25 Real Desktop Observation Mode is next",
     ):
         check(phrase.lower() in review.lower(), f"team review missing: {phrase}")
@@ -364,7 +364,7 @@ def main() -> int:
         "browser read-only observations cannot execute tools",
         "browser control remains locked",
         "desktop/shell/cloud/MCP execution remains locked",
-        "Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path",
+        "Phase 12L narrow approved new `.md`/`.txt` creation remains a gated file write path",
         "Phase 25 Real Desktop Observation Mode",
     )
     for doc in DOCS:

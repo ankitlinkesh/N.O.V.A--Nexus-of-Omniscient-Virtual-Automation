@@ -45,6 +45,6 @@ def loop_policy_text() -> str:
             "Context preview comes from Phase 16 patterns; threat preview comes from Phase 17 patterns.",
             "Structured-output checks remain local validation previews only.",
             "WorkSession awareness is sanitized status metadata only; raw runtime dumps are blocked.",
-            "Phase 12L narrow approved new .md/.txt creation remains the only real write path.",
+            "Phase 12L narrow approved new .md/.txt creation remains a gated write path.",
         ]
     )

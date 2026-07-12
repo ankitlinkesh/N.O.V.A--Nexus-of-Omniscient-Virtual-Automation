@@ -152,7 +152,7 @@ def format_browser_readiness() -> str:
             "Missing before execution:",
             *_bullets(readiness.gaps),
             "",
-            "Phase 12L boundary still stands: the only real write path is approved new .md/.txt creation under docs/ or samples/.",
+            "Phase 12L boundary still stands: a gated write path is approved new .md/.txt creation under docs/ or samples/.",
             "Execution: readiness status only. No browser action was executed.",
         ]
     )
@@ -553,7 +553,7 @@ def format_browser_action_readiness() -> str:
             "- login/payment refusal or explicit private workflow policy",
             "- WorkSession audit and target-aware verification for browser actions",
             "",
-            "Phase 12L boundary still stands: the only real write path is approved new .md/.txt creation under docs/ or samples/.",
+            "Phase 12L boundary still stands: a gated write path is approved new .md/.txt creation under docs/ or samples/.",
             "Execution: readiness status only. No browser action was executed.",
         ]
     )
@@ -768,7 +768,7 @@ def format_browser_readiness_gaps() -> str:
     lines.extend(
         [
             "",
-            "Phase 12L boundary still stands: the only real write path is approved new .md/.txt creation under docs/ or samples/.",
+            "Phase 12L boundary still stands: a gated write path is approved new .md/.txt creation under docs/ or samples/.",
             "Execution: gaps/status only. No network or browser action was executed.",
         ]
     )
@@ -826,7 +826,7 @@ def _phase13_final_common_lines() -> list[str]:
         "Real browser control is not enabled.",
         "network/DNS/live page read/DOM/screenshot/action execution are locked.",
         proof.future_gate,
-        "Phase 12L narrow real create remains the only real write path.",
+        "Phase 12L narrow real create remains a gated write path.",
         proof.phase12_boundary,
         "No browser and no network action was executed.",
     ]

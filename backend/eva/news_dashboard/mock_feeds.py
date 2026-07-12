@@ -17,5 +17,5 @@ def build_mock_dashboard(topic: str = "world events") -> NewsDashboard:
         tuple(s.citation_metadata for s in sources), "ready_local_mock_dashboard",
         "No unrestricted crawling.", "No login/session/cookie/profile access.",
         "No browser control.", "No live LLM call was made.", "No tool execution.",
-        "Phase 12L remains the only real write path.",
+        "Phase 12L remains a gated write path.",
     )
