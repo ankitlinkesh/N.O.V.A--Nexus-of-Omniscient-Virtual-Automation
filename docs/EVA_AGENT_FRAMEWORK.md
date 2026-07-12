@@ -1,5 +1,14 @@
 # Eva Agent Framework v1
 
+> **Current-state correction (2026-07-12).** The per-phase notes below are a
+> historical changelog. Several repeat "Phase 12L narrow `.md`/`.txt` creation
+> remains the only real write path" and "execution remains locked" — those are
+> no longer accurate as present-tense claims. Eva executes a whitelisted set of
+> tools and gates destructive/privacy/external ones behind explicit user
+> approval via the central permission gate (`ToolRegistry.run()`). For the exact,
+> code-derived picture, run `eva capability truth`. Read the phase notes as
+> "true when written," not as the current boundary.
+
 Agent Framework v1 gives Eva's specialist subsystems a shared lifecycle interface so Planner v3 steps can be assigned consistently in future executor phases.
 
 This phase is framework, status, explain, and dry-run only. It does not execute planned tasks.

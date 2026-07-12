@@ -1,5 +1,11 @@
 # Eva Bug Queue
 
+> **Current-state correction (2026-07-12).** Entries below that say "Phase 12L
+> ... only real write path" or "execution remains locked" are historical and no
+> longer accurate. Eva executes whitelisted tools and gates destructive/privacy/
+> external ones behind explicit user approval via `ToolRegistry.run()`. Run
+> `eva capability truth` for the code-derived boundary.
+
 Last updated: 2026-06-01
 
 Use this queue as a stabilization handoff. Before fixing, reproduce from the current repo and prefer capability routing, skill routing, planner/tool integration, and grounded system awareness over broad fast-command patches.

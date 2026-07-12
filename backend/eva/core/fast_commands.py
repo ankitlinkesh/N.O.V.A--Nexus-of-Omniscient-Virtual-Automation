@@ -2403,6 +2403,11 @@ def maybe_handle_fast_command(
         }
         return release_commands[normalized](), "fast-command"
 
+    if normalized in {"eva capability truth", "eva execution truth", "what can eva actually execute"}:
+        from ..security.capability_truth import format_capability_truth
+
+        return format_capability_truth(), "fast-command"
+
     if normalized in {
         "eva roadmap status",
         "eva execution boundaries",

@@ -16,7 +16,18 @@ Eva is not presented as an unrestricted autonomous operator. The public demo is 
 
 The repository contains the Phase 32 safe local demo smoke layer and the Phase 33 roadmap-foundation layer. These are report/status/documentation/catalog surfaces only and are considered ready for local demo review only after the focused, quick, and full verifier commands below pass in the current checkout.
 
-No publication, upload, package release, installer creation, commit, tag, push, or new execution path is performed by these phases. In short: no new execution path is enabled.
+No publication, upload, package release, installer creation, commit, tag, push, or new execution path is added by these specific report/status phases.
+
+## Execution Model
+
+Eva is not execution-free. It runs a whitelisted set of local tools and makes real LLM provider calls. What keeps this safe is not the absence of execution but a central permission gate — every tool call goes through `ToolRegistry.run()`, which classifies it and enforces approval; a `confirmed` argument carries no authority.
+
+- **Runs immediately:** safe, bounded local reads and observation, plus a whitelist of UI/browser/app actions the planner may choose (open a URL/app, media keys, window and tab control, workspace/code/research reads).
+- **Requires explicit confirmation or override:** privacy reads, destructive file actions, screen input (type/hotkey/press), and external messages. These return a pending-action ledger id and run only after a user types `confirm <id>` / `confirm override <id>`.
+- **Not reachable by the LLM planner:** destructive file tools and screen-input tools are registered but excluded from the planner whitelist; they run only via the local, header-guarded `/api/tools` endpoint and still pass the gate.
+- **Live provider calls:** real LLM API calls happen when keys are configured (NVIDIA NIM, Gemini, OpenRouter, Groq, CLoD) with local Ollama fallback.
+
+For the exact, code-derived picture (never hand-maintained), run `eva capability truth`.
 
 ## Capabilities
 
@@ -33,6 +44,7 @@ No publication, upload, package release, installer creation, commit, tag, push, 
 ## Demo Commands
 
 ```text
+eva capability truth
 eva release status
 eva release demo
 eva release commands
@@ -145,17 +157,17 @@ These commands provide local evidence only. They do not publish or certify produ
 
 ## Safety Boundaries
 
-- No unrestricted shell or arbitrary command execution.
-- No browser clicking, typing, login, upload, download, cookie, profile, or session control.
-- No desktop clicking, typing, hotkeys, clipboard, app/window control, or continuous monitoring.
+- No unrestricted shell or arbitrary command execution (SHELL_ACTION is hard-blocked).
+- No browser login, upload, download, cookie, profile, or session control. Eva can open URLs and do bounded tab/window control; it does not automate form-filling or logged-in actions.
+- Desktop and screen input (click/type/hotkey) require explicit confirmation and are not planner-reachable; there is no continuous monitoring.
 - No unrestricted crawler.
 - No CodingAgent source editing or patch application.
 - No public-demo live LLM/API/provider call.
 - No cloud or MCP execution.
 - No microphone, audio recording, playback, ASR, or TTS execution in the voice foundation.
 - No secret, configuration, session, raw memory database, or private WorkSession dump exposure.
-- No broad filesystem mutation.
-- Phase 12L narrow approved text-file creation remains the only real write path.
+- No broad filesystem mutation: file writes/patches/moves/deletes are gated (require override), path-restricted to the project and Documents/Desktop/Downloads, and deny `.env*`, `.git`, `*.sqlite3`, and key files.
+- No secret exfiltration: the path allowlist blocks reading or writing secret/config/database files by name.
 
 ## Known Limitations
 
