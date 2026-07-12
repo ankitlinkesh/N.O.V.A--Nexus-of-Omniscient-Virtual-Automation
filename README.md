@@ -16,7 +16,7 @@ Eva is not presented as an unrestricted autonomous operator. The public demo is 
 
 The repository contains the Phase 32 safe local demo smoke layer and the Phase 33 roadmap-foundation layer. These are report/status/documentation/catalog surfaces only and are considered ready for local demo review only after the focused, quick, and full verifier commands below pass in the current checkout.
 
-No publication, upload, package release, installer creation, commit, tag, push, or new execution path is added by these specific report/status phases.
+These specific report/status phases add no new execution path: no publication, upload, package release, installer, commit, tag, or push is performed by them, and they enable no new tool. (This is scoped to the report/status phases — see the Execution Model section below for what Eva does execute.)
 
 ## Execution Model
 
