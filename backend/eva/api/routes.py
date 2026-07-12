@@ -110,6 +110,48 @@ def _remember_final_source(session_context: dict | None, source: str, results: l
     remember_answer_provenance(session_context, source=source, tools=tools_used)
 
 
+def _persist_and_log(
+    memory,
+    session_id: str,
+    session_context: dict,
+    started_at: float,
+    message: str,
+    reply: str,
+    source: str,
+    *,
+    log_kind: str,
+    log_payload: dict,
+    matched_event: str,
+    matched_fields: dict | None = None,
+    provenance: str = "final",
+    provenance_tools: list[str] | None = None,
+) -> None:
+    """Shared finalization for the deterministic pre-LLM stages (fast command,
+    casual response, capability route). Both /chat and /chat/stream use this so
+    memory writes, logging, and timing stay identical across the two endpoints."""
+    memory.add_message(session_id, "user", message)
+    memory.add_message(session_id, "assistant", reply)
+    _safe_log(memory, session_id, log_kind, log_payload)
+    _timing_log(session_id, matched_event, started_at, **(matched_fields or {}))
+    _timing_log(session_id, "response_ready", started_at, source=source, total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
+    if provenance == "answer":
+        remember_answer_provenance(session_context, source=source, tools=provenance_tools or [])
+    else:
+        _remember_final_source(session_context, source)
+
+
+def _simple_stream_events(session_id: str, source: str, reply: str, route: str | None = None) -> list[str]:
+    """The meta/token/done triple a deterministic stage emits when streaming."""
+    meta = {"type": "meta", "session_id": session_id, "source": source}
+    if route is not None:
+        meta["route"] = route
+    return [
+        _json_line(meta),
+        _json_line({"type": "token", "text": reply}),
+        _json_line({"type": "done", "reply": reply}),
+    ]
+
+
 def _safe_log(memory, session_id: str, kind: str, payload: dict) -> None:
     try:
         memory.log_event(session_id, kind, payload)
@@ -882,23 +924,21 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     fast = maybe_handle_fast_command(payload.message, tools, session_context, memory, session_id)
     if fast is not None:
         reply, source = fast
-        memory.add_message(session_id, "user", payload.message)
-        memory.add_message(session_id, "assistant", reply)
-        _safe_log(memory, session_id, "deterministic_command", {"source": source, "reply": reply})
-        _timing_log(session_id, "fast_command_matched", started_at, source=source)
-        _timing_log(session_id, "response_ready", started_at, source=source, total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
-        _remember_final_source(session_context, source)
+        _persist_and_log(
+            memory, session_id, session_context, started_at, payload.message, reply, source,
+            log_kind="deterministic_command", log_payload={"source": source, "reply": reply},
+            matched_event="fast_command_matched", matched_fields={"source": source},
+        )
         return ChatResponse(session_id=session_id, reply=reply, source=source)
 
     casual = maybe_handle_fast_response(payload.message)
     if casual is not None:
         reply, source = casual
-        memory.add_message(session_id, "user", payload.message)
-        memory.add_message(session_id, "assistant", reply)
-        _safe_log(memory, session_id, "fast_casual_response", {"source": source, "reply": reply})
-        _timing_log(session_id, "fast_casual_matched", started_at)
-        _timing_log(session_id, "response_ready", started_at, source=source, total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
-        _remember_final_source(session_context, source)
+        _persist_and_log(
+            memory, session_id, session_context, started_at, payload.message, reply, source,
+            log_kind="fast_casual_response", log_payload={"source": source, "reply": reply},
+            matched_event="fast_casual_matched",
+        )
         return ChatResponse(session_id=session_id, reply=reply, source=source)
 
     operator = handle_operator_command(payload.message, _operator_context(session_context))
@@ -922,12 +962,13 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     capability_reply = _handle_capability_route(payload.message, capability, session_context, memory, session_id, settings)
     if capability_reply is not None:
         reply, source = capability_reply
-        memory.add_message(session_id, "user", payload.message)
-        memory.add_message(session_id, "assistant", reply)
-        _safe_log(memory, session_id, "capability_route", {"classification": capability, "source": source})
-        _timing_log(session_id, "capability_route_matched", started_at, capability=capability.get("capability"), route=capability.get("suggested_route"))
-        _timing_log(session_id, "response_ready", started_at, source=source, total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
-        remember_answer_provenance(session_context, source=source, tools=[str(capability.get("suggested_route") or "")])
+        _persist_and_log(
+            memory, session_id, session_context, started_at, payload.message, reply, source,
+            log_kind="capability_route", log_payload={"classification": capability, "source": source},
+            matched_event="capability_route_matched",
+            matched_fields={"capability": capability.get("capability"), "route": capability.get("suggested_route")},
+            provenance="answer", provenance_tools=[str(capability.get("suggested_route") or "")],
+        )
         return ChatResponse(session_id=session_id, reply=reply, source=source)
 
     if is_agentic_intent(payload.message):
@@ -1026,29 +1067,25 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         fast = maybe_handle_fast_command(payload.message, tools, session_context, memory, session_id)
         if fast is not None:
             reply, source = fast
-            memory.add_message(session_id, "user", payload.message)
-            memory.add_message(session_id, "assistant", reply)
-            _safe_log(memory, session_id, "deterministic_command", {"source": source, "reply": reply})
-            _timing_log(session_id, "fast_command_matched", started_at, source=source)
-            _timing_log(session_id, "response_ready", started_at, source=source, total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
-            _remember_final_source(session_context, source)
-            yield _json_line({"type": "meta", "session_id": session_id, "source": source})
-            yield _json_line({"type": "token", "text": reply})
-            yield _json_line({"type": "done", "reply": reply})
+            _persist_and_log(
+                memory, session_id, session_context, started_at, payload.message, reply, source,
+                log_kind="deterministic_command", log_payload={"source": source, "reply": reply},
+                matched_event="fast_command_matched", matched_fields={"source": source},
+            )
+            for line in _simple_stream_events(session_id, source, reply):
+                yield line
             return
 
         casual = maybe_handle_fast_response(payload.message)
         if casual is not None:
             reply, source = casual
-            memory.add_message(session_id, "user", payload.message)
-            memory.add_message(session_id, "assistant", reply)
-            _safe_log(memory, session_id, "fast_casual_response", {"source": source, "reply": reply})
-            _timing_log(session_id, "fast_casual_matched", started_at)
-            _timing_log(session_id, "response_ready", started_at, source=source, total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
-            _remember_final_source(session_context, source)
-            yield _json_line({"type": "meta", "session_id": session_id, "source": source})
-            yield _json_line({"type": "token", "text": reply})
-            yield _json_line({"type": "done", "reply": reply})
+            _persist_and_log(
+                memory, session_id, session_context, started_at, payload.message, reply, source,
+                log_kind="fast_casual_response", log_payload={"source": source, "reply": reply},
+                matched_event="fast_casual_matched",
+            )
+            for line in _simple_stream_events(session_id, source, reply):
+                yield line
             return
 
         operator = handle_operator_command(payload.message, _operator_context(session_context))
@@ -1076,15 +1113,15 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         capability_reply = _handle_capability_route(payload.message, capability, session_context, memory, session_id, settings)
         if capability_reply is not None:
             reply, source = capability_reply
-            memory.add_message(session_id, "user", payload.message)
-            memory.add_message(session_id, "assistant", reply)
-            _safe_log(memory, session_id, "capability_route", {"classification": capability, "source": source})
-            _timing_log(session_id, "capability_route_matched", started_at, capability=capability.get("capability"), route=capability.get("suggested_route"))
-            _timing_log(session_id, "response_ready", started_at, source=source, total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
-            remember_answer_provenance(session_context, source=source, tools=[str(capability.get("suggested_route") or "")])
-            yield _json_line({"type": "meta", "session_id": session_id, "source": source, "route": capability.get("suggested_route")})
-            yield _json_line({"type": "token", "text": reply})
-            yield _json_line({"type": "done", "reply": reply})
+            _persist_and_log(
+                memory, session_id, session_context, started_at, payload.message, reply, source,
+                log_kind="capability_route", log_payload={"classification": capability, "source": source},
+                matched_event="capability_route_matched",
+                matched_fields={"capability": capability.get("capability"), "route": capability.get("suggested_route")},
+                provenance="answer", provenance_tools=[str(capability.get("suggested_route") or "")],
+            )
+            for line in _simple_stream_events(session_id, source, reply, route=capability.get("suggested_route")):
+                yield line
             return
 
         if is_agentic_intent(payload.message):
