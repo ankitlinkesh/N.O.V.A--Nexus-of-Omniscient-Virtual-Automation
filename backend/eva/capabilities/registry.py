@@ -72,6 +72,7 @@ def build_default_registry() -> CapabilityRegistry:
             StaticCapabilityProvider("coding_agent", "CodingAgent", tuple(_coding_agent_capabilities())),
             StaticCapabilityProvider("release_demo", "Public Demo / Release", tuple(_release_demo_capabilities())),
             StaticCapabilityProvider("release_candidate", "Release Candidate Hardening", tuple(_release_candidate_capabilities())),
+            StaticCapabilityProvider("roadmap", "Roadmap Foundations", tuple(_roadmap_capabilities())),
             StaticCapabilityProvider("eva_core", "Eva Core", tuple(_eva_core_capabilities())),
         ]
     )
@@ -522,8 +523,9 @@ def _coding_agent_capabilities() -> list[Capability]:
 
 def _release_demo_capabilities() -> list[Capability]:
     verifier = "verify_eva_public_demo_release.py"
+    phase32_verifier = "verify_eva_post_push_demo_smoke.py"
     notes = (
-        "Phase 29 deterministic report/status/demo profile only. No publishing, upload, package release, "
+        "Phase 29 and Phase 32 deterministic report/status/demo profile only. No publishing, upload, package release, "
         "commit/tag/push, shell/package/cloud/MCP execution, browser/desktop control, source edits, "
         "arbitrary filesystem access, secret/config/session reads, live provider calls, tool execution, "
         "or new write path. Phase 12L remains the only real file-write boundary."
@@ -538,7 +540,7 @@ def _release_demo_capabilities() -> list[Capability]:
         ("release.limitations", "Release Known Limitations", "Show honest public limitations and non-goals."),
         ("release.verification", "Release Verification Bundle", "Show manual verifier commands without running them."),
     )
-    return [
+    capabilities = [
         _cap(
             capability_id,
             name,
@@ -550,6 +552,29 @@ def _release_demo_capabilities() -> list[Capability]:
         )
         for capability_id, name, description in definitions
     ]
+    capabilities.extend(
+        [
+            _cap(
+                "release.demo_smoke",
+                "Release Demo Smoke Test",
+                "Show the Phase 32 safe local demo smoke checklist.",
+                "release_demo",
+                "public_release",
+                verifier_name=phase32_verifier,
+                safety_notes=notes,
+            ),
+            _cap(
+                "release.post_push_sync",
+                "Release Post-Push Sync Status",
+                "Show the Phase 32 post-push sync and remote hygiene status.",
+                "release_demo",
+                "public_release",
+                verifier_name=phase32_verifier,
+                safety_notes=notes,
+            ),
+        ]
+    )
+    return capabilities
 
 
 def _release_candidate_capabilities() -> list[Capability]:
@@ -583,6 +608,40 @@ def _release_candidate_capabilities() -> list[Capability]:
         )
         for capability_id, name, description in definitions
     ]
+
+
+def _roadmap_capabilities() -> list[Capability]:
+    from ..roadmap.catalog import get_capability_catalog
+    from ..roadmap.models import ExecutionClass
+
+    capabilities: list[Capability] = []
+    for descriptor in get_capability_catalog():
+        if not descriptor.capability_id.startswith("roadmap."):
+            continue
+        blocked = descriptor.execution_class is ExecutionClass.BLOCKED
+        read_only = descriptor.execution_class in {ExecutionClass.REPORT_ONLY, ExecutionClass.READ_ONLY, ExecutionClass.BLOCKED}
+        risk_level = "medium" if blocked else "low"
+        status = "blocked" if blocked else "stable"
+        capabilities.append(
+            _cap(
+                descriptor.capability_id,
+                descriptor.name,
+                descriptor.notes,
+                "roadmap",
+                "roadmap",
+                risk_level=risk_level,
+                read_only=read_only,
+                requires_confirmation=False,
+                enabled_by_default=not blocked,
+                status=status,
+                verifier_name=descriptor.verifier,
+                safety_notes=(
+                    "Phase 33-42 roadmap report/status/catalog metadata only. "
+                    "No new execution path is enabled; Phase 12L remains the only real write boundary."
+                ),
+            )
+        )
+    return capabilities
 
 
 def _eva_core_capabilities() -> list[Capability]:

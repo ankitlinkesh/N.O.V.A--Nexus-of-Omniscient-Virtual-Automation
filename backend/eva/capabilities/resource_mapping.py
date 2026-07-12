@@ -430,6 +430,8 @@ _LINKS: tuple[CapabilityResourceLink, ...] = (
             "readiness",
             "limitations",
             "verification",
+            "demo_smoke",
+            "post_push_sync",
         )
     ],
     *[
@@ -451,6 +453,29 @@ _LINKS: tuple[CapabilityResourceLink, ...] = (
             "readiness",
             "safety_proof",
             "verification",
+        )
+    ],
+    *[
+        _link(
+            f"roadmap.{name}",
+            "eva-roadmap-foundations",
+            "Roadmap Foundations",
+            agent="SafetyAgent",
+            execution_path="fast_command",
+            preview_only=True,
+            notes="Phase 33-42 report/status/catalog only; no new execution path is available and Phase 12L remains the only real write boundary.",
+        )
+        for name in (
+            "execution_boundary_audit",
+            "command_catalog",
+            "capability_catalog",
+            "control_truth_panels",
+            "frontend_truth",
+            "grounded_answers",
+            "voice_reliability",
+            "verifier_dashboard",
+            "safe_real_pilot",
+            "release_candidate_v2",
         )
     ],
     _link("desktop.status", "eva-desktop-agent-safety", "DesktopAgent", agent="DesktopAgent", execution_path="fast_command", notes="Read-only DesktopAgent safety status; no screen observation or desktop control."),

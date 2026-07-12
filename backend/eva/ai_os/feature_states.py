@@ -46,6 +46,10 @@ def feature_states_text() -> str:
             "- Release Candidate Hardening commit planning is text-only.",
             "- Release Candidate Hardening allows no Git operations and no publishing.",
             "- Release Candidate Hardening next safe step: user-approved commit execution outside Eva or a separate explicit commit-approval phase.",
+            "- Roadmap Foundations: Phase 33 execution boundary audit is report/status/catalog only.",
+            "- Roadmap Foundations cover Phase 33 through Phase 42 without enabling a new execution path.",
+            "- Phase 41 safe real-capability pilot remains blocked until a later explicit approval phase.",
+            "- Phase 42 Release Candidate v2 Hardening is documentation/verification hardening only.",
         ]
         + [f"- {name}: {description}." for name, description in descriptions]
     )

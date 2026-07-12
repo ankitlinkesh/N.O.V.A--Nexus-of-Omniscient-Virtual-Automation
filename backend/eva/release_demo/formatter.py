@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from .capability_map import capability_map_text
 from .demo_commands import demo_commands_text
+from .demo_smoke import demo_smoke_text
 from .demo_profile import build_demo_profile
 from .known_limitations import known_limitations_text
+from .post_push_sync import post_push_sync_text
 from .release_readiness import VERIFICATION_COMMANDS, release_readiness_text
 from .safety_proof import safety_proof_text
 from .status import get_release_demo_status
@@ -93,3 +95,11 @@ def format_release_verification() -> str:
         )
     )
     return _output("Eva release verification bundle", body)
+
+
+def format_release_demo_smoke() -> str:
+    return _output("Eva release demo smoke test", demo_smoke_text())
+
+
+def format_release_post_push_sync() -> str:
+    return _output("Eva release post-push sync status", post_push_sync_text())

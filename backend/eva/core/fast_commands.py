@@ -1357,12 +1357,16 @@ def _handle_eva_ask_command(
         "release_safety_proof",
         "release_readiness",
         "release_limitations",
+        "release_demo_smoke",
+        "release_post_push_sync",
     }:
         from ..release_demo.formatter import (
             format_release_capability_map,
             format_release_commands,
             format_release_demo,
+            format_release_demo_smoke,
             format_release_limitations,
+            format_release_post_push_sync,
             format_release_readiness,
             format_release_safety_proof,
             format_release_status,
@@ -1376,6 +1380,8 @@ def _handle_eva_ask_command(
             "release_safety_proof": format_release_safety_proof,
             "release_readiness": format_release_readiness,
             "release_limitations": format_release_limitations,
+            "release_demo_smoke": format_release_demo_smoke,
+            "release_post_push_sync": format_release_post_push_sync,
         }
         return "Eva ask\n\n" + body_map[route.intent](), "fast-command"
     if route.intent in {
@@ -1887,6 +1893,8 @@ def _capability_for_natural_intent(intent: str) -> str | None:
         "release_safety_proof": "release.safety_proof",
         "release_readiness": "release.readiness",
         "release_limitations": "release.limitations",
+        "release_demo_smoke": "release.demo_smoke",
+        "release_post_push_sync": "release.post_push_sync",
         "verification_before_completion": "eva.workflow_plan",
         "real_apply_policy": "file.real_apply_policy",
         "real_create_request": "file.real_create_new_text_file",
@@ -2365,12 +2373,16 @@ def maybe_handle_fast_command(
         "eva release readiness",
         "eva release limitations",
         "eva release verification",
+        "eva release smoke test",
+        "eva release post push sync",
     }:
         from ..release_demo.formatter import (
             format_release_capability_map,
             format_release_commands,
             format_release_demo,
+            format_release_demo_smoke,
             format_release_limitations,
+            format_release_post_push_sync,
             format_release_readiness,
             format_release_safety_proof,
             format_release_status,
@@ -2386,8 +2398,40 @@ def maybe_handle_fast_command(
             "eva release readiness": format_release_readiness,
             "eva release limitations": format_release_limitations,
             "eva release verification": format_release_verification,
+            "eva release smoke test": format_release_demo_smoke,
+            "eva release post push sync": format_release_post_push_sync,
         }
         return release_commands[normalized](), "fast-command"
+
+    if normalized in {
+        "eva roadmap status",
+        "eva execution boundaries",
+        "eva catalog status",
+        "eva frontend truth status",
+        "eva grounded answer status",
+        "eva voice reliability status",
+        "eva verifier dashboard status",
+    }:
+        from ..roadmap.formatter import (
+            format_catalog_status,
+            format_execution_boundary_audit,
+            format_frontend_truth_status,
+            format_grounded_answer_status,
+            format_phase_roadmap,
+            format_verifier_dashboard_status,
+            format_voice_reliability_status,
+        )
+
+        roadmap_commands = {
+            "eva roadmap status": format_phase_roadmap,
+            "eva execution boundaries": format_execution_boundary_audit,
+            "eva catalog status": format_catalog_status,
+            "eva frontend truth status": format_frontend_truth_status,
+            "eva grounded answer status": format_grounded_answer_status,
+            "eva voice reliability status": format_voice_reliability_status,
+            "eva verifier dashboard status": format_verifier_dashboard_status,
+        }
+        return roadmap_commands[normalized](), "fast-command"
 
     if normalized in {
         "eva news status", "eva news policy", "eva news dashboard", "eva news topics",

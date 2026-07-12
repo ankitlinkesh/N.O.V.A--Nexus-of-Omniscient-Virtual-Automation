@@ -700,8 +700,8 @@ function updateBrainReadout(mode) {
   const [provider, model] = labels[mode] || labels.auto;
   if (activeProvider) activeProvider.textContent = provider;
   if (activeModel) activeModel.textContent = model;
-  if (activeMode) activeMode.textContent = mode === "local" ? "Local safe fallback" : "Operator + Agentic";
-  if (nimChip) nimChip.textContent = mode === "nvidia_nim" || mode === "auto" ? "NIM Ready" : "Fallback Ready";
+  if (activeMode) activeMode.textContent = mode === "local" ? "Local safe fallback" : "Safe Demo + Catalog";
+  if (nimChip) nimChip.textContent = mode === "nvidia_nim" || mode === "auto" ? "Provider Ready" : "Fallback Ready";
 }
 
 async function sendStreamingChat(message) {

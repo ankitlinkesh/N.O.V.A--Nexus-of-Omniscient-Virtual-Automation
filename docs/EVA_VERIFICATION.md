@@ -345,3 +345,44 @@ For Phase 30, no git add/commit/tag/push was performed and no publishing/uploadi
 CodingAgent remains preview/report/status only, News remains local/mock or safe-read-only, and Voice remains a locked/mock foundation. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path.
 
 Next safe step: user-approved commit execution outside Eva or a separate explicit commit-approval phase.
+
+# Phase 32 Post-Push Sync + Demo Smoke Test Hardening
+
+Phase 32 Post-Push Sync + Demo Smoke Test Hardening is complete after this pass. The focused verifier is:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\verify_eva_post_push_demo_smoke.py
+```
+
+The verifier covers release demo smoke modules, post-push sync status, human-readable output, `eva release smoke test`, `eva release post push sync`, `eva ask` routes, README/demo docs, master verifier inclusion, and forbidden runtime surfaces.
+
+Remote moved warning was handled by updating local origin to:
+
+```text
+https://github.com/ankitlinkesh/eva-community.git
+```
+
+No commit/push/tag/release was performed in Phase 32. Demo smoke test is report/status/checklist only. No provider SDKs or package installs. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. No secrets, tokens, cookies, passwords, browser sessions, or config contents are read.
+
+Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.
+
+# Phase 33-42 Roadmap Foundations
+
+Phase 33 Execution Boundary Audit is complete as a foundation after this pass. The focused verifier is:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\verify_eva_phase33_roadmap_foundations.py
+```
+
+The verifier covers ExecutionClass values, typed execution boundary metadata, risky tool-registry classifications, Phase 32 demo-smoke catalog entries, Phase 33 through Phase 42 roadmap entries, command descriptors, capability descriptors, verifier descriptors, fast commands, `eva ask` routes, README/docs status, frontend truth labels, and master-profile inclusion.
+
+Run it before claiming roadmap-foundation readiness:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\verify_eva_phase33_roadmap_foundations.py
+.\.venv\Scripts\python.exe scripts\verify_eva_all.py --quick --timeout 90
+```
+
+Execution boundary audit status: no new execution path is enabled. Roadmap commands are report/status/catalog only. Phase 41 remains blocked until a later explicit approval phase. Phase 42 Release Candidate v2 Hardening is documentation/verification hardening only and does not tag, release, upload, publish, package, deploy, or push anything.
+
+No provider SDKs or package installs were added. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.

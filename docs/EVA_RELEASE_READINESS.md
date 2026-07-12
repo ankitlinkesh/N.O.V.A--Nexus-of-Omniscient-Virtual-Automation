@@ -31,3 +31,39 @@ Arbitrary file reads/writes remain blocked. Browser/desktop/shell/cloud/MCP and 
 Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path.
 
 Next safe step: user-approved commit execution outside Eva or a separate explicit commit-approval phase.
+
+## Phase 32 post-push demo smoke readiness
+
+Phase 32 Post-Push Sync + Demo Smoke Test Hardening is complete after this pass. It verifies that the pushed checkpoint can be explained to a fresh demo operator with safe local commands, post-push sync status, and a demo smoke checklist.
+
+Remote moved warning was handled by updating local origin to:
+
+```text
+https://github.com/ankitlinkesh/eva-community.git
+```
+
+Use `eva release smoke test` and `eva release post push sync` before a demo. Run `scripts/verify_eva_post_push_demo_smoke.py` plus the quick/full master profiles before claiming readiness.
+
+No commit/push/tag/release was performed in Phase 32. Demo smoke test is report/status/checklist only. No provider SDKs or package installs. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. No secrets, tokens, cookies, passwords, browser sessions, or config contents are read.
+
+Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.
+
+## Phase 33-42 roadmap readiness
+
+Phase 33 Execution Boundary Audit is complete as a foundation after this pass. It is ready for review after `scripts/verify_eva_phase33_roadmap_foundations.py` and the master quick profile pass in the current checkout.
+
+The readiness claim is limited to typed safety/catalog/reporting surfaces for Phase 33 through Phase 42. It does not claim that every later implementation phase is finished.
+
+Execution boundary audit status: no new execution path is enabled. Roadmap commands are report/status/catalog only. Phase 41 remains blocked until a later explicit approval phase. Phase 42 Release Candidate v2 Hardening remains documentation/verification hardening only and does not tag, release, upload, publish, package, deploy, or push anything.
+
+Safe review commands:
+
+- `eva roadmap status`
+- `eva execution boundaries`
+- `eva catalog status`
+- `eva frontend truth status`
+- `eva grounded answer status`
+- `eva voice reliability status`
+- `eva verifier dashboard status`
+
+No provider SDKs or package installs were added. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.

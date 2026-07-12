@@ -498,6 +498,24 @@ def _release_demo_schema(name: str, description: str) -> dict[str, Any]:
     }
 
 
+def _roadmap_schema(name: str, description: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "description": description,
+        "parameters": [],
+        "outputs": ["roadmap/report/status/catalog only"],
+        "safety_notes": [
+            "No new execution path.",
+            "No tool execution.",
+            "No browser/desktop/shell/cloud/MCP action.",
+            "No secret/config/session reads.",
+            "No package publishing, tag, release, upload, or deployment.",
+            "Phase 12L is the only existing real write boundary.",
+        ],
+        "execution_status": "roadmap_report_only",
+    }
+
+
 def _release_candidate_schema(name: str, description: str) -> dict[str, Any]:
     return {
         "name": name,
@@ -674,6 +692,8 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
     "release.readiness": _release_demo_schema("Release Readiness", "Show local demo readiness without publishing."),
     "release.limitations": _release_demo_schema("Release Known Limitations", "Show honest public limitations."),
     "release.verification": _release_demo_schema("Release Verification Bundle", "Show manual verifier commands."),
+    "release.demo_smoke": _release_demo_schema("Release Demo Smoke Test", "Show the Phase 32 safe local demo smoke checklist."),
+    "release.post_push_sync": _release_demo_schema("Release Post-Push Sync Status", "Show the Phase 32 post-push sync status."),
     "rc.status": _release_candidate_schema("Release Candidate Status", "Show Phase 30 locked readiness."),
     "rc.manifest": _release_candidate_schema("RC Dirty Tree Manifest", "Show the audited change grouping."),
     "rc.commit_plan": _release_candidate_schema("RC Commit Plan", "Show commit candidates as text only."),
@@ -682,6 +702,16 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
     "rc.readiness": _release_candidate_schema("RC Readiness", "Show safe-to-commit guidance without Git."),
     "rc.safety_proof": _release_candidate_schema("RC Safety Proof", "Show deterministic Phase 30 safety evidence."),
     "rc.verification": _release_candidate_schema("RC Verification", "Show manual checks without execution."),
+    "roadmap.execution_boundary_audit": _roadmap_schema("Execution Boundary Audit", "Classify risky runtime surfaces and existing gates."),
+    "roadmap.command_catalog": _roadmap_schema("Command Catalog", "Show typed command descriptors for roadmap commands."),
+    "roadmap.capability_catalog": _roadmap_schema("Capability Catalog", "Show typed capability descriptors for roadmap work."),
+    "roadmap.control_truth_panels": _roadmap_schema("Control Truth Panels", "Show Control Center and AI OS truth-panel roadmap status."),
+    "roadmap.frontend_truth": _roadmap_schema("Frontend Truth", "Show safe-demo frontend truth status."),
+    "roadmap.grounded_answers": _roadmap_schema("Grounded Answers", "Show catalog-backed answer-routing status."),
+    "roadmap.voice_reliability": _roadmap_schema("Voice Reliability", "Show voice lifecycle and diagnostics roadmap status."),
+    "roadmap.verifier_dashboard": _roadmap_schema("Verifier Dashboard", "Show verifier metadata and profile status."),
+    "roadmap.safe_real_pilot": _roadmap_schema("Safe Real-Capability Pilot", "Show blocked status for optional future real capability graduation."),
+    "roadmap.release_candidate_v2": _roadmap_schema("Release Candidate v2", "Show Phase 42 hardening status without publishing."),
     "research_memory.status": {
         "name": "Research Memory Status",
         "description": "Show local Research Memory status without paths.",

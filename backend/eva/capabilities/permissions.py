@@ -428,7 +428,20 @@ def _blocked_permission(capability_id: str, reason: str | None = None) -> Capabi
 
 def _permission_from_capability(capability: Capability) -> CapabilityPermission:
     writes_local_data = not capability.read_only
-    external_effect = capability.provider not in {"research_memory", "eva_v2", "public_release", "file_agent", "browser_agent", "desktop_agent", "eva_core", "llm_router"}
+    external_effect = capability.provider not in {
+        "research_memory",
+        "eva_v2",
+        "public_release",
+        "file_agent",
+        "browser_agent",
+        "desktop_agent",
+        "coding_agent",
+        "release_demo",
+        "release_candidate",
+        "roadmap",
+        "eva_core",
+        "llm_router",
+    }
     public_allowed = bool(
         capability.enabled_by_default
         and capability.status == "stable"

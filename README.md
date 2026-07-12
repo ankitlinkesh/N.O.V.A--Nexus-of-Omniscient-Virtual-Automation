@@ -14,9 +14,9 @@ Eva is not presented as an unrestricted autonomous operator. The public demo is 
 
 ## Current Verified Status
 
-The repository contains the Phase 29 Public Demo / Release profile. It is report/status/documentation only and is considered ready for local demo review only after the focused, quick, and full verifier commands below pass in the current checkout.
+The repository contains the Phase 32 safe local demo smoke layer and the Phase 33 roadmap-foundation layer. These are report/status/documentation/catalog surfaces only and are considered ready for local demo review only after the focused, quick, and full verifier commands below pass in the current checkout.
 
-No publication, upload, package release, installer creation, commit, tag, or push is performed by Phase 29.
+No publication, upload, package release, installer creation, commit, tag, push, or new execution path is performed by these phases. In short: no new execution path is enabled.
 
 ## Capabilities
 
@@ -41,9 +41,50 @@ eva release safety proof
 eva release readiness
 eva release limitations
 eva release verification
+eva release smoke test
+eva release post push sync
+eva roadmap status
+eva execution boundaries
+eva catalog status
+eva frontend truth status
+eva grounded answer status
+eva voice reliability status
+eva verifier dashboard status
 ```
 
 These commands return deterministic local text. They do not publish, execute tools, inspect private sessions, or unlock restricted features.
+
+## Safe Local Demo
+
+Phase 32 adds a safe local demo smoke layer for a fresh user/demo run. Use `eva release smoke test` to show the demo-smoke checklist and `eva release post push sync` to show the post-push sync status. These are report/status/checklist only.
+
+To verify Eva without enabling unsafe features:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\verify_eva_post_push_demo_smoke.py
+.\.venv\Scripts\python.exe scripts\verify_eva_all.py --quick --timeout 90
+.\.venv\Scripts\python.exe scripts\verify_eva_all.py --full --timeout 90
+```
+
+No provider SDKs or package installs are needed. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path.
+
+## Phase 33-42 Roadmap Foundations
+
+Phase 33 starts the execution boundary audit and typed catalog foundation for the Phase 33 through Phase 42 improvement roadmap. Phase 42 remains Release Candidate v2 hardening and does not publish, tag, release, upload, or deploy anything.
+
+Roadmap status commands:
+
+```text
+eva roadmap status
+eva execution boundaries
+eva catalog status
+eva frontend truth status
+eva grounded answer status
+eva voice reliability status
+eva verifier dashboard status
+```
+
+These commands are report/status/catalog only. They classify existing runtime surfaces, document risky tool boundaries, and expose the next phase plan without enabling a new execution path. Phase 12L remains the only real project write boundary.
 
 Additional established safety demonstrations remain available:
 
@@ -78,6 +119,12 @@ Run the Phase 29 verifier:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\verify_eva_public_demo_release.py
+```
+
+Run the Phase 33 roadmap-foundation verifier:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\verify_eva_phase33_roadmap_foundations.py
 ```
 
 Run both master profiles:

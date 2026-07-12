@@ -610,3 +610,49 @@ For Phase 30, no git add/commit/tag/push was performed and no publishing/uploadi
 CodingAgent remains preview/report/status only, News Dashboard remains local/mock or safe-read-only only, and Voice remains a locked/mock foundation. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real write path.
 
 Next safe step: user-approved commit execution outside Eva or a separate explicit commit-approval phase.
+
+## Phase 32 Post-Push Sync + Demo Smoke Test Hardening
+
+Phase 32 Post-Push Sync + Demo Smoke Test Hardening is complete after this pass. It records post-push remote hygiene and adds a deterministic demo smoke checklist/report/status layer for fresh local demo runs.
+
+Remote moved warning was handled by updating local origin to:
+
+```text
+https://github.com/ankitlinkesh/eva-community.git
+```
+
+New report-only commands:
+
+- `eva release smoke test`
+- `eva release post push sync`
+- `eva ask show demo smoke test`
+- `eva ask show post push sync status`
+- `eva ask is Eva synced with GitHub`
+- `eva ask how do I demo Eva safely`
+- `eva ask what should I run in the demo`
+
+No commit/push/tag/release was performed in Phase 32. Demo smoke test is report/status/checklist only. No provider SDKs or package installs. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. No secrets, tokens, cookies, passwords, browser sessions, or config contents are read.
+
+Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.
+
+## Phase 33-42 Roadmap Foundations
+
+Phase 33 Execution Boundary Audit is complete as a foundation after this pass. It adds typed execution classes, execution boundary metadata, command descriptors, capability descriptors, verifier descriptors, and report-only roadmap commands for the Phase 33 through Phase 42 improvement sequence.
+
+New report-only commands:
+
+- `eva roadmap status`
+- `eva execution boundaries`
+- `eva catalog status`
+- `eva frontend truth status`
+- `eva grounded answer status`
+- `eva voice reliability status`
+- `eva verifier dashboard status`
+
+Phase 34 Command Router Decomposition, Phase 35 Capability Catalog Normalization, Phase 36 Control Center and AI OS Truth Panels, Phase 37 Frontend UX Truth and Demo Polish, Phase 38 Grounded Answer and Routing Quality, Phase 39 Voice Reliability, Phase 40 Verifier Harness Refactor, Phase 41 Optional Safe Real-Capability Pilot, and Phase 42 Release Candidate v2 Hardening are represented as typed roadmap metadata.
+
+Execution boundary audit status: no new execution path is enabled. Risky runtime tool-registry surfaces are cataloged as gated real actions or blocked where appropriate, and roadmap/release/demo commands remain report/status/catalog only.
+
+Phase 41 remains blocked until a later explicit approval phase. Phase 42 is release-candidate hardening only and does not tag, release, upload, publish, package, or deploy anything.
+
+No provider SDKs or package installs were added. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.

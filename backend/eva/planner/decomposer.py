@@ -152,6 +152,8 @@ def decompose_goal(goal_text: str) -> list[EvaTaskStep]:
         ("release_readiness", "Read public release readiness", "release.readiness"),
         ("release_limitations", "Read public known limitations", "release.limitations"),
         ("release_verification", "Read public verification bundle", "release.verification"),
+        ("release_demo_smoke", "Read safe local demo smoke checklist", "release.demo_smoke"),
+        ("release_post_push_sync", "Read post-push sync status", "release.post_push_sync"),
     ):
         if intent in intents:
             steps.append(
@@ -159,6 +161,27 @@ def decompose_goal(goal_text: str) -> list[EvaTaskStep]:
                     intent,
                     title,
                     "Local deterministic release demo/report/status only; external actions, mutation, filesystem access, and every execution class remain locked.",
+                    capability,
+                    normalized,
+                    "SafetyAgent",
+                    depends_on=steps[-1].step_id,
+                )
+            )
+    for intent, title, capability in (
+        ("roadmap_status", "Read phase improvement roadmap", "roadmap.control_truth_panels"),
+        ("execution_boundaries", "Read execution boundary audit", "roadmap.execution_boundary_audit"),
+        ("catalog_status", "Read roadmap catalog status", "roadmap.capability_catalog"),
+        ("frontend_truth_status", "Read frontend truth status", "roadmap.frontend_truth"),
+        ("grounded_answer_status", "Read grounded answer status", "roadmap.grounded_answers"),
+        ("voice_reliability_status", "Read voice reliability status", "roadmap.voice_reliability"),
+        ("verifier_dashboard_status", "Read verifier dashboard status", "roadmap.verifier_dashboard"),
+    ):
+        if intent in intents:
+            steps.append(
+                _preview_step(
+                    intent,
+                    title,
+                    "Local deterministic roadmap/report/status only; no new execution path is enabled and Phase 12L remains the only real write boundary.",
                     capability,
                     normalized,
                     "SafetyAgent",

@@ -8,9 +8,11 @@ def next_safe_step_text() -> str:
         [
             "AI OS next safe step",
             *boundary_lines(),
-            "Recommended next phase: Phase 27 News/Web Intelligence Dashboard.",
-            "Phase 25 desktop observation remains explicit, one-shot, redaction-first, and control-locked.",
-            "Phase 26 desktop control remains a local/mock dry-run gate with no executor.",
+            "Recommended next phase: continue Phase 33 Execution Boundary Audit / Roadmap Foundations before any real capability graduation.",
+            "Phase 33 through Phase 42 are safety/catalog/quality hardening phases.",
+            "Phase 41 safe real-capability pilot remains blocked until a later explicit approval phase.",
+            "Phase 42 Release Candidate v2 Hardening is documentation/verification hardening only.",
+            "No new execution path is enabled; Phase 12L remains the only real write boundary.",
             "The dashboard recommendation is metadata only and starts no work automatically.",
         ]
     )

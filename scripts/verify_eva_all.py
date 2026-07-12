@@ -59,6 +59,8 @@ FULL_VERIFIERS = [
     "verify_eva_coding_agent_foundation.py",
     "verify_eva_public_demo_release.py",
     "verify_eva_release_candidate_hardening.py",
+    "verify_eva_post_push_demo_smoke.py",
+    "verify_eva_phase33_roadmap_foundations.py",
     "verify_eva_file_agent_real_apply_gate.py",
     "verify_eva_file_agent_real_create_gate.py",
     "verify_eva_file_agent_sandbox_apply.py",
@@ -116,6 +118,8 @@ QUICK_VERIFIERS = [
     "verify_eva_coding_agent_foundation.py",
     "verify_eva_public_demo_release.py",
     "verify_eva_release_candidate_hardening.py",
+    "verify_eva_post_push_demo_smoke.py",
+    "verify_eva_phase33_roadmap_foundations.py",
     "verify_eva_file_agent_real_apply_gate.py",
 ]
 
@@ -125,6 +129,34 @@ PROFILES = {
     "full": FULL_VERIFIERS,
 }
 
+_VERIFIER_TAG_OVERRIDES = {
+    "verify_eva_post_push_demo_smoke.py": ("phase32", "release", "demo-smoke"),
+    "verify_eva_phase33_roadmap_foundations.py": ("phase33", "roadmap", "safety-boundary", "catalog"),
+    "verify_eva_all.py": ("phase40", "verifier-dashboard", "profiles"),
+}
+
+
+def _build_verifier_descriptors() -> dict[str, dict[str, object]]:
+    scripts = sorted(set(FULL_VERIFIERS) | set(QUICK_VERIFIERS))
+    descriptors: dict[str, dict[str, object]] = {}
+    for script in scripts:
+        profiles = tuple(name for name, names in PROFILES.items() if script in names)
+        tags = _VERIFIER_TAG_OVERRIDES.get(script, ())
+        if not tags:
+            stem = script.removeprefix("verify_eva_").removesuffix(".py")
+            tags = tuple(part for part in stem.replace("-", "_").split("_") if part)
+        descriptors[script] = {
+            "profiles": profiles,
+            "tags": tags,
+            "risk": "low" if script in QUICK_VERIFIERS else "medium",
+            "requires_network": False,
+            "mutates_repo_tracked_files": False,
+        }
+    return descriptors
+
+
+VERIFIER_DESCRIPTORS = _build_verifier_descriptors()
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run Eva verifier sweep.")
@@ -133,17 +165,27 @@ def main(argv: list[str] | None = None) -> int:
     profile_group.add_argument("--full", action="store_true", help="Run the complete verifier profile.")
     parser.add_argument("--continue-on-fail", action="store_true", help="Run remaining verifiers after a failure.")
     parser.add_argument("--list", action="store_true", help="List verifier scripts by profile without running them.")
+    parser.add_argument("--tag", help="Run only verifiers in the selected profile that include this metadata tag.")
+    parser.add_argument("--metadata", action="store_true", help="Show verifier metadata while listing profiles.")
     parser.add_argument("--timeout", type=float, default=None, help="Optional timeout in seconds per verifier script.")
     args = parser.parse_args(argv)
     profile = "quick" if args.quick else "full"
     verifiers = PROFILES[profile]
+    if args.tag:
+        verifiers = [script for script in verifiers if args.tag in VERIFIER_DESCRIPTORS.get(script, {}).get("tags", ())]
 
     if args.list:
         print("Eva verifier sweep")
         for name, scripts in PROFILES.items():
             print(f"{name}:")
-            for script in scripts:
-                print(f"- {script}")
+            selected = [script for script in scripts if not args.tag or args.tag in VERIFIER_DESCRIPTORS.get(script, {}).get("tags", ())]
+            for script in selected:
+                if args.metadata:
+                    descriptor = VERIFIER_DESCRIPTORS.get(script, {})
+                    tags = ", ".join(str(tag) for tag in descriptor.get("tags", ()))
+                    print(f"- {script} [{tags}]")
+                else:
+                    print(f"- {script}")
         return 0
 
     results: list[tuple[str, int, float]] = []

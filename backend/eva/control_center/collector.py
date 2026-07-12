@@ -9,7 +9,7 @@ def collect_control_center_status() -> ControlCenterStatus:
     warnings: list[str] = []
     return ControlCenterStatus(
         app_name="Eva Control Center",
-        phase="Phase 30 Release Candidate Hardening / Commit Planning",
+        phase="Phase 33 Execution Boundary Audit / Roadmap Foundations",
         authority_summary=_authority_summary(warnings),
         natural_router_summary=_natural_router_summary(),
         llm_router_summary=_llm_router_summary(warnings),

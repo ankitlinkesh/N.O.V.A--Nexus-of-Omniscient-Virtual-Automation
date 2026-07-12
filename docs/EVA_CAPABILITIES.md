@@ -280,3 +280,24 @@ Phase 29 Public Demo / Release is complete after this pass. It adds eight read/s
 No publishing, uploading, package release, installer creation, commit, tag, push, source edit, shell/test/package/git execution, arbitrary filesystem access, live provider call, or tool execution is enabled. Secret/config/session and raw private dumps remain blocked. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent, News Dashboard, and Voice retain their Phase 28/27/22 boundaries. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.
 
 Phase 29 handed off to Phase 30 Release Candidate Hardening. The current next safe step is user-approved commit execution outside Eva or a separate explicit commit-approval phase.
+
+## Phase 33-42 Roadmap Foundations
+
+Phase 33 Execution Boundary Audit is complete as a foundation after this pass. It adds report/status/catalog capabilities for the Phase 33 through Phase 42 improvement roadmap.
+
+New roadmap capabilities:
+
+- `roadmap.execution_boundary_audit`: classify risky runtime surfaces and existing gates.
+- `roadmap.command_catalog`: expose command descriptors before deeper router decomposition.
+- `roadmap.capability_catalog`: expose shared capability descriptors for docs, planner, resources, schemas, and verifiers.
+- `roadmap.control_truth_panels`: track Control Center and AI OS truth-panel work.
+- `roadmap.frontend_truth`: track safe demo UI labels and quick chips.
+- `roadmap.grounded_answers`: track deterministic catalog-backed answers for Eva capability/architecture questions.
+- `roadmap.voice_reliability`: track voice lifecycle and diagnostics work.
+- `roadmap.verifier_dashboard`: track verifier metadata and profile reporting.
+- `roadmap.safe_real_pilot`: remains blocked until later explicit approval.
+- `roadmap.release_candidate_v2`: records Phase 42 hardening as documentation/verification only.
+
+Execution boundary audit status: no new execution path is enabled. These capabilities are report/status/catalog only, except `roadmap.safe_real_pilot`, which is blocked until a later explicit approval phase. Phase 42 does not tag, release, upload, publish, package, deploy, or push anything.
+
+No provider SDKs or package installs were added. No real LLM/API/provider calls happen. No `.env`, `.env.local`, secrets, tokens, cookies, passwords, browser sessions, or config contents are read. Browser/desktop/shell/cloud/MCP execution remains locked. CodingAgent remains preview/report/status only. Phase 12L narrow approved new `.md`/`.txt` creation remains the only real file write path.

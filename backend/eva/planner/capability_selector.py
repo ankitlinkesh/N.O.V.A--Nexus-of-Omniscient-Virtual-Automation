@@ -24,6 +24,15 @@ def infer_goal_intents(goal_text: str) -> list[str]:
     if "release readiness" in text or "ready for demo" in text: intents.append("release_readiness")
     if "known limitations" in text or "what can eva not do" in text: intents.append("release_limitations")
     if "release verification" in text: intents.append("release_verification")
+    if "demo smoke" in text or "smoke test" in text or "demo safely" in text: intents.append("release_demo_smoke")
+    if "post push sync" in text or "post-push sync" in text or "synced with github" in text: intents.append("release_post_push_sync")
+    if "roadmap status" in text or "improvement roadmap" in text or "phase roadmap" in text: intents.append("roadmap_status")
+    if "execution boundaries" in text or "execution boundary audit" in text or "actually execute safely" in text: intents.append("execution_boundaries")
+    if "catalog status" in text or "capability catalog" in text or "command catalog" in text: intents.append("catalog_status")
+    if "frontend truth" in text or "safe demo ui" in text: intents.append("frontend_truth_status")
+    if "grounded answer" in text or "grounded routing" in text: intents.append("grounded_answer_status")
+    if "voice reliability" in text or "voice diagnostics" in text: intents.append("voice_reliability_status")
+    if "verifier dashboard" in text or "verifier metadata" in text: intents.append("verifier_dashboard_status")
     if "coding specialist status" in text or "coding status" in text: intents.append("coding_status")
     if any(x in text for x in ("can eva edit code", "can eva apply patches", "can eva run tests", "can eva run git commands", "coding policy")): intents.append("coding_policy")
     if "coding specialists" in text: intents.append("coding_specialists")
@@ -759,6 +768,19 @@ def select_capabilities_for_goal(goal_text: str) -> list[str]:
         ("release_readiness", "release.readiness"),
         ("release_limitations", "release.limitations"),
         ("release_verification", "release.verification"),
+        ("release_demo_smoke", "release.demo_smoke"),
+        ("release_post_push_sync", "release.post_push_sync"),
+    ):
+        if intent in intents:
+            selected.append(capability)
+    for intent, capability in (
+        ("roadmap_status", "roadmap.control_truth_panels"),
+        ("execution_boundaries", "roadmap.execution_boundary_audit"),
+        ("catalog_status", "roadmap.capability_catalog"),
+        ("frontend_truth_status", "roadmap.frontend_truth"),
+        ("grounded_answer_status", "roadmap.grounded_answers"),
+        ("voice_reliability_status", "roadmap.voice_reliability"),
+        ("verifier_dashboard_status", "roadmap.verifier_dashboard"),
     ):
         if intent in intents:
             selected.append(capability)

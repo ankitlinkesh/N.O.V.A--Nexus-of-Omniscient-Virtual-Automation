@@ -47,6 +47,24 @@ def route_natural_request(text: str) -> NaturalRouteResult:
         return _route(original, "release_status", 0.995, "eva release status", "read", planner=True)
     if _has_any(normalized, ("show public demo",)):
         return _route(original, "release_demo", 0.995, "eva release demo", "read", planner=True)
+    if _has_any(normalized, ("show demo smoke test", "how do i demo eva safely", "what should i run in the demo")):
+        return _route(original, "release_demo_smoke", 0.997, "eva release smoke test", "read", planner=True)
+    if _has_any(normalized, ("show post push sync status", "is eva synced with github", "show post-push sync status")):
+        return _route(original, "release_post_push_sync", 0.997, "eva release post push sync", "read", planner=True)
+    if _has_any(normalized, ("show eva roadmap status", "show roadmap status", "show phase roadmap", "show improvement roadmap")):
+        return _route(original, "roadmap_status", 0.997, "eva roadmap status", "read", planner=True)
+    if _has_any(normalized, ("show execution boundaries", "show execution boundary audit", "what can eva actually execute safely", "what can eva execute safely")):
+        return _route(original, "execution_boundaries", 0.997, "eva execution boundaries", "read", planner=True)
+    if _has_any(normalized, ("show catalog status", "show capability catalog status", "show command catalog status")):
+        return _route(original, "catalog_status", 0.997, "eva catalog status", "read", planner=True)
+    if _has_any(normalized, ("show frontend truth status", "show safe demo ui status")):
+        return _route(original, "frontend_truth_status", 0.997, "eva frontend truth status", "read", planner=True)
+    if _has_any(normalized, ("show grounded answer status", "show grounded routing status")):
+        return _route(original, "grounded_answer_status", 0.997, "eva grounded answer status", "read", planner=True)
+    if _has_any(normalized, ("show voice reliability status", "show voice diagnostics status")):
+        return _route(original, "voice_reliability_status", 0.997, "eva voice reliability status", "read", planner=True)
+    if _has_any(normalized, ("show verifier dashboard status", "show verifier metadata status")):
+        return _route(original, "verifier_dashboard_status", 0.997, "eva verifier dashboard status", "read", planner=True)
     if _has_any(normalized, ("show demo commands",)):
         return _route(original, "release_commands", 0.995, "eva release commands", "read", planner=True)
     if _has_any(normalized, ("show capability map",)) or normalized == "what can eva do":

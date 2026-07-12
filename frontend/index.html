@@ -69,9 +69,9 @@
           <p class="hero-subtitle">Ask. Command. Inspect. Orchestrate.</p>
           <div class="status-chip-row" aria-label="Eva capabilities">
             <span class="status-chip" id="statusPill">Online</span>
-            <span class="status-chip">Agentic v2</span>
-            <span class="status-chip" id="nimChip">NIM Ready</span>
-            <span class="status-chip">Operator Mode</span>
+            <span class="status-chip">Report-only Roadmap</span>
+            <span class="status-chip" id="nimChip">Provider Ready</span>
+            <span class="status-chip">Execution Boundaries</span>
           </div>
           <a class="deck-jump" href="#commandDeck">Open Command Deck</a>
         </div>
@@ -102,7 +102,8 @@
           </div>
 
           <div class="rail-section rail-actions">
-            <button type="button" class="ghost-button" data-prompt="operator status">Operator status</button>
+            <button type="button" class="ghost-button" data-prompt="eva roadmap status">Roadmap status</button>
+            <button type="button" class="ghost-button" data-prompt="eva execution boundaries">Execution boundaries</button>
             <button type="button" class="ghost-button" data-prompt="research status">Research status</button>
             <button type="button" class="ghost-button" data-prompt="llm status">LLM status</button>
           </div>
@@ -144,9 +145,9 @@
 
           <div class="rail-section quick-grid" aria-label="Quick commands">
             <button type="button" class="quick-chip" data-prompt="yo Eva">Yo Eva</button>
-            <button type="button" class="quick-chip" data-prompt="open chrome">Open Chrome</button>
-            <button type="button" class="quick-chip" data-prompt="show screen">Show Screen</button>
-            <button type="button" class="quick-chip" data-prompt="agent mode: say hello in one sentence">Agent Ping</button>
+            <button type="button" class="quick-chip" data-prompt="eva release smoke test">Safe Demo</button>
+            <button type="button" class="quick-chip" data-prompt="eva roadmap status">Roadmap</button>
+            <button type="button" class="quick-chip" data-prompt="eva execution boundaries">Boundaries</button>
           </div>
         </aside>
 
@@ -186,8 +187,8 @@
         <aside class="status-panel glass-panel">
           <div class="panel-card">
             <p class="eyebrow">Mode</p>
-            <strong id="activeMode">Operator + Agentic</strong>
-            <span>Safe tools only</span>
+            <strong id="activeMode">Safe Demo + Catalog</strong>
+            <span>Report-only roadmap</span>
           </div>
           <div class="panel-card">
             <p class="eyebrow">Provider</p>
@@ -228,7 +229,7 @@
           </div>
           <div class="panel-card module-stack">
             <p class="eyebrow">Modules</p>
-            <div class="metric"><span>Voice</span><strong id="voiceStatus">Modular</strong></div>
+            <div class="metric"><span>Voice diagnostics</span><strong id="voiceStatus">Modular</strong></div>
             <div class="metric"><span>Screen</span><strong>No camera</strong></div>
             <div class="metric"><span>Memory</span><strong>SQLite</strong></div>
             <div class="metric"><span>Phone</span><strong>LAN ready</strong></div>
