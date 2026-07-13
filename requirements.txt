@@ -19,5 +19,10 @@ pyautogui==0.9.54
 # PLAYWRIGHT_BROWSERS_PATH (defaults to D:\eva-agent-tools\playwright-browsers).
 playwright==1.61.0
 
+# MCP (Model Context Protocol) client SDK, used by backend/eva/mcp/. Inert by
+# default: no subprocess or network connection unless the operator sets
+# EVA_MCP_ENABLED=1 and configures servers in config/mcp_servers.json.
+mcp==1.28.1
+
 # Not pip packages: Tavily search is an HTTP API used via httpx (needs an API
 # key in .env), and Piper TTS is a bundled binary under bin/piper.exe.

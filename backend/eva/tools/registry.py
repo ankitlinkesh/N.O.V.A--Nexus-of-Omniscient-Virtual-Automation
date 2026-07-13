@@ -78,6 +78,13 @@ from ..security import tool_gate
 
 SafetyLevel = Literal["safe", "sensitive", "dangerous"]
 
+# Shared cache of MCP-derived tool specs, populated (only when the MCP
+# subsystem is explicitly enabled and configured) via register_mcp_tool_specs()
+# below. ToolRegistry() is constructed in multiple places (routes.py,
+# confirmation.py's run_approved, runner.py) so this module-level cache is how
+# MCP tools become visible to every instance. Empty by default => no-op.
+_MCP_TOOL_SPECS: dict[str, "ToolSpec"] = {}
+
 
 @dataclass(frozen=True)
 class ToolSpec:
@@ -1295,6 +1302,10 @@ class ToolRegistry:
             ),
         }
         self._normalize_action_types()
+        # Merge in any MCP-derived tool specs registered via
+        # register_mcp_tool_specs(). Empty by default, so this is a no-op
+        # unless the MCP subsystem has been explicitly enabled/configured.
+        self._tools.update(_MCP_TOOL_SPECS)
 
     def _normalize_action_types(self) -> None:
         """Correct action_type metadata so it honestly reflects what each tool
@@ -1493,4 +1504,10 @@ class ToolRegistry:
             "supports_rollback": spec.supports_rollback,
             "verification_method": spec.verification_method,
         }
+
+
+def register_mcp_tool_specs(specs: dict[str, ToolSpec]) -> None:
+    """Populate the shared MCP spec cache so every ToolRegistry instance
+    (including the fresh one that executes confirmations) exposes them."""
+    _MCP_TOOL_SPECS.update(specs)
 
