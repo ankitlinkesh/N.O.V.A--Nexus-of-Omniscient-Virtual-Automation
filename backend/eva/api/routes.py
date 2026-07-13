@@ -972,7 +972,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         return ChatResponse(session_id=session_id, reply=reply, source=source)
 
     if is_agentic_intent(payload.message):
-        history = memory.recent_messages(session_id)
+        history = memory.history_with_recall(session_id, payload.message)
         memory.add_message(session_id, "user", payload.message)
         result = await run_agentic_task(
             payload.message,
@@ -1001,7 +1001,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         )
 
 
-    history = memory.recent_messages(session_id)
+    history = memory.history_with_recall(session_id, payload.message)
     memory.add_message(session_id, "user", payload.message)
 
     try:
@@ -1125,7 +1125,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
             return
 
         if is_agentic_intent(payload.message):
-            history = memory.recent_messages(session_id)
+            history = memory.history_with_recall(session_id, payload.message)
             memory.add_message(session_id, "user", payload.message)
             yield _json_line({"type": "meta", "session_id": session_id, "source": "agent-runner", "route": "agentic"})
             yield _json_line({"type": "agent_task", "message": "Agent task started"})
@@ -1158,7 +1158,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
             return
 
 
-        history = memory.recent_messages(session_id)
+        history = memory.history_with_recall(session_id, payload.message)
         memory.add_message(session_id, "user", payload.message)
         yield _json_line({"type": "planning", "message": "Planning..."})
 

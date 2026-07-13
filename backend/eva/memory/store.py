@@ -105,6 +105,19 @@ class MemoryStore:
                 "INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
                 (uuid4().hex, session_id, role, content, datetime.now(timezone.utc).isoformat()),
             )
+        self._maybe_vector_store(session_id, role, content)
+
+    def _maybe_vector_store(self, session_id: str, role: str, content: str) -> None:
+        try:
+            from ..vector_memory.retriever import add_memory_item, vector_memory_status
+            if not vector_memory_status().get("enabled"):
+                return
+            text = (content or "").strip()
+            if len(text) < 20:  # skip trivial turns ("ok", "yes", etc.)
+                return
+            add_memory_item({"text": text, "metadata": {"session_id": session_id, "role": role}, "source": "chat"})
+        except Exception:
+            return
 
     def log_event(self, session_id: str, kind: str, payload: dict) -> None:
         with self._lock, self._connect() as conn:
@@ -129,6 +142,27 @@ class MemoryStore:
             {"role": role, "content": content, "created_at": created_at}
             for role, content, created_at in reversed(rows)
         ]
+
+    def history_with_recall(self, session_id: str, query: str, limit: int = 12) -> list[dict[str, str]]:
+        history = self.recent_messages(session_id, limit=limit)
+        try:
+            from ..vector_memory.retriever import search_memory, vector_memory_status
+            if not vector_memory_status().get("enabled"):
+                return history
+            hits = (search_memory(str(query or ""), limit=4) or {}).get("results") or []
+            # de-duplicate against what's already in recent history text
+            recent_texts = {m.get("content", "").strip() for m in history}
+            lines = []
+            for h in hits:
+                t = (h.get("text") or "").strip()
+                if t and t not in recent_texts:
+                    lines.append(f"- {t}")
+            if not lines:
+                return history
+            recall_msg = {"role": "system", "content": "Relevant things you remember about the user (from long-term memory):\n" + "\n".join(lines[:4])}
+            return [recall_msg] + history
+        except Exception:
+            return history
 
     def remember_fact(self, key: str, value: str, *, namespace: str = "user_profile", source: str = "user") -> None:
         now = datetime.now(timezone.utc).isoformat()
