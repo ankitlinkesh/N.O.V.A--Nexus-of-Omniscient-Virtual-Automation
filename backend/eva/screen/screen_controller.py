@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -11,9 +12,31 @@ def _obs(action_id: str, success: bool, summary: str, raw: dict[str, Any] | None
     return AgentObservation(action_id=action_id, success=success, raw_observation=raw or {}, summary=summary, error=error)
 
 
+def real_input_enabled() -> bool:
+    """Real pyautogui-backed mouse/keyboard control is opt-in.
+
+    Even with pyautogui installed, physical input is only performed when
+    EVA_ENABLE_REAL_INPUT is truthy. This keeps the default (and the whole
+    verifier/test suite) inert so nothing moves the real cursor unexpectedly;
+    the operator opts in explicitly when they want Eva to have hands.
+    """
+    raw = os.environ.get("EVA_ENABLE_REAL_INPUT")
+    if raw is None:
+        return False
+    # Empty string counts as off too: a physical-input gate must fail safe, so
+    # only an explicit truthy value hands Eva the mouse and keyboard.
+    return raw.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
 def _pyautogui():
+    if not real_input_enabled():
+        return None, "real input disabled (set EVA_ENABLE_REAL_INPUT=1 to enable pyautogui-backed control)"
     try:
         import pyautogui  # type: ignore
+
+        # Slam the cursor into any screen corner to abort; small pause between actions.
+        pyautogui.FAILSAFE = True
+        pyautogui.PAUSE = 0.1
         return pyautogui, None
     except Exception as exc:
         return None, str(exc)
@@ -24,7 +47,7 @@ def click(x: int, y: int, reason: str, action_id: str = "screen.click") -> Agent
         return _obs(action_id, False, "Screen click refused because no active task reason was provided.", error="reason_required")
     gui, error = _pyautogui()
     if gui is None:
-        return _obs(action_id, False, "Screen click unavailable because pyautogui is not installed.", error=error)
+        return _obs(action_id, False, "Screen click unavailable because real input is disabled.", error=error)
     gui.click(int(x), int(y))
     return _obs(action_id, True, f"Clicked visible screen coordinate for reason: {reason}.", {"x": int(x), "y": int(y)})
 
@@ -34,7 +57,7 @@ def double_click(x: int, y: int, reason: str, action_id: str = "screen.double_cl
         return _obs(action_id, False, "Screen double-click refused because no active task reason was provided.", error="reason_required")
     gui, error = _pyautogui()
     if gui is None:
-        return _obs(action_id, False, "Screen double-click unavailable because pyautogui is not installed.", error=error)
+        return _obs(action_id, False, "Screen double-click unavailable because real input is disabled.", error=error)
     gui.doubleClick(int(x), int(y))
     return _obs(action_id, True, f"Double-clicked visible screen coordinate for reason: {reason}.", {"x": int(x), "y": int(y)})
 
@@ -44,7 +67,7 @@ def type_text(text: str, reason: str, action_id: str = "screen.type_text") -> Ag
         return _obs(action_id, False, "Typing refused because no active task reason was provided.", error="reason_required")
     gui, error = _pyautogui()
     if gui is None:
-        return _obs(action_id, False, "Typing unavailable because pyautogui is not installed.", error=error)
+        return _obs(action_id, False, "Typing unavailable because real input is disabled.", error=error)
     gui.write(str(text), interval=0.01)
     return _obs(action_id, True, f"Typed text for reason: {reason}.", {"chars": len(str(text))})
 
@@ -54,7 +77,7 @@ def hotkey(keys: list[str], reason: str, action_id: str = "screen.hotkey") -> Ag
         return _obs(action_id, False, "Hotkey refused because no active task reason was provided.", error="reason_required")
     gui, error = _pyautogui()
     if gui is None:
-        return _obs(action_id, False, "Hotkey unavailable because pyautogui is not installed.", error=error)
+        return _obs(action_id, False, "Hotkey unavailable because real input is disabled.", error=error)
     clean = [str(key).strip().lower() for key in keys if str(key).strip()]
     gui.hotkey(*clean)
     return _obs(action_id, True, f"Pressed hotkey for reason: {reason}.", {"keys": clean})
@@ -65,7 +88,7 @@ def press(key: str, reason: str, action_id: str = "screen.press") -> AgentObserv
         return _obs(action_id, False, "Key press refused because no active task reason was provided.", error="reason_required")
     gui, error = _pyautogui()
     if gui is None:
-        return _obs(action_id, False, "Key press unavailable because pyautogui is not installed.", error=error)
+        return _obs(action_id, False, "Key press unavailable because real input is disabled.", error=error)
     gui.press(str(key).strip().lower())
     return _obs(action_id, True, f"Pressed key for reason: {reason}.", {"key": key})
 
@@ -75,7 +98,7 @@ def scroll(amount: int, reason: str, action_id: str = "screen.scroll") -> AgentO
         return _obs(action_id, False, "Scroll refused because no active task reason was provided.", error="reason_required")
     gui, error = _pyautogui()
     if gui is None:
-        return _obs(action_id, False, "Scroll unavailable because pyautogui is not installed.", error=error)
+        return _obs(action_id, False, "Scroll unavailable because real input is disabled.", error=error)
     gui.scroll(int(amount))
     return _obs(action_id, True, f"Scrolled for reason: {reason}.", {"amount": int(amount)})
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..screen.screen_controller import real_input_enabled
 from ..tools.registry import ToolRegistry
 from . import tool_gate
 
@@ -82,6 +83,11 @@ def format_capability_truth(registry: ToolRegistry | None = None) -> str:
         f"- {len(data['planner_immediate'])} of those run immediately; {len(data['planner_gated'])} still need confirmation/override.",
         "- Destructive file tools and screen input tools are NOT planner-reachable;",
         "  they run only via the direct, header-guarded /api/tools endpoint, and still pass the gate.",
+        "",
+        f"Physical mouse/keyboard input is {'ENABLED' if real_input_enabled() else 'disabled by default'} "
+        "(EVA_ENABLE_REAL_INPUT).",
+        "- When disabled, screen.click/type_text/hotkey/press/scroll degrade to a no-op message.",
+        "- When enabled, type_text/hotkey/press still require confirmation; pyautogui FAILSAFE is on.",
         "",
         "Approval flow: a gated call returns a pending-action ledger id; only a user-typed",
         "`confirm <id>` / `confirm override <id>` executes it via ToolRegistry.run_approved().",

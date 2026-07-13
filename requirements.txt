@@ -7,9 +7,11 @@ mss==10.2.0
 pillow==12.2.0
 python-multipart==0.0.29
 
-# Optional: real screen/desktop control (the screen.* tools). The app runs
-# without it — those tools degrade to a clear "not installed" message.
-# pyautogui==0.9.54
+# Real screen/desktop control backend for the screen.* tools (mouse/keyboard).
+# Installed, but inert by default: physical input only fires when the operator
+# sets EVA_ENABLE_REAL_INPUT=1 (see screen_controller.real_input_enabled).
+# Without the flag, the screen.* tools degrade to a clear "disabled" message.
+pyautogui==0.9.54
 
 # Not pip packages: Tavily search is an HTTP API used via httpx (needs an API
 # key in .env), and Piper TTS is a bundled binary under bin/piper.exe.
