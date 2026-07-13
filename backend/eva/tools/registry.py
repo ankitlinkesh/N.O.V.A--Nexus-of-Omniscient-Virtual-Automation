@@ -73,6 +73,7 @@ from .app_control_tools import app_close_request, app_focus, app_open, browser_o
 from .desktop import close_app, media_key, open_app, open_folder, open_url, system_power, system_status, web_search
 from .message_tools import message_confirm_send, message_prepare, message_send_via_ui
 from .safe_file_tools import file_copy, file_delete, file_list_dir, file_move, file_patch_text, file_read_text, file_write_text
+from ..browser_automation import playwright_driver
 from ..security import tool_gate
 
 SafetyLevel = Literal["safe", "sensitive", "dangerous"]
@@ -149,6 +150,29 @@ _POWER_TOOLS = frozenset({"system_power", "guarded_power_action"})
 
 def _schema(properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
     return {"type": "object", "properties": properties, "required": required or [], "additionalProperties": False}
+
+
+def _web_target(
+    target: dict[str, Any] | None,
+    selector: str | None,
+    role: str | None,
+    name: str | None,
+    text: str | None,
+) -> dict[str, Any]:
+    """Build a Playwright locator target dict from an explicit `target` object
+    or from individual selector/role/name/text locator hints."""
+    if isinstance(target, dict) and target:
+        return target
+    built: dict[str, Any] = {}
+    if selector:
+        built["selector"] = selector
+    if role:
+        built["role"] = role
+    if name:
+        built["name"] = name
+    if text:
+        built["text"] = text
+    return built
 
 
 def _status() -> dict[str, Any]:
@@ -770,6 +794,117 @@ class ToolRegistry:
                 verification_strategy="Normalizes public URLs, opens in Chrome, and verifies visible browser windows.",
                 failure_recovery="Refuse private/non-http URLs and ask for a safe public URL if needed.",
             ),
+            "web.open_url": ToolSpec(
+                name="web.open_url",
+                description="Open a URL in the Playwright-controlled browser session for real DOM automation. Disabled unless EVA_V2_PLAYWRIGHT_ENABLED=true.",
+                args_schema=_schema({"url": {"type": "string"}}, ["url"]),
+                safety_level="safe",
+                handler=lambda url: playwright_driver.open_url(str(url)),
+                category="web",
+                risk="low",
+                action_type="NETWORK_ACTION",
+                risk_categories=("NETWORK_ACTION",),
+            ),
+            "web.snapshot": ToolSpec(
+                name="web.snapshot",
+                description="Get a text snapshot (URL, title, visible text) of the current Playwright page. Disabled unless EVA_V2_PLAYWRIGHT_ENABLED=true.",
+                args_schema=_schema({}),
+                safety_level="safe",
+                handler=playwright_driver.get_page_snapshot,
+                category="web",
+                risk="low",
+                action_type="NETWORK_ACTION",
+                risk_categories=("NETWORK_ACTION",),
+            ),
+            "web.locate": ToolSpec(
+                name="web.locate",
+                description="Locate an element on the current Playwright page by role, name, or text without interacting with it. Disabled unless EVA_V2_PLAYWRIGHT_ENABLED=true.",
+                args_schema=_schema({"role": {"type": "string"}, "name": {"type": "string"}, "text": {"type": "string"}}, []),
+                safety_level="safe",
+                handler=lambda role=None, name=None, text=None: playwright_driver.locate_element(role=role, name=name, text=text),
+                category="web",
+                risk="low",
+                action_type="NETWORK_ACTION",
+                risk_categories=("NETWORK_ACTION",),
+            ),
+            "web.verify": ToolSpec(
+                name="web.verify",
+                description="Verify the current Playwright page against an expected URL, title, or visible text. Disabled unless EVA_V2_PLAYWRIGHT_ENABLED=true.",
+                args_schema=_schema(
+                    {
+                        "expected_url": {"type": "string"},
+                        "expected_title": {"type": "string"},
+                        "expected_text": {"type": "string"},
+                    },
+                    [],
+                ),
+                safety_level="safe",
+                handler=lambda expected_url=None, expected_title=None, expected_text=None: playwright_driver.verify_page(
+                    expected_url=expected_url, expected_title=expected_title, expected_text=expected_text
+                ),
+                category="web",
+                risk="low",
+                action_type="NETWORK_ACTION",
+                risk_categories=("NETWORK_ACTION",),
+            ),
+            "web.click": ToolSpec(
+                name="web.click",
+                description="Click an element in the Playwright-controlled browser via real DOM automation. Can submit forms or navigate, so it requires confirmation. Disabled unless EVA_V2_PLAYWRIGHT_ENABLED=true.",
+                args_schema=_schema(
+                    {
+                        "target": {"type": "object"},
+                        "selector": {"type": "string"},
+                        "role": {"type": "string"},
+                        "name": {"type": "string"},
+                        "text": {"type": "string"},
+                    },
+                    [],
+                ),
+                safety_level="sensitive",
+                handler=lambda target=None, selector=None, role=None, name=None, text=None: playwright_driver.click_element(
+                    _web_target(target, selector, role, name, text)
+                ),
+                category="web",
+                risk="medium",
+                action_type="EXTERNAL_POST",
+                risk_categories=("EXTERNAL_POST",),
+                requires_confirmation=True,
+            ),
+            "web.type": ToolSpec(
+                name="web.type",
+                description="Type text into an element in the Playwright-controlled browser via real DOM automation. Can submit data, so it requires confirmation. `text_value` is the text typed into the page; selector/role/name/text are locator hints. Disabled unless EVA_V2_PLAYWRIGHT_ENABLED=true.",
+                args_schema=_schema(
+                    {
+                        "target": {"type": "object"},
+                        "selector": {"type": "string"},
+                        "role": {"type": "string"},
+                        "name": {"type": "string"},
+                        "text_value": {"type": "string"},
+                        "text": {"type": "string"},
+                    },
+                    ["text_value"],
+                ),
+                safety_level="sensitive",
+                handler=lambda text_value, target=None, selector=None, role=None, name=None, text=None: playwright_driver.type_text(
+                    _web_target(target, selector, role, name, text), str(text_value)
+                ),
+                category="web",
+                risk="medium",
+                action_type="EXTERNAL_POST",
+                risk_categories=("EXTERNAL_POST",),
+                requires_confirmation=True,
+            ),
+            "web.close": ToolSpec(
+                name="web.close",
+                description="Close the Playwright browser session if one is open. Disabled unless EVA_V2_PLAYWRIGHT_ENABLED=true.",
+                args_schema=_schema({}),
+                safety_level="safe",
+                handler=playwright_driver.close_browser,
+                category="web",
+                risk="low",
+                action_type="NETWORK_ACTION",
+                risk_categories=("NETWORK_ACTION",),
+            ),
             "media_control": ToolSpec(
                 name="media_control",
                 description="Send media keys: mute, volume_up, volume_down, play_pause, next, previous.",
@@ -1257,7 +1392,9 @@ class ToolRegistry:
     def get(self, name: str) -> ToolSpec | None:
         return self._tools.get(name)
 
-    def run(self, name: str, **kwargs: Any) -> Any:
+    def run(self, name: str, /, **kwargs: Any) -> Any:
+        # `name` is positional-only so a tool argument literally called "name"
+        # (e.g. the web.* locator hint) doesn't collide with the tool-name param.
         spec = self._tools.get(name)
         if spec is None:
             raise KeyError(f"Unknown tool: {name}")
