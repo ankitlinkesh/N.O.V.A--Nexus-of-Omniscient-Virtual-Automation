@@ -26,3 +26,9 @@ mcp==1.28.1
 
 # Not pip packages: Tavily search is an HTTP API used via httpx (needs an API
 # key in .env), and Piper TTS is a bundled binary under bin/piper.exe.
+
+# Local vector-memory backend (backend/eva/vector_memory). Flag-gated behind
+# EVA_V2_VECTOR_MEMORY_ENABLED (default off); uses chromadb's bundled ONNX
+# MiniLM embeddings (no torch/sentence-transformers), model cached under
+# ~/.cache/chroma.
+chromadb==1.5.9
