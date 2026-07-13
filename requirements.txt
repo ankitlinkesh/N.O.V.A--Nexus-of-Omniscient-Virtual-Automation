@@ -13,5 +13,11 @@ python-multipart==0.0.29
 # Without the flag, the screen.* tools degrade to a clear "disabled" message.
 pyautogui==0.9.54
 
+# Real browser DOM automation for the Playwright adapter. Inert by default:
+# a browser only launches when EVA_V2_PLAYWRIGHT_ENABLED=true. Chromium binaries
+# are installed separately (`playwright install chromium`) and located via
+# PLAYWRIGHT_BROWSERS_PATH (defaults to D:\eva-agent-tools\playwright-browsers).
+playwright==1.61.0
+
 # Not pip packages: Tavily search is an HTTP API used via httpx (needs an API
 # key in .env), and Piper TTS is a bundled binary under bin/piper.exe.

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..browser_automation.playwright_driver import playwright_status
 from ..screen.screen_controller import real_input_enabled
 from ..tools.registry import ToolRegistry
 from . import tool_gate
@@ -88,6 +89,10 @@ def format_capability_truth(registry: ToolRegistry | None = None) -> str:
         "(EVA_ENABLE_REAL_INPUT).",
         "- When disabled, screen.click/type_text/hotkey/press/scroll degrade to a no-op message.",
         "- When enabled, type_text/hotkey/press still require confirmation; pyautogui FAILSAFE is on.",
+        "",
+        f"Browser DOM automation (Playwright) is {'ENABLED' if playwright_status()['enabled'] else 'disabled by default'} "
+        "(EVA_V2_PLAYWRIGHT_ENABLED).",
+        "- When enabled, navigation is restricted to public http(s) hosts (no localhost/private targets).",
         "",
         "Approval flow: a gated call returns a pending-action ledger id; only a user-typed",
         "`confirm <id>` / `confirm override <id>` executes it via ToolRegistry.run_approved().",
