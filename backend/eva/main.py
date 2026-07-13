@@ -14,8 +14,26 @@ ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = ROOT / "frontend"
 
 
+def _load_mcp_tools_if_enabled() -> None:
+    """Discover and register MCP tools at startup, only when EVA_MCP_ENABLED is
+    set and servers are configured. Wrapped so a slow or broken MCP server can
+    never block or crash app startup; MCP is entirely optional."""
+    try:
+        from .mcp.config import mcp_enabled
+
+        if not mcp_enabled():
+            return
+        from .api import routes as _routes
+        from .mcp.registration import load_mcp_tools
+
+        load_mcp_tools(_routes.tools)
+    except Exception:
+        pass
+
+
 def create_app() -> FastAPI:
     load_project_env(ROOT)
+    _load_mcp_tools_if_enabled()
     settings = load_settings(ROOT / "config" / "eva.toml")
     app = FastAPI(title="Eva Agent", version="0.1.0")
     app.state.settings = settings
