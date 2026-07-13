@@ -1,16 +1,25 @@
 ﻿from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from ..core.config import ModelSettings
 from ..llm.router import attempts_as_dicts, complete_with_fallback
+from ..llm.tool_schema import to_openai_tools
 from ..tools.registry import ToolRegistry
 
 DecisionType = Literal["answer", "tool_calls", "confirmation_required", "done"]
 PlannerMode = Literal["single_turn", "agent_step"]
+
+
+def _native_function_calling_enabled() -> bool:
+    raw = os.environ.get("EVA_NATIVE_FUNCTION_CALLING")
+    if raw is None:
+        return False
+    return raw.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
 @dataclass(frozen=True)
@@ -51,6 +60,11 @@ class ToolCallPlanner:
         forced = self._forced_decision(message)
         if forced is not None:
             return forced
+        if _native_function_calling_enabled():
+            native = await self._native_plan(message, history or [], mode=mode, task_context=task_context or {})
+            if native is not None:
+                return native
+            # else: fall through to the existing JSON-prompt path
         prompt = self._prompt(message, history or [], mode=mode, task_context=task_context or {})
         routed = await complete_with_fallback(
             [{"role": "system", "content": "Return strict JSON only for Eva planner decisions."}, {"role": "user", "content": prompt}],
@@ -73,6 +87,73 @@ class ToolCallPlanner:
         if fallback is not None:
             return fallback
         raise PlannerError("I could not plan that safely. Try a simpler command.")
+
+    async def _native_plan(
+        self,
+        message: str,
+        history: list[dict[str, str]],
+        *,
+        mode: PlannerMode,
+        task_context: dict[str, Any],
+    ) -> PlannerDecision | None:
+        try:
+            specs = self.registry.planner_specs()
+            tools = to_openai_tools(specs)
+            valid_names = {s["name"] for s in specs}
+
+            system_prompt = (
+                "You are Eva's action planner. If the user wants an action performed, "
+                "call the single most appropriate tool. If it is a question you can answer "
+                "directly, reply in plain text without calling a tool."
+            )
+            messages = [{"role": "system", "content": system_prompt}] + list(history or []) + [
+                {"role": "user", "content": message}
+            ]
+
+            routed = await complete_with_fallback(
+                messages,
+                self.settings,
+                purpose="planner",
+                temperature=0.1,
+                max_tokens=800,
+                tools=tools,
+            )
+            self.last_llm_attempts = attempts_as_dicts(routed.attempts)
+
+            if not routed.response.ok:
+                return None
+
+            if routed.response.tool_calls:
+                calls: list[PlannedToolCall] = []
+                for entry in routed.response.tool_calls:
+                    fn = entry.get("function") or {}
+                    name = fn.get("name")
+                    try:
+                        args = json.loads(fn.get("arguments") or "{}")
+                    except (json.JSONDecodeError, TypeError):
+                        args = {}
+                    if name in valid_names:
+                        calls.append(PlannedToolCall(tool=name, args=args if isinstance(args, dict) else {}))
+                if calls:
+                    return PlannerDecision(
+                        type="tool_calls",
+                        reason="native function-calling",
+                        tool_calls=calls,
+                        final_response="",
+                    )
+                return None
+
+            if routed.response.text:
+                return PlannerDecision(
+                    type="answer",
+                    reason="native function-calling",
+                    tool_calls=[],
+                    final_response=routed.response.text.strip(),
+                )
+
+            return None
+        except Exception:
+            return None
 
     def _forced_decision(self, message: str) -> PlannerDecision | None:
         text = " ".join(message.lower().strip().split())
