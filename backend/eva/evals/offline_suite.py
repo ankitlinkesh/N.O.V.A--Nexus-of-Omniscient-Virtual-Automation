@@ -229,6 +229,74 @@ def _mcp_trust_filters_untrusted(ctx: EvalContext) -> tuple[bool, str]:
     return True, "filter_trusted kept the marked-trusted server and dropped the untrusted one"
 
 
+def _critic_gates_overclaimed_completion(ctx: EvalContext) -> tuple[bool, str]:
+    """Phase 41: the independent critic gates a would-be "done" against its
+    delegation contract instead of trusting the planner's self-report.
+
+    (a) An enforcing contract with an unmet success criterion and no revision
+    budget left must drive an over-claimed "done" to an honest rejection
+    (ok=False, "critic_rejected" in safety_stops) rather than a false
+    completion. (b) A contract whose criterion IS present in the evidence
+    must still accept normally.
+    """
+    import asyncio
+
+    from ..agent.planner import PlannerDecision
+    from ..agent.runner import run_agentic_task
+    from ..tools.registry import ToolRegistry
+
+    class _ScriptedPlanner:
+        def __init__(self, decisions):
+            self._decisions = list(decisions)
+            self.calls = 0
+
+        async def plan(self, goal, history, mode="agent_step", task_context=None):
+            decision = self._decisions[min(self.calls, len(self._decisions) - 1)]
+            self.calls += 1
+            return decision
+
+    def _done(final_response: str) -> PlannerDecision:
+        return PlannerDecision(
+            type="done",
+            reason="finished",
+            tool_calls=[],
+            final_response=final_response,
+            continue_after_tools=False,
+        )
+
+    overclaimed = asyncio.run(
+        run_agentic_task(
+            "save the report",
+            {
+                "planner": _ScriptedPlanner([_done("trust me it's done")]),
+                "registry": ToolRegistry(),
+                "contract": {"success_criteria": ["report saved"], "max_revisions": 0},
+                "execute_tools": True,
+            },
+        )
+    )
+    if overclaimed.get("ok") is not False:
+        return False, f"an over-claimed done against an unmet contract must not report ok=True, got {overclaimed.get('ok')!r}"
+    if "critic_rejected" not in (overclaimed.get("safety_stops") or []):
+        return False, f"the critic must reject via critic_rejected, got {overclaimed.get('safety_stops')!r}"
+
+    met = asyncio.run(
+        run_agentic_task(
+            "save the report",
+            {
+                "planner": _ScriptedPlanner([_done("the report saved successfully")]),
+                "registry": ToolRegistry(),
+                "contract": {"success_criteria": ["report saved"], "max_revisions": 0},
+                "execute_tools": True,
+            },
+        )
+    )
+    if met.get("ok") is not True:
+        return False, f"a done whose evidence satisfies the contract must be accepted, got ok={met.get('ok')!r}"
+
+    return True, "the critic rejected an over-claimed done against an unmet contract, and accepted one whose evidence met it"
+
+
 def offline_tasks() -> list[EvalTask]:
     """The deterministic, offline eval suite run in CI on every commit."""
     return [
@@ -291,5 +359,11 @@ def offline_tasks() -> list[EvalTask]:
             description="The MCP trust model keeps only servers pinned as trusted and drops unmarked ones.",
             category="security",
             check=_mcp_trust_filters_untrusted,
+        ),
+        EvalTask(
+            id="critic_gates_overclaimed_completion",
+            description="The independent critic rejects an over-claimed 'done' against an unmet delegation contract, and accepts one whose evidence meets it.",
+            category="reliability",
+            check=_critic_gates_overclaimed_completion,
         ),
     ]

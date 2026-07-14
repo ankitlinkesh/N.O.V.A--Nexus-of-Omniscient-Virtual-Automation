@@ -25,6 +25,11 @@ class AgentRunState:
     # auto-authorized on the untrusted content's say-so).
     injection_flagged: bool = False
     tainted_sources: list[str] = field(default_factory=list)
+    # Phase 41: how many times the critic has sent the task back for revision.
+    critic_revisions: int = 0
+
+    def record_critic_revision(self) -> None:
+        self.critic_revisions += 1
 
     def repeated_without_progress(self, call: PlannedToolCall) -> bool:
         signature = tool_signature(call)

@@ -81,6 +81,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase39_reliability.py",
     "verify_eva_phase40_adversarial.py",
     "verify_eva_phase40c_hardening.py",
+    "verify_eva_phase41_critic.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -137,6 +138,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase39_reliability.py",
     "verify_eva_phase40_adversarial.py",
     "verify_eva_phase40c_hardening.py",
+    "verify_eva_phase41_critic.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -157,6 +159,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase39_reliability.py": ("phase39", "reliability", "recovery"),
     "verify_eva_phase40_adversarial.py": ("phase40", "adversarial", "injection"),
     "verify_eva_phase40c_hardening.py": ("phase40c", "least-privilege", "secrets-broker"),
+    "verify_eva_phase41_critic.py": ("phase41", "critic", "delegation-contract"),
 }
 
 

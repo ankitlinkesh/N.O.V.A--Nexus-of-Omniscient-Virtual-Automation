@@ -29,6 +29,7 @@ from .task import AgentStep, AgentTask
 from ..threat_defense.authorization import authorize_action
 from ..threat_defense.taint import assess as assess_taint, source_type_for_tool, wrap_as_untrusted_data
 from ..threat_defense.tool_scope import TaskToolScope
+from .critic import DelegationContract, REVISE, honest_caveat, review_completion
 
 
 def _is_privileged_tool(registry: ToolRegistry, tool_name: str) -> bool:
@@ -106,7 +107,7 @@ def _executed_tools(task: AgentTask) -> list[str]:
     return [step.tool_name for step in task.steps if step.tool_name and step.status == "done"]
 
 
-def _final_result(task: AgentTask, *, ok: bool, requires_confirmation: bool = False, action: str | None = None, events: list[dict[str, Any]] | None = None, safety_stops: list[str] | None = None) -> dict[str, Any]:
+def _final_result(task: AgentTask, *, ok: bool, requires_confirmation: bool = False, action: str | None = None, events: list[dict[str, Any]] | None = None, safety_stops: list[str] | None = None, critic: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "ok": ok,
         "task_id": task.id,
@@ -118,9 +119,46 @@ def _final_result(task: AgentTask, *, ok: bool, requires_confirmation: bool = Fa
         "tools_planned": _planned_tools(task),
         "tools_executed": _executed_tools(task),
         "safety_stops": safety_stops or [],
+        "critic": critic,
         "task": task.as_dict(),
         "events": events or [],
     }
+
+
+def _finalize_success(task, state, contract, session_context, *, events, safety_stops, memory, session_id):
+    """Phase 41: gate a would-be "done" through the independent critic.
+
+    The critic re-derives satisfaction from the run's real evidence (observations
+    + Phase 38 verification counts) against the delegation contract. With no
+    enforcing contract it accepts (advisory), so single-shot behavior is
+    unchanged. With an enforcing contract that the evidence does not satisfy, the
+    task is reported honestly (ok=False + a truthful caveat) rather than claiming
+    a false completion. The permission/verification gates remain the hard
+    boundaries; this is a quality gate on top of them.
+    """
+    verdict = review_completion(
+        goal=task.user_goal,
+        final_response=task.final_response,
+        observations=list(task.observations),
+        verified_successes=state.verified_successes,
+        failures=state.failures,
+        contract=contract,
+        revisions_used=state.critic_revisions,
+    )
+    events.append({"type": "agent_critic", "task_id": task.id, "message": ", ".join(verdict.reasons), "satisfied": verdict.satisfied})
+    from ..observability.context import trace_critic
+
+    trace_critic(verdict.as_dict())
+    _safe_log(memory, session_id, "agent_critic_review", {"task_id": task.id, "verdict": verdict.as_dict()})
+
+    ok = True
+    stops = list(safety_stops)
+    if contract is not None and contract.enforcing and not verdict.satisfied:
+        task.final_response = f"{task.final_response}{honest_caveat(verdict)}"
+        task.status = "attempted"
+        ok = False
+        stops.append("critic_rejected")
+    return _return_task(task, session_context, ok=ok, events=events, safety_stops=stops, critic=verdict.as_dict())
 
 
 def _store_task_state(session_context: Any, result: dict[str, Any]) -> None:
@@ -179,6 +217,10 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
         # unrestricted (backward compatible); a caller passes context["tool_scope"]
         # (list/set of tool names or "prefix*" wildcards) to lock the task down.
         tool_scope = TaskToolScope.of(context.get("tool_scope"))
+        # Phase 41: an optional delegation contract (goal + success criteria +
+        # require_verified + max_revisions). The critic gates completion against
+        # it. None = advisory critic (backward compatible single-shot behavior).
+        contract = DelegationContract.of(context.get("contract"))
         events: list[dict[str, Any]] = [
             {"type": "agent_task", "task_id": task.id, "message": "Agent task started"},
             {"type": "agent_plan", "task_id": task.id, "plan": list(task.plan), "message": "Plan ready"},
@@ -243,13 +285,35 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
             )
 
             if decision.type in {"answer", "done"}:
+                # Phase 41: the critic reviews the planner's "done" against the
+                # contract BEFORE accepting it. If an enforcing contract isn't
+                # satisfied yet and the revision budget allows, send the task
+                # back for another attempt (critic -> revise) with feedback
+                # instead of accepting a premature completion.
+                if contract is not None and contract.enforcing:
+                    pre_verdict = review_completion(
+                        goal=goal,
+                        final_response=decision.final_response,
+                        observations=list(task.observations),
+                        verified_successes=state.verified_successes,
+                        failures=state.failures,
+                        contract=contract,
+                        revisions_used=state.critic_revisions,
+                    )
+                    if not pre_verdict.satisfied and pre_verdict.recommendation == REVISE:
+                        state.record_critic_revision()
+                        feedback = f"Critic sent this back (revision {state.critic_revisions}): {', '.join(pre_verdict.reasons)} Address the unmet criteria before finishing."
+                        task.add_observation(feedback)
+                        events.append({"type": "agent_critic", "task_id": task.id, "step": index, "message": feedback, "satisfied": False})
+                        _safe_log(memory, session_id, "agent_critic_revision", {"task_id": task.id, "step": index, "reasons": list(pre_verdict.reasons)})
+                        continue
                 step = AgentStep(index=index, thought_summary=decision.reason, planned_action=decision.type, observation=decision.final_response, status="done")
                 task.add_step(step)
                 task.status = "done"
                 task.final_response = decision.final_response
                 events.append({"type": "agent_step", "task_id": task.id, "step": index, "message": f"Step {index}: done"})
                 _safe_log(memory, session_id, "agent_task_done", {"task_id": task.id, "final_response": task.final_response})
-                return _return_task(task, session_context, ok=True, events=events, safety_stops=safety_stops)
+                return _finalize_success(task, state, contract, session_context, events=events, safety_stops=safety_stops, memory=memory, session_id=session_id)
 
             if decision.type == "confirmation_required":
                 step = AgentStep(index=index, thought_summary=decision.reason, planned_action="confirmation_required", observation=decision.final_response, status="skipped")
@@ -461,7 +525,7 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
                 task.status = "done"
                 task.final_response = observation
                 _safe_log(memory, session_id, "agent_task_done", {"task_id": task.id, "reason": "web_summary_complete", "final_response": task.final_response})
-                return _return_task(task, session_context, ok=True, events=events, safety_stops=safety_stops)
+                return _finalize_success(task, state, contract, session_context, events=events, safety_stops=safety_stops, memory=memory, session_id=session_id)
 
             if result.requires_confirmation:
                 task.status = "waiting_for_confirmation"
@@ -486,7 +550,7 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
                 task.status = "done"
                 task.final_response = observation
                 _safe_log(memory, session_id, "agent_task_done", {"task_id": task.id, "final_response": task.final_response})
-                return _return_task(task, session_context, ok=True, events=events, safety_stops=safety_stops)
+                return _finalize_success(task, state, contract, session_context, events=events, safety_stops=safety_stops, memory=memory, session_id=session_id)
 
         task.status = "failed"
         task.final_response = "I reached my maximum step limit, so I stopped with the progress I had."

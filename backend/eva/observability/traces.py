@@ -41,6 +41,10 @@ def log_threat(trace_id: str, threat: dict[str, Any], root: Path | None = None) 
     _store(root).append(trace_id, "threat", threat)
 
 
+def log_critic(trace_id: str, verdict: dict[str, Any], root: Path | None = None) -> None:
+    _store(root).append(trace_id, "critic", verdict)
+
+
 def log_dry_run_preview(trace_id: str, payload: dict[str, Any], root: Path | None = None) -> None:
     _store(root).append(trace_id, "dry_run_preview", payload)
 
