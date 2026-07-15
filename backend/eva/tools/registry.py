@@ -1434,6 +1434,25 @@ class ToolRegistry:
         from ..observability.context import trace_gate_decision
 
         trace_gate_decision(name, decision, spec)
+        # Phase 42 calibrated autonomy: a confirm-class action that the user has
+        # approved enough times before may auto-allow — but ONLY when trust
+        # policies are explicitly enabled, and NEVER for override/hard_block
+        # (those cannot be de-escalated here). Guarded by the flag so the default
+        # path is byte-identical: no ledger read, no behavior change, when off.
+        if decision == "confirm":
+            from ..permissions.trust_policy import calibrate, count_approvals, trust_policies_enabled
+
+            if trust_policies_enabled():
+                target = str(call_args.get("path") or call_args.get("target") or call_args.get("dst") or call_args.get("recipient") or "")
+                calibrated = calibrate(
+                    base_decision="confirm",
+                    action_type=str(getattr(spec, "action_type", "") or ""),
+                    approvals=count_approvals(name, target),
+                )
+                if calibrated.auto_allowed:
+                    decision = "allow"
+                    trace_gate_decision(name, "trusted_auto_allow", spec)
+
         if decision == "hard_block":
             return {
                 "ok": False,

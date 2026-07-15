@@ -27,6 +27,9 @@ class AgentRunState:
     tainted_sources: list[str] = field(default_factory=list)
     # Phase 41: how many times the critic has sent the task back for revision.
     critic_revisions: int = 0
+    # Phase 42: confidence of the most recent reflection (for confidence-aware
+    # escalation of the next action).
+    last_confidence: float | None = None
 
     def record_critic_revision(self) -> None:
         self.critic_revisions += 1

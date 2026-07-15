@@ -32,6 +32,23 @@ from ..threat_defense.tool_scope import TaskToolScope
 from .critic import DelegationContract, REVISE, honest_caveat, review_completion
 
 
+def _is_interrupted(signal: Any) -> bool:
+    """Phase 42 cooperative interruptibility: true if the caller asked the task
+    to stop. Accepts a callable ``() -> bool``, a threading.Event-like object
+    with ``is_set()``, or a plain truthy value. Fail-safe (never raises)."""
+    if signal is None:
+        return False
+    try:
+        if callable(signal):
+            return bool(signal())
+        is_set = getattr(signal, "is_set", None)
+        if callable(is_set):
+            return bool(is_set())
+        return bool(signal)
+    except Exception:
+        return False
+
+
 def _is_privileged_tool(registry: ToolRegistry, tool_name: str) -> bool:
     """A tool is privileged if the permission gate would gate it (confirm /
     override / hard_block) rather than let it run immediately."""
@@ -237,6 +254,15 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
             return _return_task(task, session_context, ok=False, events=events, safety_stops=safety_stops)
 
         for index in range(1, task.max_steps + 1):
+            # Phase 42 mid-task interruptibility: the caller can ask the task to
+            # stop between steps (context["interrupt"] callable/Event/flag). Eva
+            # stops gracefully with whatever progress it had, no partial action.
+            if _is_interrupted(context.get("interrupt")):
+                task.status = "interrupted"
+                task.final_response = "I stopped because you interrupted the task."
+                safety_stops.append("interrupted")
+                _safe_log(memory, session_id, "agent_task_interrupted", {"task_id": task.id, "step": index})
+                return _return_task(task, session_context, ok=False, events=events, safety_stops=safety_stops)
             task.status = "planning"
             events.append({"type": "agent_step", "task_id": task.id, "step": index, "message": f"Step {index}: planning"})
             task_context = {
@@ -434,6 +460,31 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
                 _safe_log(memory, session_id, "agent_injection_escalation", {"task_id": task.id, "step": index, "tool": call.tool, "reason": auth.reason})
                 return _return_task(task, session_context, ok=False, requires_confirmation=True, action=call.tool, events=events, safety_stops=safety_stops)
 
+            # Phase 42 confidence-aware escalation: when the caller sets a minimum
+            # action confidence and the agent's recent confidence is below it, an
+            # otherwise-auto (allow-class) action asks for confirmation first.
+            # Escalation only ever ADDS friction, so it is always safe.
+            min_action_confidence = context.get("min_action_confidence")
+            if (
+                min_action_confidence is not None
+                and not privileged
+                and state.last_confidence is not None
+                and state.last_confidence < float(min_action_confidence)
+            ):
+                message = (
+                    f"I'm not confident enough ({state.last_confidence:.2f} < {float(min_action_confidence):.2f}) to run "
+                    f"`{call.tool}` on my own — confirm if you'd like me to proceed."
+                )
+                step.status = "skipped"
+                step.observation = message
+                task.add_observation(message)
+                task.status = "waiting_for_confirmation"
+                task.final_response = message
+                safety_stops.append("low_confidence_escalation")
+                events.append({"type": "agent_calibration", "task_id": task.id, "step": index, "message": message})
+                _safe_log(memory, session_id, "agent_low_confidence_escalation", {"task_id": task.id, "step": index, "tool": call.tool, "confidence": state.last_confidence})
+                return _return_task(task, session_context, ok=False, requires_confirmation=True, action=call.tool, events=events, safety_stops=safety_stops)
+
             result = executor.execute(call)
             if call.tool in {"web_search", "browser_search"} and result.ok:
                 remember_web_results(session_context, result.result)
@@ -458,6 +509,7 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
             task.status = "reflecting"
             reflection = reflect_on_step(goal, task, step, result)
             task.add_reflection(reflection)
+            state.last_confidence = reflection.confidence
             events.append(
                 {
                     "type": "agent_reflection",
