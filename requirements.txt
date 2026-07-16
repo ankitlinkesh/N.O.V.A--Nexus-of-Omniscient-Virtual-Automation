@@ -32,3 +32,13 @@ mcp==1.28.1
 # MiniLM embeddings (no torch/sentence-transformers), model cached under
 # ~/.cache/chroma.
 chromadb==1.5.9
+
+# Voice input (Phase 49) — OPTIONAL, and inert unless EVA_VOICE_INPUT_ENABLED=1.
+# Speech-to-text runs fully on-device: faster-whisper uses CTranslate2, NOT torch,
+# matching this project's CPU-only constraint. No audio or transcript is ever sent
+# to a speech service. Models download to EVA_STT_MODEL_DIR (default
+# D:\eva-agent-tools\voice) to keep the system drive free.
+# sounddevice is only needed to capture from a microphone (Phase 49b); nothing
+# opens an audio device unless voice input is explicitly enabled.
+faster-whisper==1.2.1
+sounddevice==0.5.5

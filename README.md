@@ -47,7 +47,8 @@ Real capabilities, and the flag each needs. **Default is off**: a fresh checkout
 | **Real browser control** (Playwright) | opt-in, gated | `EVA_V2_PLAYWRIGHT_ENABLED` |
 | **MCP servers** (external tools) | opt-in, gated | `EVA_MCP_ENABLED` |
 | **Text-to-speech** — real, fully local (Piper, bundled exe + on-disk voice model; no audio leaves the machine) | on | `EVA_TTS_PROVIDER=piper` |
-| Wake word + speech-to-text (microphone input) | **not built yet** | — |
+| **Speech-to-text** — real, fully local (faster-whisper/CTranslate2, no torch; no audio leaves the machine) | opt-in | `EVA_VOICE_INPUT_ENABLED` |
+| Wake word + continuous mic capture | **not built yet** | — |
 
 `EVA_PROFILE=daily` turns on the side-effect-free "mind" capabilities in one switch. **No profile may ever auto-enable real input, the browser, or MCP** — those stay opt-in one flag at a time, by design and enforced by a verifier.
 
@@ -156,9 +157,11 @@ Delivered in order; each phase shipped with tests, an offline eval, and a dedica
 | 47 | **Self-improvement** — learned skills that compose existing gated tools; N.O.V.A never writes code. |
 | 48 | **Provider diagnostics** — `llm doctor` makes LLM provider rot visible instead of silent. |
 
-Already working outside that arc: **local text-to-speech** (Piper, bundled binary + `en_US-ryan-high` voice model, fully offline).
+| 49a | **Voice input** — local speech-to-text (faster-whisper/CTranslate2, no torch). Off by default; the microphone is opt-in one flag at a time and no profile may enable it. |
 
-Not yet built: the **voice input** half (wake word + speech-to-text) and a **native shell** (tray app + global hotkey).
+Already working outside that arc: **local text-to-speech** (Piper, bundled binary + `en_US-ryan-high` male voice model, fully offline). The loop is closed end to end — N.O.V.A's own spoken output transcribes back correctly.
+
+Not yet built: **wake word + continuous mic capture** (Phase 49b) and a **native shell** (tray app + global hotkey).
 
 ## Run Locally
 
@@ -218,12 +221,14 @@ These commands provide local evidence only. They do not publish or certify produ
 - **No secret exfiltration:** the path allowlist blocks reading secret/config/database files by name, and the secrets broker scrubs live secret values out of anything sent to a model or a trace.
 - **No unattended privileged action:** proactive rules and durable-queue recovery replay a *request*, never an approval.
 - **No self-written code:** learned skills may only compose tools that already exist.
-- **No microphone, audio recording, or speech recognition** — there is no ASR or wake word, so nothing is ever listening. Text-to-speech is real but runs entirely locally via a bundled Piper binary and an on-disk voice model; no audio and no text is sent to a speech service.
+- **Nothing is ever listening.** There is no wake word and no continuous capture; speech-to-text only runs on a buffer it is explicitly handed, and only when `EVA_VOICE_INPUT_ENABLED` is set. No activation profile may enable the microphone — like real input and the browser, it is opt-in one flag at a time.
+- **Voice is fully local, in both directions.** Piper (speech out) and faster-whisper (speech in) both run on-device; no audio and no transcript is ever sent to a speech service. A transcript is treated exactly like typed text: it faces the same planner and the same permission gate, so speaking a command earns no privilege that typing it would not.
 - MCP execution is off unless enabled, and then only for servers pinned as trusted, with per-server call budgets.
 
 ## Known Limitations
 
-- Voice is half-built: text-to-speech works locally, but there is no wake word or speech-to-text, so you cannot talk to it yet.
+- Voice is nearly complete but not wired end to end: speech-to-text and text-to-speech both work locally, but there is no wake word or continuous microphone capture yet, so you cannot just talk to it hands-free.
+- The default speech-to-text model is `base`, which fumbles proper nouns (it hears "NOVA" as "Nola"); set `EVA_STT_MODEL=small` for better accuracy at ~250MB.
 - There is no native shell yet — it runs as a local web app.
 - OpenRouter and CLoD are currently non-functional (dead key / bad model id); run `llm doctor` for live status.
 - Proactivity has no background ticker: rules are evaluated on startup and on demand.
