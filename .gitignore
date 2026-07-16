@@ -41,3 +41,7 @@ Thumbs.db
 
 # Claude Code local state (agent worktrees, etc.)
 .claude/
+
+# Local voice comparison samples (Phase 49 exploration)
+voice_samples/
+nova_voice_test.wav

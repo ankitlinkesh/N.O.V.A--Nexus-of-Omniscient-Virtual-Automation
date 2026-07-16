@@ -14,7 +14,7 @@ class OpenRouterProvider(OpenAICompatibleProvider):
     default_model = "deepseek/deepseek-chat-v3-0324:free"
     base_url_env = "OPENROUTER_BASE_URL"
     default_base_url = "https://openrouter.ai/api/v1"
-    extra_headers = {"HTTP-Referer": "http://127.0.0.1:8765", "X-Title": "Eva Agent"}
+    extra_headers = {"HTTP-Referer": "http://127.0.0.1:8765", "X-Title": "N.O.V.A"}
 
     def __init__(self, settings):
         super().__init__(settings)

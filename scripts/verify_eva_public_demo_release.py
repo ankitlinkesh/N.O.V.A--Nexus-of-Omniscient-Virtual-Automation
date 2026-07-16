@@ -241,7 +241,9 @@ def main() -> int:
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     readme_lower = readme.lower()
-    for phrase in ("what is eva", "demo commands", "capabilities", "verification", "safety boundaries", "known limitations", "non-goals"):
+    # "what is n.o.v.a" — the product was renamed from Eva to N.O.V.A (Nexus of
+    # Omniscient Virtual Automation); the section still has to exist.
+    for phrase in ("what is n.o.v.a", "demo commands", "capabilities", "verification", "safety boundaries", "known limitations", "non-goals"):
         check(phrase in readme_lower, f"README public section missing: {phrase}")
     check("c:\\users\\" not in readme_lower, "README exposes a private path")
 
