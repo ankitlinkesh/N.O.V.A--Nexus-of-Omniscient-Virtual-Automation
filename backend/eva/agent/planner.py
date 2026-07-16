@@ -43,6 +43,56 @@ class PlannerError(RuntimeError):
     pass
 
 
+# How many recent chat turns to carry into a prompt.
+_RECENT_TURNS = 4
+
+
+def _split_history(history: list[dict[str, str]] | None) -> tuple[list[str], list[dict[str, str]]]:
+    """Separate memory notes from chat turns.
+
+    ``MemoryStore.history_with_recall`` PREPENDS what Eva remembers about the
+    user as ``system`` messages (the Phase 43 durable user model and the
+    semantic recall block). Both of these prompt builders used to do
+    ``history[-4:]`` filtered to ``{"user","assistant"}``, which dropped those
+    notes twice over: the role filter discarded them outright, and the tail
+    slice would have missed them anyway because they sit at the HEAD. Memory was
+    being assembled and then silently thrown away before it ever reached the
+    model — real prompt testing caught it (Eva knew the user was allergic to
+    shellfish and still gave a generic answer).
+
+    Returns (notes, recent_chat_turns) so a prompt can carry both.
+    """
+    items = list(history or [])
+    notes = [
+        str(item.get("content") or "").strip()
+        for item in items
+        if item.get("role") == "system" and str(item.get("content") or "").strip()
+    ]
+    recent = [
+        {"role": item.get("role"), "content": str(item.get("content") or "")[:500]}
+        for item in items
+        if item.get("role") in {"user", "assistant"}
+    ][-_RECENT_TURNS:]
+    return notes, recent
+
+
+def _memory_block(notes: list[str]) -> str:
+    """Render memory notes for a prompt, or nothing at all when there are none.
+
+    Empty string when there is nothing remembered, so a prompt with no memory is
+    byte-identical to how it looked before this existed.
+    """
+    if not notes:
+        return ""
+    joined = "\n".join(notes)
+    return (
+        "\nWhat you already know about this user (from your memory - treat as facts you "
+        "know, USE them when relevant instead of answering generically, and never read "
+        "them aloud or say they came from memory):\n"
+        f"{joined}\n"
+    )
+
+
 class ToolCallPlanner:
     def __init__(self, settings: ModelSettings, registry: ToolRegistry) -> None:
         self.settings = settings
@@ -476,17 +526,13 @@ class ToolCallPlanner:
         return self._single_turn_prompt(message, history)
 
     def _single_turn_prompt(self, message: str, history: list[dict[str, str]]) -> str:
-        recent = [
-            {"role": item.get("role"), "content": item.get("content", "")[:500]}
-            for item in history[-4:]
-            if item.get("role") in {"user", "assistant"}
-        ]
+        notes, recent = _split_history(history)
         return f"""
 You are Eva's tool-calling planner. Return strict JSON only. No markdown.
 
 User message:
 {message}
-
+{_memory_block(notes)}
 Recent chat context:
 {json.dumps(recent, ensure_ascii=False)}
 
@@ -527,11 +573,7 @@ Rules:
 """.strip()
 
     def _agent_step_prompt(self, message: str, history: list[dict[str, str]], task_context: dict[str, Any]) -> str:
-        recent = [
-            {"role": item.get("role"), "content": item.get("content", "")[:500]}
-            for item in history[-4:]
-            if item.get("role") in {"user", "assistant"}
-        ]
+        notes, recent = _split_history(history)
         compact_context = {
             "goal": task_context.get("goal") or message,
             "plan": task_context.get("plan") or [],
@@ -550,7 +592,7 @@ You are Eva's bounded agent-step planner. Return strict JSON only. No markdown. 
 
 User goal:
 {message}
-
+{_memory_block(notes)}
 Recent chat context:
 {json.dumps(recent, ensure_ascii=False)}
 

@@ -141,6 +141,16 @@ class MemoryStore:
             from ..vector_memory.retriever import add_memory_item, vector_memory_status
             if not vector_memory_status().get("enabled"):
                 return
+            # Only the USER's own words are evidence about the user. Storing Eva's
+            # replies too turned long-term memory into an echo chamber: a later
+            # question would semantically match Eva's own earlier answer, which
+            # was then replayed to the model as "things you remember about the
+            # user" — so Eva confidently parroted her own previous generic reply
+            # instead of using what she actually knew. Real prompt testing caught
+            # this (she knew the user was allergic to shellfish and still recited
+            # a stock food-safety list she had written herself).
+            if role != "user":
+                return
             text = (content or "").strip()
             if len(text) < 20:  # skip trivial turns ("ok", "yes", etc.)
                 return
@@ -182,15 +192,30 @@ class MemoryStore:
             hits = (search_memory(str(query or ""), limit=4) or {}).get("results") or []
             # de-duplicate against what's already in recent history text
             recent_texts = {m.get("content", "").strip() for m in history}
+            asked = " ".join(str(query or "").lower().split())
             lines = []
+            seen: set[str] = set()
             for h in hits:
                 t = (h.get("text") or "").strip()
-                if t and t not in recent_texts:
-                    lines.append(f"- {t}")
+                if not t or t in recent_texts:
+                    continue
+                normalized = " ".join(t.lower().split())
+                # Never echo the user's own current question back as a "memory":
+                # it is the query, not a fact, and it crowds out real ones.
+                if normalized == asked or normalized in seen:
+                    continue
+                seen.add(normalized)
+                lines.append(f"- {t}")
             if not lines:
                 return history
-            recall_msg = {"role": "system", "content": "Relevant things you remember about the user (from long-term memory):\n" + "\n".join(lines[:4])}
-            return [recall_msg] + history
+            recall_msg = {"role": "system", "content": "Things the user has told you before (their own words, from long-term memory):\n" + "\n".join(lines[:4])}
+            # Slot in AFTER the durable user model but BEFORE the chat turns, so
+            # the high-precision, confidence-scored facts lead and this fuzzier
+            # semantic recall supports them rather than burying them.
+            insert_at = 0
+            while insert_at < len(history) and history[insert_at].get("role") == "system":
+                insert_at += 1
+            return history[:insert_at] + [recall_msg] + history[insert_at:]
         except Exception:
             return history
 
