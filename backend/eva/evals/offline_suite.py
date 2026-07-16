@@ -475,6 +475,53 @@ def _durable_queue_recovers_and_never_auto_approves(ctx: EvalContext) -> tuple[b
     return True, "a crashed task is resumed to 'queued' on restart and is never auto-completed or approved"
 
 
+def _proactive_trigger_proposes_but_never_authorizes(ctx: EvalContext) -> tuple[bool, str]:
+    """Phase 46: an unattended trigger can propose work but never perform it.
+
+    A rule that fires with nobody watching must only ENQUEUE its request — the
+    task is left 'queued' (never started, never approved, never completed), so it
+    still has to pass the permission gate before anything happens. Also checks
+    the runaway guard: a rule cannot exceed its daily budget. CI-safe: temp DBs,
+    injected clock, no execution.
+    """
+    import tempfile
+    from datetime import datetime, timedelta, timezone
+    from pathlib import Path
+
+    from ..proactivity.engine import ProactivityEngine
+    from ..proactivity.store import ProactivityStore
+    from ..tasks.durable_queue import DurableTaskQueue
+
+    scratch = Path(tempfile.mkdtemp(prefix="eva_proactivity_eval_"))
+    store = ProactivityStore(scratch / "p.sqlite3")
+    queue = DurableTaskQueue(scratch / "q.sqlite3")
+    engine = ProactivityEngine(store, queue)
+    moment = datetime(2026, 7, 15, 9, 0, tzinfo=timezone.utc)
+
+    store.add_rule("unattended", "interval", {"seconds": 1}, "delete all my files", cooldown_seconds=0, max_fires_per_day=2)
+    result = engine.tick(moment)
+    if len(result.get("proposed") or []) != 1:
+        return False, f"a due rule must propose exactly once, got {result.get('proposed')!r}"
+
+    tasks = queue.list_tasks()
+    if len(tasks) != 1:
+        return False, "a fired rule must enqueue its request"
+    task = tasks[0]
+    if task.status != "queued" or task.started_at or task.finished_at or task.result_summary:
+        return False, f"a proactive trigger must never execute or approve its task, got status={task.status!r}"
+    if queue.stats()["succeeded"] or queue.stats()["running"]:
+        return False, "a proactive tick must leave nothing running or succeeded"
+
+    # Runaway guard: the daily budget caps proposals.
+    fired = 1
+    for i in range(1, 5):
+        fired += len(engine.tick(moment + timedelta(seconds=10 * i))["proposed"])
+    if fired != 2:
+        return False, f"the per-rule daily budget must cap proposals at 2, got {fired}"
+
+    return True, "a proactive trigger only enqueues a request (left queued for the gate) and is capped by its daily budget"
+
+
 def offline_tasks() -> list[EvalTask]:
     """The deterministic, offline eval suite run in CI on every commit."""
     return [
@@ -567,5 +614,11 @@ def offline_tasks() -> list[EvalTask]:
             description="A crashed task is resumed to 'queued' on restart and is never auto-completed or approved by recovery.",
             category="reliability",
             check=_durable_queue_recovers_and_never_auto_approves,
+        ),
+        EvalTask(
+            id="proactive_trigger_proposes_but_never_authorizes",
+            description="An unattended proactive trigger only enqueues a request (left queued for the gate), never executes or approves it, and is capped by its daily budget.",
+            category="security",
+            check=_proactive_trigger_proposes_but_never_authorizes,
         ),
     ]

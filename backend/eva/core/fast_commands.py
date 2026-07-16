@@ -655,6 +655,79 @@ def _durable_queue_enqueue(text: str) -> str:
     return f"Queued a durable task (id {task.id[:8]}): {task.request}. It survives restarts and runs through the gate."
 
 
+_PROACTIVITY_DISABLED_MSG = (
+    "Proactivity is off. Set EVA_PROACTIVITY_ENABLED=1 to let me act on standing rules (schedules, "
+    "file watchers). Rules only ever PROPOSE work — anything they queue still needs the gate, and a "
+    "privileged action still waits for your confirmation."
+)
+
+
+def _proactivity_rules() -> str:
+    try:
+        from ..proactivity import open_default_store, proactivity_enabled
+    except Exception:
+        return "Proactivity is unavailable in this build."
+    if not proactivity_enabled():
+        return _PROACTIVITY_DISABLED_MSG
+    store = open_default_store()
+    if store is None:
+        return _PROACTIVITY_DISABLED_MSG
+    rules = store.list_rules()
+    if not rules:
+        return "No proactive rules yet. Rules propose work on a schedule or when a file changes; they never act on their own."
+    lines = [f"Proactive rules ({len(rules)}):"]
+    for rule in rules[:15]:
+        state = "on" if rule.enabled else "off"
+        last = rule.last_fired_at or "never"
+        lines.append(f"- [{state}] {rule.name} ({rule.kind}) -> '{rule.request}' | last fired: {last}")
+    lines.append("Rules only propose; every queued task still runs through the permission gate.")
+    return "\n".join(lines)
+
+
+def _proactivity_tick() -> str:
+    try:
+        from ..proactivity import open_default_engine, proactivity_enabled
+    except Exception:
+        return "Proactivity is unavailable in this build."
+    if not proactivity_enabled():
+        return _PROACTIVITY_DISABLED_MSG
+    engine = open_default_engine()
+    if engine is None:
+        return _PROACTIVITY_DISABLED_MSG
+    result = engine.tick()
+    proposed = result.get("proposed") or []
+    suppressed = result.get("suppressed") or []
+    if not proposed:
+        extra = f" ({len(suppressed)} suppressed by rate limits)" if suppressed else ""
+        return f"Checked {result.get('evaluated', 0)} rule(s); nothing is due right now{extra}."
+    lines = [f"Checked {result.get('evaluated', 0)} rule(s) and queued {len(proposed)} proposal(s):"]
+    for item in proposed[:10]:
+        lines.append(f"- {item.get('rule')}: {item.get('request')}")
+    lines.append("These are queued for approval — nothing ran; each still goes through the gate.")
+    return "\n".join(lines)
+
+
+def _proactivity_notifications() -> str:
+    try:
+        from ..proactivity import open_default_store, proactivity_enabled
+    except Exception:
+        return "Proactivity is unavailable in this build."
+    if not proactivity_enabled():
+        return _PROACTIVITY_DISABLED_MSG
+    store = open_default_store()
+    if store is None:
+        return _PROACTIVITY_DISABLED_MSG
+    notes = store.list_notifications(limit=10)
+    if not notes:
+        return "No notifications."
+    lines = [f"Notifications ({len(notes)}):"]
+    for note in notes:
+        mark = "" if note.read else "* "
+        lines.append(f"- {mark}{note.message}")
+    store.mark_all_read()
+    return "\n".join(lines)
+
+
 def _after_prefix(text: str, prefixes: tuple[str, ...]) -> str | None:
     for prefix in prefixes:
         if text.startswith(prefix):
@@ -4726,6 +4799,15 @@ def maybe_handle_fast_command(
     enqueue_text = _after_prefix(original, ("enqueue task ", "queue task ", "add task ", "enqueue "))
     if enqueue_text:
         return _durable_queue_enqueue(enqueue_text), "fast-command"
+
+    if normalized in {"proactivity status", "rules", "rules list", "list rules", "proactive rules"}:
+        return _proactivity_rules(), "fast-command"
+
+    if normalized in {"check triggers", "proactivity tick", "run rules", "check rules"}:
+        return _proactivity_tick(), "fast-command"
+
+    if normalized in {"notifications", "my notifications", "what did i miss"}:
+        return _proactivity_notifications(), "fast-command"
 
     if normalized in {"skills status", "skill status", "agent skills"}:
         from ..agent.skills import skill_status

@@ -64,6 +64,27 @@ def _recover_durable_tasks_if_enabled(app: FastAPI) -> None:
         pass
 
 
+def _run_proactivity_catchup_if_enabled(app: FastAPI) -> None:
+    """Evaluate standing proactive rules once at startup (Phase 46), only when
+    EVA_PROACTIVITY_ENABLED is set.
+
+    This is the catch-up pass: whatever became due while Eva was off gets
+    PROPOSED now. A tick only enqueues requests and records notifications — it
+    executes nothing, so everything it proposes still faces the permission gate
+    before it can run. No background loop is started here; ticking beyond this
+    catch-up is a deliberate call. Wrapped so it can never crash startup."""
+    try:
+        from .proactivity import open_default_engine
+
+        engine = open_default_engine()
+        if engine is None:
+            return
+        app.state.proactivity = engine
+        app.state.proactivity_catchup = engine.tick()
+    except Exception:
+        pass
+
+
 def create_app() -> FastAPI:
     load_project_env(ROOT)
     _apply_activation_profile()
@@ -83,6 +104,7 @@ def create_app() -> FastAPI:
 
     app.state.memory = MemoryStore(ROOT / "data" / "eva.sqlite3")
     _recover_durable_tasks_if_enabled(app)
+    _run_proactivity_catchup_if_enabled(app)
     app.include_router(router, prefix="/api")
     app.include_router(get_control_center_routes())
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

@@ -86,6 +86,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase43_memory.py",
     "verify_eva_phase44_perception.py",
     "verify_eva_phase45_durable.py",
+    "verify_eva_phase46_proactivity.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -147,6 +148,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase43_memory.py",
     "verify_eva_phase44_perception.py",
     "verify_eva_phase45_durable.py",
+    "verify_eva_phase46_proactivity.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -172,6 +174,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase43_memory.py": ("phase43", "memory", "user-model"),
     "verify_eva_phase44_perception.py": ("phase44", "perception", "grounding"),
     "verify_eva_phase45_durable.py": ("phase45", "durable-queue", "crash-recovery"),
+    "verify_eva_phase46_proactivity.py": ("phase46", "proactivity", "triggers"),
 }
 
 
