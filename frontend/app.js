@@ -142,7 +142,7 @@ function scrollMessagesToBottom() {
 function addMessage(role, content = "") {
   const node = document.createElement("article");
   node.className = `message ${role}`;
-  node.innerHTML = `<span>${role === "user" ? "You" : "EVA"}</span><p></p>`;
+  node.innerHTML = `<span>${role === "user" ? "You" : "NOVA"}</span><p></p>`;
   node.querySelector("p").textContent = content;
   timeline.appendChild(node);
   scrollMessagesToBottom();

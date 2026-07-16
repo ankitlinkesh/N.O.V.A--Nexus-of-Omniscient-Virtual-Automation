@@ -81,7 +81,17 @@ def main() -> int:
     failures += emit("license_mentions_copyright", "Copyright 2026 Ankit L" in license_text)
     readme_lower = readme_text.lower()
     failures += emit("readme_says_source_available", "source-available" in readme_lower)
-    failures += emit("readme_does_not_call_eva_open_source", "eva is open-source" not in readme_lower and "eva agent is open-source" not in readme_lower and "this project is open-source" not in readme_lower)
+    # The licence is PolyForm Noncommercial: source-available, NOT open-source.
+    # The brand rename to N.O.V.A would have silently defeated this guard (it
+    # only knew the old name), so it now checks every name the product goes by.
+    _open_source_claims = (
+        "eva is open-source",
+        "eva agent is open-source",
+        "nova is open-source",
+        "n.o.v.a is open-source",
+        "this project is open-source",
+    )
+    failures += emit("readme_does_not_call_eva_open_source", not any(claim in readme_lower for claim in _open_source_claims))
     failures += emit("readme_mentions_noncommercial_use", "non-commercial use is allowed" in readme_lower or "noncommercial use is allowed" in readme_lower)
     failures += emit("readme_mentions_commercial_permission", "commercial use" in readme_lower and "requires separate written permission" in readme_lower)
     failures += emit("hardening_status_human_readable", "Eva public release hardening" in status_text and clean_output(status_text), output=status_text)

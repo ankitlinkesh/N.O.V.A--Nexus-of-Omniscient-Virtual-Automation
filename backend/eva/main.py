@@ -90,7 +90,7 @@ def create_app() -> FastAPI:
     _apply_activation_profile()
     _load_mcp_tools_if_enabled()
     settings = load_settings(ROOT / "config" / "eva.toml")
-    app = FastAPI(title="Eva Agent", version="0.1.0")
+    app = FastAPI(title="N.O.V.A — Nexus of Omniscient Virtual Automation", version="0.1.0")
     app.state.settings = settings
 
     @app.middleware("http")

@@ -75,9 +75,9 @@ EVA_IDENTITY_SUMMARY = (
     f"I'm {ASSISTANT_NAME} — your local agent running on this laptop."
 )
 LOCAL_MEMORY_SUMMARY = (
-    "Yep. Eva has local SQLite memory on this laptop. Right now I store chat messages and tool events locally, "
-    "and I use the known local profile for stable things like your name and Eva project preferences. I'm not a "
-    "stateless cloud bot here, but I also won't invent personal facts you haven't told me."
+    f"Yep. {ASSISTANT_NAME} has local SQLite memory on this laptop. Right now I store chat messages and tool events "
+    f"locally, and I use the known local profile for stable things like your name and {ASSISTANT_NAME} project "
+    "preferences. I'm not a stateless cloud bot here, but I also won't invent personal facts you haven't told me."
 )
 AGENT_STATUS_SUMMARY = {
     "mode": "Agentic v2",
