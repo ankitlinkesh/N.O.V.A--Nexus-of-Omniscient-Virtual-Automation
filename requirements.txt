@@ -42,3 +42,10 @@ chromadb==1.5.9
 # opens an audio device unless voice input is explicitly enabled.
 faster-whisper==1.2.1
 sounddevice==0.5.5
+
+# Wake word (Phase 49b) - OPTIONAL, inert unless EVA_VOICE_INPUT_ENABLED=1.
+# Runs a ~1MB ONNX model locally on CPU (no torch): no audio leaves the machine
+# to decide whether the wake word was said. Models download to EVA_WAKE_MODEL_DIR
+# (default D:\eva-agent-toolsoice\openwakeword). Nothing opens an audio device
+# unless voice input is explicitly enabled, and no activation profile may enable it.
+openwakeword==0.6.0

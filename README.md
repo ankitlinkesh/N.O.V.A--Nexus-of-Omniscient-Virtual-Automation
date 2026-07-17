@@ -48,7 +48,7 @@ Real capabilities, and the flag each needs. **Default is off**: a fresh checkout
 | **MCP servers** (external tools) | opt-in, gated | `EVA_MCP_ENABLED` |
 | **Text-to-speech** — real, fully local (Piper, bundled exe + on-disk voice model; no audio leaves the machine) | on | `EVA_TTS_PROVIDER=piper` |
 | **Speech-to-text** — real, fully local (faster-whisper/CTranslate2, no torch; no audio leaves the machine) | opt-in | `EVA_VOICE_INPUT_ENABLED` |
-| Wake word + continuous mic capture | **not built yet** | — |
+| **Wake word + mic capture** — real, fully local (openWakeWord ONNX; nothing is transcribed before the wake word) | opt-in | `EVA_VOICE_INPUT_ENABLED` |
 
 `EVA_PROFILE=daily` turns on the side-effect-free "mind" capabilities in one switch. **No profile may ever auto-enable real input, the browser, or MCP** — those stay opt-in one flag at a time, by design and enforced by a verifier.
 
@@ -228,7 +228,7 @@ These commands provide local evidence only. They do not publish or certify produ
 
 ## Known Limitations
 
-- Voice is nearly complete but not wired end to end: speech-to-text and text-to-speech both work locally, but there is no wake word or continuous microphone capture yet, so you cannot just talk to it hands-free.
+- Voice works in both directions and hands-free (wake word -> speech-to-text -> reply -> speech), all locally. The wake phrase is `hey_jarvis`: openWakeWord ships pretrained models for a handful of phrases and "hey nova" is not one of them, so a custom phrase needs a trained model. Set `EVA_WAKE_WORD` to pick another.
 - The default speech-to-text model is `base`, which fumbles proper nouns (it hears "NOVA" as "Nola"); set `EVA_STT_MODEL=small` for better accuracy at ~250MB.
 - There is no native shell yet — it runs as a local web app.
 - OpenRouter and CLoD are currently non-functional (dead key / bad model id); run `llm doctor` for live status.

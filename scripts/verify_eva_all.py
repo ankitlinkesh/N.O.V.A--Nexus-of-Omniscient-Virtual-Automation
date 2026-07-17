@@ -90,6 +90,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase47_self_improvement.py",
     "verify_eva_phase48_reasoning.py",
     "verify_eva_phase49_voice_input.py",
+    "verify_eva_phase49b_wake_word.py",
     "verify_eva_phase51_action_type_audit.py",
 ]
 
@@ -156,6 +157,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase47_self_improvement.py",
     "verify_eva_phase48_reasoning.py",
     "verify_eva_phase49_voice_input.py",
+    "verify_eva_phase49b_wake_word.py",
     "verify_eva_phase51_action_type_audit.py",
 ]
 
@@ -186,6 +188,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase47_self_improvement.py": ("phase47", "self-improvement", "skill-learning"),
     "verify_eva_phase48_reasoning.py": ("phase48", "reasoning-ceiling", "llm-doctor"),
     "verify_eva_phase49_voice_input.py": ("phase49", "voice", "speech-to-text"),
+    "verify_eva_phase49b_wake_word.py": ("phase49b", "voice", "wake-word"),
     "verify_eva_phase51_action_type_audit.py": ("phase51", "security", "action-type-audit"),
 }
 
