@@ -1,4 +1,5 @@
-﻿from pathlib import Path
+﻿import asyncio
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -85,6 +86,60 @@ def _run_proactivity_catchup_if_enabled(app: FastAPI) -> None:
         pass
 
 
+async def _gate_governed_executor(request: str) -> dict:
+    """Run one queued request through the ORDINARY agent loop.
+
+    This is what makes the background scheduler safe to run unattended: a queued
+    task gets no special authority. Every tool call it makes goes through
+    ToolRegistry.run exactly as if the request had been typed, so anything
+    privileged parks in the confirmation ledger instead of executing."""
+    from .agent.runner import run_agentic_task
+
+    return await run_agentic_task(request, {"execute_tools": True})
+
+
+def _start_background_scheduler_if_enabled(app: FastAPI) -> None:
+    """Start the unattended propose+drain loop (Phase 53), only when
+    EVA_BACKGROUND_WORKER_ENABLED is set.
+
+    Phases 45/46 built the queue and the rule engine but deliberately never ran
+    them. This runs them. It stays safe because it delegates: the engine can only
+    propose, and the worker executes through the gate — the scheduler itself
+    approves nothing. Wrapped so it can never crash startup, and skipped
+    entirely when there is no running event loop (e.g. a verifier importing the
+    app)."""
+    try:
+        from .runtime.scheduler import BackgroundScheduler, background_worker_enabled
+
+        if not background_worker_enabled():
+            return
+        engine = getattr(app.state, "proactivity", None)
+        queue = getattr(app.state, "task_queue", None)
+        worker = None
+        if queue is not None:
+            from .tasks.worker import DurableTaskWorker
+
+            worker = DurableTaskWorker(queue, _gate_governed_executor)
+        if engine is None and worker is None:
+            return  # nothing to do; the queue/proactivity flags are off
+
+        scheduler = BackgroundScheduler(engine, worker)
+        app.state.scheduler = scheduler
+
+        @app.on_event("startup")
+        async def _launch_scheduler() -> None:  # pragma: no cover - needs a live loop
+            app.state.scheduler_task = asyncio.create_task(scheduler.run_forever())
+
+        @app.on_event("shutdown")
+        async def _stop_scheduler() -> None:  # pragma: no cover - needs a live loop
+            scheduler.request_stop()
+            task = getattr(app.state, "scheduler_task", None)
+            if task is not None:
+                task.cancel()
+    except Exception:
+        pass
+
+
 def create_app() -> FastAPI:
     load_project_env(ROOT)
     _apply_activation_profile()
@@ -105,6 +160,7 @@ def create_app() -> FastAPI:
     app.state.memory = MemoryStore(ROOT / "data" / "eva.sqlite3")
     _recover_durable_tasks_if_enabled(app)
     _run_proactivity_catchup_if_enabled(app)
+    _start_background_scheduler_if_enabled(app)
     app.include_router(router, prefix="/api")
     app.include_router(get_control_center_routes())
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

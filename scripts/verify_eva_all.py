@@ -92,6 +92,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase49_voice_input.py",
     "verify_eva_phase49b_wake_word.py",
     "verify_eva_phase51_action_type_audit.py",
+    "verify_eva_phase53_scheduler.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -159,6 +160,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase49_voice_input.py",
     "verify_eva_phase49b_wake_word.py",
     "verify_eva_phase51_action_type_audit.py",
+    "verify_eva_phase53_scheduler.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -190,6 +192,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase49_voice_input.py": ("phase49", "voice", "speech-to-text"),
     "verify_eva_phase49b_wake_word.py": ("phase49b", "voice", "wake-word"),
     "verify_eva_phase51_action_type_audit.py": ("phase51", "security", "action-type-audit"),
+    "verify_eva_phase53_scheduler.py": ("phase53", "scheduler", "background-worker"),
 }
 
 
