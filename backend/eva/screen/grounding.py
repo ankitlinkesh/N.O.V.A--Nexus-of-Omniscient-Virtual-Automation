@@ -51,6 +51,21 @@ _DEFAULT_MIN_CONFIDENCE = 0.75
 # mean, so grounding refuses to pick one rather than risk clicking the wrong one.
 _AMBIGUITY_MARGIN = 0.08
 
+# Phase 63: roles that are actual click targets. Used only as a TIE-BREAK
+# inside resolve()'s ambiguity margin (see there) -- never to exclude a role
+# from matching or scoring in the first place. Some apps legitimately expose
+# clickable things as "Text", so this is deliberately not a filter.
+_INTERACTIVE_ROLES = frozenset({
+    "button", "splitbutton", "hyperlink", "link", "menuitem", "menu",
+    "checkbox", "radiobutton", "togglebutton", "tabitem", "tab",
+    "listitem", "edit", "combobox", "slider", "spinner",
+})
+
+
+def _is_interactive_role(role: str) -> bool:
+    return str(role or "").strip().lower() in _INTERACTIVE_ROLES
+
+
 # Query words that name a control ROLE rather than its label. They are removed
 # from the label match and used instead to prefer the right kind of control.
 _ROLE_SYNONYMS: dict[str, frozenset[str]] = {
@@ -321,6 +336,36 @@ def resolve(
         return Resolution("none", None, tuple(ranked[:5]), f"best match {best.confidence:.2f} is below the {float(min_confidence):.2f} floor")
     tied = [t for t in ranked if t.confidence >= float(min_confidence) and (best.confidence - t.confidence) < float(margin)]
     if len(tied) >= 2:
+        # Phase 63 tie-break: a login page whose <h1> heading reads "Sign in"
+        # right next to a "Sign in" BUTTON is an extremely common pattern, and
+        # it used to make every such page's submit button unreachable by
+        # label -- resolve() saw three equally-scored "Sign in" candidates
+        # (the button and two static text nodes for the heading) and refused,
+        # exactly as Phase 59 designed it to when it truly cannot tell which
+        # control is meant. But a static text node is never a click target a
+        # user meant when an interactive control with the same label exists
+        # in the same tie -- a heading is not a button -- so when EXACTLY ONE
+        # tied candidate is interactive, that is the answer, not an ambiguity.
+        #
+        # This is intentionally narrow, so it cannot become a general
+        # "prefer buttons" rule that overrides real scoring:
+        #   * It only ever looks inside the tied set that already exists
+        #     above -- a clearly better STATIC match (outside the margin) is
+        #     never reached here at all, because `tied` would have length 1.
+        #   * Two tied INTERACTIVE candidates (two "OK" buttons) still refuse
+        #     exactly as before: interactive_tied below has length 2, not 1.
+        #   * Roles are never excluded from matching or scoring (some apps
+        #     legitimately expose clickable things as "Text") -- this is a
+        #     tie-break, not a filter.
+        interactive_tied = [t for t in tied if _is_interactive_role(t.role)]
+        if len(interactive_tied) == 1:
+            winner = interactive_tied[0]
+            return Resolution(
+                "found",
+                winner,
+                tuple(ranked[:5]),
+                f"'{query}' tied between {len(tied)} controls; picked the one interactive candidate over the static ones",
+            )
         return Resolution("ambiguous", None, tuple(tied[:5]), f"{len(tied)} controls match '{query}' about equally; be more specific")
     return Resolution("found", best, tuple(ranked[:5]), "one clear match")
 

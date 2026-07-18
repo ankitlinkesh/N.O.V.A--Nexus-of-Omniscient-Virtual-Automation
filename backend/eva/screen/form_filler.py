@@ -251,6 +251,62 @@ def foreground_window_title() -> str:
         return ""
 
 
+# -- re-verifying the window before typing (Phase 63) ------------------------
+#
+# StagedForm captures window_title at STAGING time, and it is shown in the
+# approval manifest -- but between staging, human approval, and execution the
+# foreground window can change (a notification, an alt-tab, or -- as happened
+# live-driving this against a real browser -- a terminal simply holding
+# focus while the human approves in it). Without re-checking, screen_tools
+# would type the user's decrypted vault value into whatever window happens to
+# be in front. See screen_tools.screen_submit_form for where this is called,
+# once before EVERY field (not just once at the start of the run).
+#
+# The matching rule is deliberately NOT exact string equality on the full
+# title. A real web page can legitimately rewrite its own document.title
+# while it is being filled in -- the page this defect was found on does
+# exactly that -- so an exact-equality check would abort mid-fill on a page
+# merely updating itself, which is not the harm this guard exists to catch.
+# Browser chrome (and many native apps) appends a STABLE suffix to the page/
+# document title -- "<page title> - Google Chrome" -- and a genuine window
+# switch (Chrome -> a terminal) changes that suffix, not just the leading
+# page-title text. So "same window" here means "same trailing '- App Name'
+# segment", which tolerates a live page rewriting its own title while still
+# catching a real foreground-window change.
+#
+# When a title has no " - " to split on, its identity IS the whole title --
+# meaning ANY change of that title aborts. That is deliberately the safe
+# direction: without a recognizable app suffix to key on, we cannot tell "the
+# page renamed itself" from "the window changed", so we treat any drift as a
+# potential window change rather than risk typing into the wrong place.
+def _window_identity(title: str) -> str:
+    text = str(title or "").strip()
+    if not text:
+        return ""
+    if " - " in text:
+        return text.rsplit(" - ", 1)[1].strip()
+    return text
+
+
+def verify_staged_window(staged: "StagedForm") -> str | None:
+    """``None`` if the current foreground window still matches the one this
+    form was staged against; otherwise a human-readable reason it does not.
+
+    Fails SAFE in both directions: an empty staged title means "unknown at
+    staging time, cannot verify" and is itself a reason to refuse (never
+    silently proceed blind), and any identity mismatch (see
+    ``_window_identity``) is reported as a window change. Callers should stop
+    the whole run -- and type nothing -- on any non-``None`` return.
+    """
+    expected = str(staged.window_title or "").strip()
+    if not expected:
+        return "the target window was not recorded when this form was staged, so it cannot be verified; refusing to type blind"
+    current = foreground_window_title()
+    if _window_identity(expected) != _window_identity(current):
+        return f"the foreground window changed (expected a window matching '{expected}', found '{current or '(no foreground window)'}')"
+    return None
+
+
 def _looks_like_secret(value: str) -> bool:
     try:
         from ..privacy.secrets_broker import contains_secret_leak
@@ -367,4 +423,5 @@ __all__ = [
     "pop_staged_form",
     "describe_staged_form",
     "foreground_window_title",
+    "verify_staged_window",
 ]

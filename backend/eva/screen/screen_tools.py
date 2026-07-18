@@ -14,6 +14,7 @@ from .form_filler import (
     is_vault_ref,
     pop_staged_form,
     vault_ref_name,
+    verify_staged_window,
 )
 from .screen_observer import observe_screen_once
 from .ui_locator import UiTarget
@@ -203,6 +204,25 @@ def screen_submit_form(spec_id: str, reason: str) -> dict[str, Any]:
         # heuristic in _looks_like_secret would say about the reference text
         # itself (e.g. "@vault:email" does not look like a live secret).
         secret = True if is_ref else _looks_like_secret(spec_field.value)
+
+        # 0. Re-verify the foreground window is still the one this form was
+        # staged against -- BEFORE every field, not just once at the start.
+        # Between staging, human approval, and execution the foreground
+        # window can change (a notification, an alt-tab, or -- as happened
+        # live-driving this against a real browser form -- the terminal
+        # simply holding focus while the approval happened in it); a
+        # notification or popup stealing focus between field 2 and field 3
+        # must stop the run rather than send field 3's value somewhere
+        # unintended. See form_filler.verify_staged_window for the matching
+        # rule (a stable window "identity", not exact title equality, so a
+        # page rewriting its own document.title mid-fill does not itself
+        # abort) and why an unrecorded staged title fails safe (refuse to
+        # type blind) rather than proceeding.
+        window_error = verify_staged_window(staged)
+        if window_error:
+            steps.append(FillStep(label, "window_changed", secret, window_error[:200]))
+            return _stop(FillOutcome(steps, filled, False, f"aborted before '{label}': {window_error}"))
+
         if not label:
             steps.append(FillStep("", "not_found", secret, "empty field label"))
             return _stop(FillOutcome(steps, filled, False, "a field had no label"))
@@ -267,6 +287,14 @@ def screen_submit_form(spec_id: str, reason: str) -> dict[str, Any]:
         filled += 1
 
     # 3. The final submit action -- same direct-call rule as step 1 above.
+    # Also re-verified against the window: submitting still ACTS on screen
+    # (a click, a keypress), so the same focus-theft window applies here too.
+    if staged.submit.mode in ("click", "press"):
+        window_error = verify_staged_window(staged)
+        if window_error:
+            steps.append(FillStep(staged.submit.label or staged.submit.key, "window_changed", False, window_error[:200]))
+            return _stop(FillOutcome(steps, filled, False, f"aborted before submitting: {window_error}"))
+
     if staged.submit.mode == "click" and staged.submit.label:
         submitted = screen_click(label=staged.submit.label, reason=effective_reason)
         if not _ok(submitted):

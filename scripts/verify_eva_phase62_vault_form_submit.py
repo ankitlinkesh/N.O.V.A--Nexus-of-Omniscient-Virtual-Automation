@@ -184,18 +184,25 @@ def _run() -> int:
     )
 
     # Everything below drives the real registry + real gate + real confirmation
-    # round-trip. Only two things are faked, and both are BELOW the tool-level
+    # round-trip. Only three things are faked, and all are BELOW the tool-level
     # gate: which controls exist on screen (the accessibility-tree provider),
-    # and the physical pyautogui actuator that would otherwise move the mouse.
+    # the physical pyautogui actuator that would otherwise move the mouse, and
+    # (Phase 63) the foreground-window reader -- pinned to "Test App" to match
+    # every staged form's window_title below, so the new pre-type window guard
+    # (see verify_eva_phase63_live_fixes.py) does not spuriously abort this
+    # verifier against whatever window actually has focus on the machine
+    # running it.
     recorder = _InputRecorder(AgentObservation)
     form_elements = _build_form_elements(grounding)
     saved_provider = grounding._default_provider
     saved_click = screen_controller.click
     saved_type_text = screen_controller.type_text
     saved_press = screen_controller.press
+    saved_window_title_fn = form_filler.foreground_window_title
     grounding._default_provider = lambda: list(form_elements)
     screen_controller.click = recorder.click
     screen_controller.type_text = recorder.type_text
+    form_filler.foreground_window_title = lambda: "Test App"
     screen_controller.press = recorder.press
 
     try:
@@ -322,6 +329,7 @@ def _run() -> int:
         screen_controller.click = saved_click
         screen_controller.type_text = saved_type_text
         screen_controller.press = saved_press
+        form_filler.foreground_window_title = saved_window_title_fn
 
     # 9. screen.submit_form is not planner-reachable and is not smuggled in via
     # the web./mcp. auto-expose prefixes.

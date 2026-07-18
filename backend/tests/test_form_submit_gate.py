@@ -101,15 +101,21 @@ class _InputRecorder:
 def gated_screen(monkeypatch, tmp_path):
     """Real registry, real gate, real confirmation round-trip.
 
-    Only two things are faked, and both are BELOW the tool-level gate: the
-    accessibility-tree provider (what controls exist on screen) and the
-    screen_controller actuator (the physical pyautogui calls). Nothing here
-    fakes ``ToolRegistry.run``/``run_approved`` or the confirmation flow.
+    Only three things are faked, and all are BELOW the tool-level gate: the
+    accessibility-tree provider (what controls exist on screen), the
+    screen_controller actuator (the physical pyautogui calls), and (Phase 63)
+    the foreground-window reader -- pinned to "Test App" to match every staged
+    form's ``window_title`` in this file, so the new pre-type window guard
+    (see test_form_submit_window_guard.py) does not spuriously abort these
+    tests against whatever window actually has focus on the machine running
+    them. Nothing here fakes ``ToolRegistry.run``/``run_approved`` or the
+    confirmation flow.
     """
     monkeypatch.setenv("EVA_GUI_GROUNDING_ENABLED", "1")
     monkeypatch.setenv("EVA_VAULT_ENABLED", "1")
     monkeypatch.setenv("EVA_VAULT_PATH", str(tmp_path / "vault.json"))
     monkeypatch.setattr(grounding, "_default_provider", lambda: list(FORM_ELEMENTS))
+    monkeypatch.setattr(form_filler, "foreground_window_title", lambda: "Test App")
 
     recorder = _InputRecorder()
     monkeypatch.setattr(screen_controller, "click", recorder.click)
