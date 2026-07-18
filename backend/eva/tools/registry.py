@@ -301,10 +301,11 @@ class ToolRegistry:
             ),
             "screen.click": ToolSpec(
                 name="screen.click",
-                description="Click a verified visible UI target during an active task. Raw coordinates without a target are refused.",
+                description="Click a visible UI element during an active task. Give a text `label` (e.g. 'Submit') to locate it via GUI grounding, or a verified `target`. Raw coordinates are refused.",
                 args_schema=_schema(
                     {
                         "target": {"type": "object"},
+                        "label": {"type": "string"},
                         "x": {"type": "number"},
                         "y": {"type": "number"},
                         "reason": {"type": "string"},
@@ -313,12 +314,13 @@ class ToolRegistry:
                     ["reason"],
                 ),
                 safety_level="safe",
-                handler=lambda reason, target=None, x=None, y=None, required_confidence=0.75: screen_click(
+                handler=lambda reason, target=None, label=None, x=None, y=None, required_confidence=0.75: screen_click(
                     x=int(x) if x is not None else None,
                     y=int(y) if y is not None else None,
                     reason=str(reason),
                     target=target if isinstance(target, dict) else None,
                     required_confidence=float(required_confidence or 0.75),
+                    label=str(label) if label else None,
                 ),
                 category="screen",
                 risk="low",

@@ -20,17 +20,34 @@ def screen_click(
     reason: str = "",
     target: dict[str, Any] | None = None,
     required_confidence: float = 0.75,
+    label: str | None = None,
 ) -> dict[str, Any]:
     if not str(reason or "").strip():
         return {"ok": False, "error": "reason_required", "message": "Screen click requires an active task reason."}
-    if target is None:
+    ui_target: UiTarget | None = None
+    if target is not None:
+        ui_target = UiTarget.from_dict(target)
+    elif label and str(label).strip():
+        # Phase 56: resolve a text label ("Submit", "email field") to a verified
+        # target via GUI grounding. Still no raw coordinates — grounding returns a
+        # confidence-scored target or nothing, and the floor below is enforced.
+        from .grounding import locate as ground_locate
+
+        ui_target = ground_locate(str(label), min_confidence=float(required_confidence))
+        if ui_target is None:
+            return {
+                "ok": False,
+                "error": "ui_target_not_found",
+                "message": f"I couldn't confidently find '{label}' on the screen, so I did not click.",
+                "ui_events": [{"type": "ui_target_low_confidence", "reason": "grounding_no_match", "label": str(label)}],
+            }
+    if ui_target is None:
         return {
             "ok": False,
             "error": "ui_target_required",
             "message": "I will not click raw coordinates. I need a verified UI target with confidence and a reason.",
             "ui_events": [{"type": "ui_target_low_confidence", "reason": "missing_target"}],
         }
-    ui_target = UiTarget.from_dict(target)
     if ui_target.confidence < float(required_confidence):
         return {
             "ok": False,

@@ -42,7 +42,18 @@ class UiTarget:
 
 
 def locate_by_text_hint(text: str) -> UiTarget | None:
-    return None
+    """Resolve a text label to an on-screen target via GUI grounding (Phase 56).
+
+    Returns ``None`` when grounding is disabled or nothing matches confidently, so
+    the behaviour is byte-identical to the old stub whenever grounding is off."""
+    try:
+        from .grounding import grounding_enabled, locate
+
+        if not grounding_enabled():
+            return None
+        return locate(str(text or ""))
+    except Exception:
+        return None
 
 
 def locate_by_image_template(template_path: str) -> UiTarget | None:

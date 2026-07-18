@@ -95,6 +95,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase53_scheduler.py",
     "verify_eva_phase54_nl_rules.py",
     "verify_eva_phase55_risk_signals.py",
+    "verify_eva_phase56_gui_grounding.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -165,6 +166,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase53_scheduler.py",
     "verify_eva_phase54_nl_rules.py",
     "verify_eva_phase55_risk_signals.py",
+    "verify_eva_phase56_gui_grounding.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -199,6 +201,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase53_scheduler.py": ("phase53", "scheduler", "background-worker"),
     "verify_eva_phase54_nl_rules.py": ("phase54", "proactivity", "nl-rules"),
     "verify_eva_phase55_risk_signals.py": ("phase55", "permissions", "risk-escalation"),
+    "verify_eva_phase56_gui_grounding.py": ("phase56", "screen", "gui-grounding"),
 }
 
 
