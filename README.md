@@ -166,28 +166,54 @@ These commands are report/status/catalog only. They classify existing runtime su
 
 ## What Has Been Built
 
-The project was built in numbered phases. **Two numbering schemes exist**, and this document keeps them apart rather than pretending they form one clean sequence: the original build used Phases 1–14 plus a long `12x` hardening series and an RC-era "Phase 33–42" roadmap, and the July 2026 pivot **renumbered** everything from Phase 31 onward. So the RC-era "Phase 33–42 roadmap foundations" (see the section above) is *not* the same work as Phase 33–42 below.
+The project was built in numbered phases. **Three numbering schemes exist**, and this document keeps them apart rather than pretending they form one clean sequence:
 
-### Era 1 — Foundation (Phases 1–14, plus the `12x` series)
+- **The main build, Phases 1–30** (below) — foundation through release-candidate hardening.
+- **The July 2026 pivot, Phases 31 onward** (below) — which restarted the numbering.
+- **A `v2 …` sub-numbering** used inside the disabled-by-default v2 runtime work (its own "Phase 1–6": runtime scaffolding, dry-run previews, the safe execution bridge, read-only skill delegation, the pending-action ledger, Safe Code Index v2). These are *not* the main Phases 1–6.
 
-Grouped rather than listed one-by-one; the authoritative detail lives in `docs/EVA_CURRENT_STATE.md`.
+So the RC-era "Phase 33–42 roadmap foundations" (see the section above) is *not* the same work as Phase 33–42 below, and the `v2` Phase 5 ledger is not the main Phase 5 planner.
 
-| Phase | What it added |
+### Era 1 — Foundation through release candidate (Phases 1–30)
+
+| Phase | Name |
 |---|---|
-| 1 | Disabled-by-default v2 runtime scaffolding: specialist agents, typed schemas, guardrail hooks, local traces, vector-memory interfaces, browser/desktop adapters. |
-| 2 / 2.5 | Explicit dry-run / plan / route previews (`eva v2 …`); catalog-only resource registry and MCP policy. |
-| 3 / 3.1 | The safe execution bridge and execution policy; a safety hotfix hardening message/WhatsApp wording. |
-| 4 | Read-only skill delegation. |
-| 5 | **The pending-action ledger and permission-session UX** — the ancestor of today's gate. |
-| 6 | Safe Code Index v2 (metadata-only, skips secrets). |
-| 12A–12S | The long hardening series: FileAgent read-only foundation, draft previews, apply-readiness, the approval ledger, the narrow `12L` real-create gate, project inspection, Control Center, WorkSession audit timeline, and the smoke/quick/full verifier profiles. |
-| 13 / 14 | Browser hardening and desktop readiness. |
+| 1 | Project foundation & architecture |
+| 2 | FastAPI backend foundation |
+| 3 | API routing & command framework |
+| 4 | Capability registry v1 |
+| 5 | Planner foundation |
+| 6 | Intent detection & natural-language routing |
+| 7 | Research memory v1 |
+| 8 | FileAgent read-only foundation |
+| 9 | Control Center foundation |
+| 10 | Agent framework foundation |
+| 11 | Verification & safety infrastructure |
+| 12A–12L | **The write-boundary series** — the longest and most cautious stretch of the project, taking file writing from "not allowed" to "narrowly allowed". In order: safe file operations, approval workflow, draft preview, write validation, rollback, audit logging, apply pipeline, sandbox apply executor, the approval ledger, execution-safety refinement, final write-boundary preparation, and `12L`'s narrow approved `.md`/`.txt` real-create gate. Twelve phases to earn the right to create one kind of file. |
+| 13 | Capability system expansion |
+| 14 | Planner v2 & workflow improvements |
+| 15 | Team review & quality layer |
+| 16 | Verification framework expansion |
+| 17 | LLM threat defense & prompt-injection guard |
+| 18 | Agent loop v1 |
+| 19 | Agentic workflow planner |
+| 20 | Controlled execution gates |
+| 21 | Memory v3 |
+| 22 | Voice assistant foundation |
+| 23 | AI OS / Control Center upgrade |
+| 24 | Browser read-only intelligence |
+| 25 | Real desktop observation mode |
+| 26 | Desktop control gate |
+| 27 | News / web intelligence dashboard |
+| 28 | Coding specialist / CodingAgent foundation |
+| 29 | Public demo / release |
+| 30 | Release-candidate hardening |
 
 Also from this era, outside the phase numbering: the agentic v2 loop, laptop operator mode, desktop/browser/workspace/code-intelligence cores, Tavily search, one-shot screen vision, SQLite memory, the NVIDIA NIM provider, Ollama fallback, and push-to-talk voice UI with Piper.
 
 Then came a **full security review and hardening pass** (the central `ToolRegistry.run()` gate, the `_safe_path` allowlist, header-guarded local API, and an adversarial pytest suite), a docs-truth pass (`eva capability truth`, generated from code rather than hand-maintained), and the pivot that set the program below.
 
-### Era 2 — The "final boss" program (Phases 31–61)
+### Era 2 — The "final boss" program (Phases 31–62)
 
 Delivered in dependency order after the July 2026 pivot. Each shipped with tests, an offline eval, and a dedicated verifier, and was merged only on a green full suite.
 
