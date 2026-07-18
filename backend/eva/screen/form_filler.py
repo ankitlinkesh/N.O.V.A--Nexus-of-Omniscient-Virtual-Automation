@@ -127,6 +127,9 @@ def fill_form(
         click = run("screen.click", reason=reason, label=label)
         if not _ok(click):
             err = _error_of(click).lower()
+            if "ambiguous" in err:
+                steps.append(FillStep(label, "ambiguous", secret, _error_of(click).strip()[:200]))
+                return FillOutcome(steps, filled, False, f"'{label}' matched several fields; be more specific")
             if "ui_target_not_found" in err or "target_required" in err or "low_confidence" in err:
                 steps.append(FillStep(label, "not_found", secret, f"could not find field '{label}' on screen"))
                 return FillOutcome(steps, filled, False, f"could not find field '{label}'")

@@ -29,11 +29,21 @@ def screen_click(
         ui_target = UiTarget.from_dict(target)
     elif label and str(label).strip():
         # Phase 56: resolve a text label ("Submit", "email field") to a verified
-        # target via GUI grounding. Still no raw coordinates — grounding returns a
-        # confidence-scored target or nothing, and the floor below is enforced.
-        from .grounding import locate as ground_locate
+        # target via GUI grounding. Still no raw coordinates. Phase 59: if the
+        # label matches several controls about equally, REFUSE and list them
+        # rather than risk clicking the wrong one.
+        from .grounding import resolve as ground_resolve
 
-        ui_target = ground_locate(str(label), min_confidence=float(required_confidence))
+        resolution = ground_resolve(str(label), min_confidence=float(required_confidence))
+        if resolution.status == "ambiguous":
+            options = "; ".join(f"{c.label} ({c.role}) at ({c.x},{c.y})" for c in resolution.candidates)
+            return {
+                "ok": False,
+                "error": "ambiguous_target",
+                "message": f"'{label}' matches several controls ({options}). Give me a more specific label; I won't guess.",
+                "ui_events": [{"type": "ui_target_ambiguous", "label": str(label), "candidates": [c.as_dict() for c in resolution.candidates]}],
+            }
+        ui_target = resolution.target
         if ui_target is None:
             return {
                 "ok": False,

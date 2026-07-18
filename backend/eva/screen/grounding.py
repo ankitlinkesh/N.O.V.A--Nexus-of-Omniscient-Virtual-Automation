@@ -46,6 +46,11 @@ _MAX_DEPTH = 14
 # Default confidence a caller must clear to act. Mirrors screen.click's floor.
 _DEFAULT_MIN_CONFIDENCE = 0.75
 
+# When the top two matches are within this confidence margin of each other (and
+# both clear the floor), the query is AMBIGUOUS — there are two controls it could
+# mean, so grounding refuses to pick one rather than risk clicking the wrong one.
+_AMBIGUITY_MARGIN = 0.08
+
 # Query words that name a control ROLE rather than its label. They are removed
 # from the label match and used instead to prefer the right kind of control.
 _ROLE_SYNONYMS: dict[str, frozenset[str]] = {
@@ -265,6 +270,51 @@ def enumerate_elements(provider: Callable[[], list[RawElement]] | None = None) -
         return []
 
 
+@dataclass(frozen=True)
+class Resolution:
+    """The result of resolving a query to a target — found, none, or ambiguous."""
+
+    status: str                       # "found" | "none" | "ambiguous"
+    target: UiTarget | None
+    candidates: tuple[UiTarget, ...]
+    reason: str
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "status": self.status,
+            "target": self.target.as_dict() if self.target else None,
+            "candidates": [c.as_dict() for c in self.candidates],
+            "reason": self.reason,
+        }
+
+
+def resolve(
+    query: str,
+    *,
+    provider: Callable[[], list[RawElement]] | None = None,
+    min_confidence: float = _DEFAULT_MIN_CONFIDENCE,
+    margin: float = _AMBIGUITY_MARGIN,
+) -> Resolution:
+    """Resolve ``query`` to a single target, or explain why it can't.
+
+    "found" only when there is ONE clear best above the floor. When the top two
+    matches are within ``margin`` of each other (both above the floor), the
+    result is "ambiguous" and lists the tied candidates — grounding declines to
+    guess which the user meant. "none" when nothing clears the floor."""
+    if not str(query or "").strip():
+        return Resolution("none", None, (), "empty query")
+    ranked = rank_targets(query, enumerate_elements(provider), floor=0.0)
+    if not ranked:
+        return Resolution("none", None, (), "no controls matched")
+    best = ranked[0]
+    if best.confidence < float(min_confidence):
+        return Resolution("none", None, tuple(ranked[:5]), f"best match {best.confidence:.2f} is below the {float(min_confidence):.2f} floor")
+    tied = [t for t in ranked if t.confidence >= float(min_confidence) and (best.confidence - t.confidence) < float(margin)]
+    if len(tied) >= 2:
+        return Resolution("ambiguous", None, tuple(tied[:5]), f"{len(tied)} controls match '{query}' about equally; be more specific")
+    return Resolution("found", best, tuple(ranked[:5]), "one clear match")
+
+
 def locate(
     query: str,
     *,
@@ -274,15 +324,10 @@ def locate(
     """The single best on-screen target for ``query``, or ``None``.
 
     ``None`` (not a low-confidence guess) whenever grounding is off, the tree is
-    empty, or nothing clears ``min_confidence`` — so a caller acts only on a
-    target it can trust, and otherwise does nothing."""
-    if not str(query or "").strip():
-        return None
-    targets = rank_targets(query, enumerate_elements(provider), floor=0.0)
-    if not targets:
-        return None
-    best = targets[0]
-    return best if best.confidence >= float(min_confidence) else None
+    empty, nothing clears ``min_confidence``, OR the match is ambiguous — so a
+    caller acts only on a target it can trust, and otherwise does nothing. Use
+    :func:`resolve` when you want to tell "not found" from "ambiguous"."""
+    return resolve(query, provider=provider, min_confidence=min_confidence).target
 
 
 def locate_candidates(
@@ -357,6 +402,8 @@ __all__ = [
     "rank_targets",
     "enumerate_elements",
     "locate",
+    "resolve",
+    "Resolution",
     "locate_candidates",
     "describe_visible",
 ]
