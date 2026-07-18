@@ -295,6 +295,60 @@ def locate_candidates(
     return rank_targets(query, enumerate_elements(provider), floor=0.0)[: max(1, int(limit))]
 
 
+# -- describing the whole screen (Phase 57) ---------------------------------
+
+def _target_dict(element: RawElement) -> dict[str, object]:
+    cx, cy = element.center
+    return {
+        "label": element.name,
+        "role": element.role,
+        "x": cx,
+        "y": cy,
+        "width": element.width,
+        "height": element.height,
+        "enabled": element.enabled,
+        # Existence, not a query match — observation lists what IS on screen;
+        # actually clicking still resolves a specific label via locate().
+        "confidence": 1.0,
+        "method": "uiautomation",
+    }
+
+
+def describe_visible(
+    *,
+    provider: Callable[[], list[RawElement]] | None = None,
+    limit: int = 20,
+) -> dict[str, object]:
+    """Enumerate the clickable controls on screen into a plain, readable report.
+
+    This is what makes ``screen.observe`` actually useful: instead of just the
+    window title it can now say what is on screen and where. Pure and injectable,
+    flag-gated, fail-safe — returns an empty report (not an error) when grounding
+    is off, the library is absent, or anything goes wrong.
+    """
+    try:
+        elements = enumerate_elements(provider)
+    except Exception:
+        elements = []
+    targets: list[dict[str, object]] = []
+    for element in elements:
+        if element.width <= 0 or element.height <= 0 or not element.on_screen or not element.name.strip():
+            continue
+        targets.append(_target_dict(element))
+        if len(targets) >= max(1, int(limit)):
+            break
+    return {"ui_targets": targets, "count": len(targets), "summary": _summarize_targets(targets)}
+
+
+def _summarize_targets(targets: list[dict[str, object]]) -> str:
+    if not targets:
+        return ""
+    shown = targets[:8]
+    parts = [f"{t['label']} ({t['role'] or 'control'})" for t in shown]
+    more = f", +{len(targets) - len(shown)} more" if len(targets) > len(shown) else ""
+    return f"Visible controls ({len(targets)}): " + "; ".join(parts) + more + "."
+
+
 __all__ = [
     "RawElement",
     "UiTarget",
@@ -304,4 +358,5 @@ __all__ = [
     "enumerate_elements",
     "locate",
     "locate_candidates",
+    "describe_visible",
 ]

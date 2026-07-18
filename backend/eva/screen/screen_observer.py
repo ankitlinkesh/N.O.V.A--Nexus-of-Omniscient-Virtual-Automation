@@ -48,6 +48,19 @@ class ScreenObservation:
         return asdict(self)
 
 
+def _safe_describe_visible() -> dict[str, Any]:
+    """Grounded UI report for the current screen, or an empty one (Phase 57).
+
+    Comes from the accessibility tree, not the screenshot, so it is attached even
+    when a pixel grab fails. Fail-safe: any error yields an empty report."""
+    try:
+        from .grounding import describe_visible
+
+        return describe_visible()
+    except Exception:
+        return {"ui_targets": [], "count": 0, "summary": ""}
+
+
 def get_active_window_title() -> str | None:
     window = get_active_window()
     return window.title if window else None
@@ -106,11 +119,15 @@ def observe_screen_once(reason: str, task_id: str | None = None, app_hint: str |
             ok=False,
             error="reason_required",
         )
+    described = _safe_describe_visible()
+    ui_targets = list(described.get("ui_targets") or [])
     try:
         frame = capture_screen(reason)
     except Exception as exc:
         title, process = _active_window_info()
         now = datetime.now(timezone.utc).isoformat()
+        # Even without pixels, the accessibility tree can still describe the UI.
+        base = f"Screen observation unavailable: {str(exc)[:160]}"
         return ScreenObservation(
             observation_id=uuid4().hex,
             frame_id="",
@@ -121,8 +138,9 @@ def observe_screen_once(reason: str, task_id: str | None = None, app_hint: str |
             width=0,
             height=0,
             created_at=now,
-            local_summary=f"Screen observation unavailable: {str(exc)[:160]}",
+            local_summary=_join_summary(base, described.get("summary")),
             privacy_risk=_privacy_risk(title),
+            ui_targets=ui_targets,
             source="live_screen",
             verified_live=False,
             ok=False,
@@ -143,12 +161,12 @@ def observe_screen_once(reason: str, task_id: str | None = None, app_hint: str |
         created_at=frame.created_at,
         local_summary="",
         privacy_risk=risk,
-        ui_targets=[],
+        ui_targets=ui_targets,
         source="live_screen",
         verified_live=True,
         ok=True,
     )
-    summary = summarize_visible_state_locally(observation)
+    summary = _join_summary(summarize_visible_state_locally(observation), described.get("summary"))
     return ScreenObservation(**{**observation.as_dict(), "local_summary": summary})
 
 
@@ -156,3 +174,12 @@ def summarize_visible_state_locally(observation: ScreenObservation) -> str:
     title = observation.active_window_title or "unknown window"
     suffix = " Privacy-sensitive window likely." if observation.privacy_risk else ""
     return f"Captured one local screen frame for active task. Active window: {title}.{suffix}"
+
+
+def _join_summary(base: str, extra: object) -> str:
+    """Append the grounded-controls summary to a base summary, if present."""
+    extra_text = str(extra or "").strip()
+    base_text = str(base or "").strip()
+    if not extra_text:
+        return base_text
+    return f"{base_text} {extra_text}".strip()
