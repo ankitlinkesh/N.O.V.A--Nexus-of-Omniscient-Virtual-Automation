@@ -18,6 +18,8 @@ SW_SHOWMAXIMIZED = 3
 SW_RESTORE = 9
 WM_CLOSE = 0x0010
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+SPI_GETFOREGROUNDLOCKTIMEOUT = 0x2000
+FOREGROUND_LOCK_TIMEOUT_REGISTRY_DEFAULT_MS = 200000
 
 
 @dataclass(frozen=True)
@@ -69,6 +71,8 @@ if not _unsupported():
     user32.IsZoomed.restype = wintypes.BOOL
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user32.PostMessageW.restype = wintypes.BOOL
+    user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT, ctypes.POINTER(wintypes.DWORD), wintypes.UINT]
+    user32.SystemParametersInfoW.restype = wintypes.BOOL
     kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     kernel32.OpenProcess.restype = wintypes.HANDLE
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
@@ -211,6 +215,51 @@ def _show_window(query: str, command: int) -> dict[str, object]:
     return payload
 
 
+def foreground_lock_timeout_ms() -> "int | None":
+    """Read Windows' foreground lock timeout (SPI_GETFOREGROUNDLOCKTIMEOUT).
+
+    A non-zero value means Windows will refuse programmatic foreground
+    changes requested by a background process -- this is exactly the
+    condition that makes focus_window's AttachThreadInput dance report
+    SetForegroundWindow success while the foreground never actually moves
+    (measured on real hardware, Phase 68). This function only READS the
+    setting for diagnosis; see the comment on the SPI_SETFOREGROUNDLOCKTIMEOUT
+    call we deliberately do NOT make, below.
+
+    Never raises -- fails safe like the rest of this module by returning None
+    on any failure (unsupported platform, or the OS call itself failing).
+    """
+    if _unsupported():
+        return None
+    try:
+        value = wintypes.DWORD(0)
+        ok = user32.SystemParametersInfoW(SPI_GETFOREGROUNDLOCKTIMEOUT, 0, ctypes.pointer(value), 0)
+        if not ok:
+            return None
+        return int(value.value)
+    except Exception:
+        return None
+
+
+# We deliberately never call SPI_SETFOREGROUNDLOCKTIMEOUT (or write the
+# HKCU\Control Panel\Desktop\ForegroundLockTimeout registry value) anywhere in
+# this module. Overriding the lock would let focus_window "succeed" only in an
+# environment we forced into a state the user doesn't actually run in --
+# exactly the kind of validation-against-a-fake-environment Phase 68 exists to
+# avoid. If the lock is engaged, the honest answer is to say so and let the
+# user bring the window forward themselves, not to silently change a
+# system-wide Windows setting out from under them.
+
+
+def _foreground_lock_explanation(timeout_ms: int) -> str:
+    return (
+        "Windows is currently blocking programmatic focus changes on this machine "
+        f"(foreground lock timeout is set to {timeout_ms} ms, and the registry default is "
+        f"{FOREGROUND_LOCK_TIMEOUT_REGISTRY_DEFAULT_MS}, so an application set this at runtime; "
+        "it resets on reboot or sign-out). Bring the window forward yourself and I will continue."
+    )
+
+
 def _try_set_foreground(hwnd: int) -> None:
     """Best-effort attempt to bring ``hwnd`` to the foreground.
 
@@ -295,6 +344,9 @@ def focus_window(query: str, *, settle_timeout: float = 0.5, settle_interval: fl
     }
     if not verified:
         payload["error"] = "focus_failed"
+        lock_timeout_ms = foreground_lock_timeout_ms()
+        if lock_timeout_ms:
+            payload["message"] = _foreground_lock_explanation(lock_timeout_ms)
     return payload
 
 

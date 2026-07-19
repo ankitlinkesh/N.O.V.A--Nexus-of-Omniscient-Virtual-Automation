@@ -242,3 +242,89 @@ def test_minimize_window_reports_ok_true_when_actually_minimized(monkeypatch):
 
     assert result["ok"] is True
     assert result["changed"] is True
+
+
+# -- 7. Phase 68: foreground_lock_timeout_ms is a diagnosis-only reader, and --
+#       focus_window explains a WHY when (and only when) the lock is engaged.
+#
+# Measured on real hardware: SystemParametersInfoW(SPI_GETFOREGROUNDLOCKTIMEOUT)
+# returned 2147483647 (INT_MAX) even though the registry default is 200000 --
+# some application set the lock at runtime (SPIF_UPDATEINIFILE was not used,
+# so it is transient and resets on reboot/sign-out). Under that condition a
+# bare SetForegroundWindow honestly returns False, but the AttachThreadInput
+# dance in _try_set_foreground returns TRUE while the foreground genuinely
+# never moves -- the Win32 API lies. Phase 64 already made `ok` track the
+# independently-verified outcome instead of that lying return value; this
+# phase only adds an explanation of WHY it failed, never changes ok/verified.
+
+
+def test_foreground_lock_timeout_ms_never_raises_and_returns_none_on_a_raising_call(monkeypatch):
+    def failing(action, param, pv, flag):
+        raise OSError("simulated ctypes failure")
+
+    monkeypatch.setattr(windows_module.user32, "SystemParametersInfoW", failing, raising=False)
+
+    assert windows_module.foreground_lock_timeout_ms() is None
+
+
+def test_foreground_lock_timeout_ms_returns_none_when_the_call_reports_failure(monkeypatch):
+    # BOOL return of 0/False means the OS call itself failed -- not "the
+    # timeout is zero", which is a legitimate value handled separately below.
+    monkeypatch.setattr(windows_module.user32, "SystemParametersInfoW", lambda *a: 0, raising=False)
+
+    assert windows_module.foreground_lock_timeout_ms() is None
+
+
+def test_foreground_lock_timeout_ms_returns_the_real_int_on_success(monkeypatch):
+    def fake_spi(action, param, pv, flag):
+        pv.contents.value = 2147483647
+        return 1
+
+    monkeypatch.setattr(windows_module.user32, "SystemParametersInfoW", fake_spi, raising=False)
+
+    assert windows_module.foreground_lock_timeout_ms() == 2147483647
+
+
+def test_focus_window_failure_mentions_the_lock_when_it_is_engaged(monkeypatch):
+    monkeypatch.setattr(windows_module, "find_window", lambda query, limit=1: [CHROME])
+    monkeypatch.setattr(windows_module, "_try_set_foreground", lambda hwnd: None)
+    monkeypatch.setattr(windows_module, "get_active_window", lambda: NOTEPAD)
+    monkeypatch.setattr(windows_module, "foreground_lock_timeout_ms", lambda: 2147483647)
+
+    result = focus_window("chrome", settle_timeout=0.05, settle_interval=0.01)
+
+    assert result["ok"] is False
+    assert result["verified"] is False
+    assert result["error"] == "focus_failed"
+    assert "2147483647" in result["message"]
+    assert "200000" in result["message"]
+
+
+def test_focus_window_failure_does_not_mention_the_lock_when_it_is_not_engaged(monkeypatch):
+    """The message must not become boilerplate glued onto every failure --
+    when the timeout is 0 (not engaged), this failure has some other cause
+    and must not falsely blame the foreground lock."""
+    monkeypatch.setattr(windows_module, "find_window", lambda query, limit=1: [CHROME])
+    monkeypatch.setattr(windows_module, "_try_set_foreground", lambda hwnd: None)
+    monkeypatch.setattr(windows_module, "get_active_window", lambda: NOTEPAD)
+    monkeypatch.setattr(windows_module, "foreground_lock_timeout_ms", lambda: 0)
+
+    result = focus_window("chrome", settle_timeout=0.05, settle_interval=0.01)
+
+    assert result["ok"] is False
+    assert result["error"] == "focus_failed"
+    assert "message" not in result
+
+
+def test_focus_window_success_never_mentions_the_lock(monkeypatch):
+    monkeypatch.setattr(windows_module, "find_window", lambda query, limit=1: [CHROME])
+    monkeypatch.setattr(windows_module, "_try_set_foreground", lambda hwnd: None)
+    monkeypatch.setattr(windows_module, "get_active_window", lambda: CHROME)
+    # Even if the lock happens to be engaged, a verified success must not
+    # carry a lock explanation -- the explanation only belongs on failure.
+    monkeypatch.setattr(windows_module, "foreground_lock_timeout_ms", lambda: 2147483647)
+
+    result = focus_window("chrome", settle_timeout=0.05, settle_interval=0.01)
+
+    assert result["ok"] is True
+    assert "message" not in result

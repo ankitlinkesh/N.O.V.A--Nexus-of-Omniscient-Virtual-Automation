@@ -74,10 +74,40 @@ def _with_execution(action_id: str, result: Any) -> str:
     executed = ToolRegistry().run_approved(action_id)
     if isinstance(executed, dict) and executed.get("ok"):
         return f"{base}\n\nExecuted `{action_id}` successfully."
-    reason = ""
-    if isinstance(executed, dict):
-        reason = str(executed.get("error") or executed.get("message") or "")
+    reason = _failure_reason(executed)
     return f"{base}\n\nI confirmed `{action_id}`, but execution did not complete{': ' + reason if reason else '.'}"
+
+
+# Keys a failed tool result may carry its human-readable reason under, in the
+# order we prefer them. This is a deliberate, explicit list rather than "scan
+# the dict for any string": a tool result can contain page text, file content
+# or other values that must never be echoed back to the console, so widening
+# this is a decision to be made per key, not a default.
+#
+# ``stopped_reason`` was found missing by live driving in Phase 68. A staged
+# form submission refused on a real origin change (the browser moved from
+# localhost to github.com between staging and approval -- exactly the phishing
+# shape Phase 67 exists to catch) reports "aborted before 'Email': the page
+# origin changed (expected a page on 'localhost', found 'github.com')" under
+# ``stopped_reason``, which is the established convention for "why the run
+# stopped" (see core/fast_commands.py and the skill runner). Because this
+# lookup only knew ``error`` and ``message``, that whole explanation was
+# computed, returned, and then dropped: the user was told only "execution did
+# not complete." on a SAFETY refusal, which reads like a malfunction and
+# invites a retry rather than explaining that the page changed underneath
+# them. The guard was working; the reporting was not.
+_FAILURE_REASON_KEYS = ("error", "message", "stopped_reason")
+
+
+def _failure_reason(executed: Any) -> str:
+    """The human-readable reason a tool call failed, or "" if it gave none."""
+    if not isinstance(executed, dict):
+        return ""
+    for key in _FAILURE_REASON_KEYS:
+        value = executed.get(key)
+        if value:
+            return str(value)
+    return ""
 
 
 def handle_pending_action_status_command(text: str) -> str:
