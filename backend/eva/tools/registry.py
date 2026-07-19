@@ -517,7 +517,14 @@ class ToolRegistry:
                 risk="low",
                 action_type="SAFE_LOCAL_UI",
                 risk_categories=("SAFE_LOCAL_UI",),
-                verification_method="app_window_active",
+                # Phase 64 regression fix: "opened" is not "focused" -- an app
+                # can launch correctly without taking the foreground (e.g.
+                # another process holds the foreground lock, which is the
+                # ordinary case, not an edge case). app_window_active asserts
+                # foreground; that is the wrong postcondition for a launch.
+                # app_window_open asserts the app now has an open window,
+                # regardless of which window is in front.
+                verification_method="app_window_open",
             ),
             "app.focus": ToolSpec(
                 name="app.focus",
@@ -529,6 +536,8 @@ class ToolRegistry:
                 risk="low",
                 action_type="SAFE_LOCAL_UI",
                 risk_categories=("SAFE_LOCAL_UI",),
+                # For focus specifically, "is this the foreground window" IS
+                # the real postcondition -- unlike app.open above.
                 verification_method="app_window_active",
             ),
             "app.close_request": ToolSpec(
@@ -542,7 +551,14 @@ class ToolRegistry:
                 action_type="SYSTEM_CHANGE",
                 risk_categories=("SYSTEM_CHANGE",),
                 requires_confirmation=True,
-                verification_method="app_window_active",
+                # A successful close's real postcondition is a window now
+                # being ABSENT -- the opposite of app_window_active's "still
+                # focused" question. Nothing here independently verifies
+                # "closed" yet (close_app sends WM_CLOSE and does not wait to
+                # confirm the window is gone), so this declares what it
+                # actually gets, self-reported success, directly rather than
+                # routing through a postcondition method that does not apply.
+                verification_method="command_result_success",
             ),
             "message.prepare": ToolSpec(
                 name="message.prepare",

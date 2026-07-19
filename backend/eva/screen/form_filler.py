@@ -307,6 +307,62 @@ def verify_staged_window(staged: "StagedForm") -> str | None:
     return None
 
 
+# -- restoring focus before aborting (Phase 64) -------------------------------
+#
+# Phase 63 added verify_staged_window: on any mismatch, screen_submit_form
+# aborted unconditionally, because eva.desktop.windows.focus_window did not
+# reliably work (a bare SetForegroundWindow is blocked by Windows' foreground
+# lock from a background process) -- attempting a restore would have been
+# pointless. Phase 64 fixed focus_window for real (the AttachThreadInput
+# dance), so a mismatch is no longer immediately fatal: it is now worth ONE
+# best-effort attempt to bring the staged window back before giving up.
+#
+# restore_window_focus is kept as its own top-level function -- the same
+# pattern as foreground_window_title above -- purely so tests can monkeypatch
+# it and never touch a real window, exactly like every other seam in this
+# module.
+
+
+def restore_window_focus(window_title: str) -> None:
+    """Best-effort attempt to bring the window matching ``window_title`` back
+    to the foreground. Never raises: a failed or impossible restore just means
+    the re-verification right after this call will (honestly) still report a
+    mismatch, and the caller aborts exactly as it did before this existed.
+    """
+    try:
+        from ..desktop.windows import focus_window
+
+        focus_window(window_title)
+    except Exception:
+        pass
+
+
+def ensure_staged_window(staged: "StagedForm") -> str | None:
+    """``None`` if the foreground window matches what this form was staged
+    against -- restoring focus first if it does not (Phase 64).
+
+    This wraps ``verify_staged_window`` with exactly one recovery attempt: on
+    a mismatch, if there is a recorded window to restore to, make one
+    best-effort attempt to bring it back to the foreground and check again.
+    The abort remains the fallback -- restoring focus makes this usable, it
+    must not make it permissive. If the window still does not match after the
+    restore attempt (no such window, the restore failed, or a genuinely
+    different window is now in front), this returns the fresh mismatch reason
+    exactly as if no restore had been attempted: nothing is typed on an
+    unconfirmed window. An empty staged title is never restorable (there is
+    nothing recorded to restore to), so it is returned unchanged, with no
+    restore attempt at all.
+    """
+    error = verify_staged_window(staged)
+    if error is None:
+        return None
+    expected = str(staged.window_title or "").strip()
+    if not expected:
+        return error
+    restore_window_focus(expected)
+    return verify_staged_window(staged)
+
+
 def _looks_like_secret(value: str) -> bool:
     try:
         from ..privacy.secrets_broker import contains_secret_leak
@@ -424,4 +480,6 @@ __all__ = [
     "describe_staged_form",
     "foreground_window_title",
     "verify_staged_window",
+    "restore_window_focus",
+    "ensure_staged_window",
 ]

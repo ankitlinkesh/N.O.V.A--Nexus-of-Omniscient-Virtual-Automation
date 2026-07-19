@@ -16,12 +16,32 @@ def _app_queries(app: str) -> list[str]:
     return [clean]
 
 
-def verify_window_focused(query: str) -> dict[str, Any]:
-    active = get_active_window()
+def verify_window_focused(query: str, *, retries: int = 4, delay_seconds: float = 0.2) -> dict[str, Any]:
+    """Best-effort check that ``query`` names the CURRENT foreground window.
+
+    Retries like its siblings below (verify_app_opened / verify_folder_opened /
+    verify_url_opened), which were already written to expect that a real
+    window change can take a moment to land. This one was the odd one out
+    with a single immediate read (Phase 64) -- and a focus change landing a
+    moment after the call that caused it returns is exactly the kind of race
+    that produced a false failure for a genuinely successful action. It is
+    called independently of whatever triggered the focus change (a fresh
+    postcondition check right after a tool returns, or verify_last_action at
+    an arbitrary later time), so it needs to be robust on its own rather than
+    relying on the caller having already settled.
+    """
+    active = None
+    verified = False
+    for _ in range(max(1, retries)):
+        active = get_active_window()
+        if active is not None:
+            haystack = f"{active.title} {active.process_name}".lower()
+            verified = any(part in haystack for part in query.lower().split() if len(part) >= 3)
+        if verified:
+            break
+        time.sleep(delay_seconds)
     if active is None:
         return {"ok": False, "verified": False, "error": "active_window_unavailable", "query": query}
-    haystack = f"{active.title} {active.process_name}".lower()
-    verified = any(part in haystack for part in query.lower().split() if len(part) >= 3)
     return {"ok": True, "verified": verified, "query": query, "active_window": active.as_dict()}
 
 

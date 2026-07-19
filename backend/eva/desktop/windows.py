@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import time
 from ctypes import wintypes
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -58,6 +59,14 @@ if not _unsupported():
     user32.ShowWindow.restype = wintypes.BOOL
     user32.SetForegroundWindow.argtypes = [wintypes.HWND]
     user32.SetForegroundWindow.restype = wintypes.BOOL
+    user32.BringWindowToTop.argtypes = [wintypes.HWND]
+    user32.BringWindowToTop.restype = wintypes.BOOL
+    user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+    user32.AttachThreadInput.restype = wintypes.BOOL
+    user32.IsIconic.argtypes = [wintypes.HWND]
+    user32.IsIconic.restype = wintypes.BOOL
+    user32.IsZoomed.argtypes = [wintypes.HWND]
+    user32.IsZoomed.restype = wintypes.BOOL
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user32.PostMessageW.restype = wintypes.BOOL
     kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
@@ -168,6 +177,25 @@ def find_window(query: str, limit: int = 10) -> list[WindowInfo]:
     return [window for window in list_open_windows() if _matches(window, query)][:limit]
 
 
+def _window_reached_state(hwnd: int, command: int) -> bool:
+    """Independently confirm ShowWindow's target state actually took effect.
+
+    ShowWindow's own return value is NOT a success flag: per MSDN, it reports
+    whether the window was PREVIOUSLY visible, not whether this call worked.
+    Treating that as "it worked" is exactly the "ok: True regardless" pattern
+    Phase 64 exists to remove, so this reads the real post-call window state
+    instead (IsIconic/IsZoomed), the same way focus_window below independently
+    reads GetForegroundWindow rather than trusting SetForegroundWindow's return.
+    """
+    if command == SW_SHOWMINIMIZED:
+        return bool(user32.IsIconic(hwnd))
+    if command == SW_SHOWMAXIMIZED:
+        return bool(user32.IsZoomed(hwnd))
+    if command == SW_RESTORE:
+        return not bool(user32.IsIconic(hwnd)) and not bool(user32.IsZoomed(hwnd))
+    return True
+
+
 def _show_window(query: str, command: int) -> dict[str, object]:
     matches = find_window(query, limit=1)
     if not matches:
@@ -175,22 +203,99 @@ def _show_window(query: str, command: int) -> dict[str, object]:
     window = matches[0]
     if _unsupported():
         return {"ok": False, "error": "unsupported_platform", "query": query}
-    ok = bool(user32.ShowWindow(window.hwnd, command))
-    return {"ok": True, "changed": ok, "window": window.as_dict()}
+    user32.ShowWindow(window.hwnd, command)
+    verified = _window_reached_state(window.hwnd, command)
+    payload: dict[str, object] = {"ok": verified, "changed": verified, "window": window.as_dict()}
+    if not verified:
+        payload["error"] = "show_window_failed"
+    return payload
 
 
-def focus_window(query: str) -> dict[str, object]:
+def _try_set_foreground(hwnd: int) -> None:
+    """Best-effort attempt to bring ``hwnd`` to the foreground.
+
+    A bare ``SetForegroundWindow`` is blocked by Windows' foreground lock when
+    called from a background process -- measured (Phase 64) from a forced
+    clean state: it silently no-ops. The AttachThreadInput dance below is the
+    standard workaround and was verified to actually work on real hardware:
+    temporarily merge input processing with the thread that owns the CURRENT
+    foreground window (which is allowed to hand off focus), do the
+    BringWindowToTop + SetForegroundWindow while attached, then always detach
+    again. Never raises -- every call here is best-effort; the caller
+    independently re-checks the real result via get_active_window(), so a
+    failure here just means that check will (honestly) report it.
+    """
+    if _unsupported():
+        return
+    try:
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        fg = user32.GetForegroundWindow()
+        t1 = user32.GetWindowThreadProcessId(fg, None) if fg else 0
+        t2 = user32.GetWindowThreadProcessId(hwnd, None)
+        attached = False
+        try:
+            if t1 and t2 and t1 != t2:
+                attached = bool(user32.AttachThreadInput(t1, t2, True))
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+        finally:
+            # Always detach if we attached, even if BringWindowToTop/
+            # SetForegroundWindow raised above -- a stuck attach is a global,
+            # cross-process side effect (it would keep merging input
+            # processing between these two threads long after this call
+            # returns).
+            if attached:
+                user32.AttachThreadInput(t1, t2, False)
+    except Exception:
+        # Genuinely never raise: this is best-effort, and the caller
+        # independently re-checks the real result via get_active_window(), so
+        # swallowing here just means that check will (honestly) report the
+        # failure instead of an unrelated ctypes exception surfacing instead.
+        pass
+
+
+def _wait_for_focus(hwnd: int, *, settle_timeout: float = 0.5, settle_interval: float = 0.05) -> tuple["WindowInfo | None", bool]:
+    """Poll get_active_window() until ``hwnd`` is foreground or time runs out.
+
+    An immediate read races the window manager: a real focus change that DID
+    take effect was measured (Phase 64) still reading as unfocused at +0.00s,
+    turning a success into a false negative. Polling a few times over a short
+    bounded window fixes that without ever blocking indefinitely.
+    """
+    deadline = time.monotonic() + max(0.0, settle_timeout)
+    active = get_active_window()
+    while True:
+        if active is not None and active.hwnd == hwnd:
+            return active, True
+        if time.monotonic() >= deadline:
+            return active, False
+        time.sleep(max(0.0, settle_interval))
+        active = get_active_window()
+
+
+def focus_window(query: str, *, settle_timeout: float = 0.5, settle_interval: float = 0.05) -> dict[str, object]:
     matches = find_window(query, limit=1)
     if not matches:
         return {"ok": False, "error": "window_not_found", "query": query}
     window = matches[0]
     if _unsupported():
         return {"ok": False, "error": "unsupported_platform", "query": query}
-    user32.ShowWindow(window.hwnd, SW_RESTORE)
-    focused = bool(user32.SetForegroundWindow(window.hwnd))
-    active = get_active_window()
-    verified = bool(active and active.hwnd == window.hwnd)
-    return {"ok": True, "focused": focused, "verified": verified, "window": window.as_dict(), "active_window": active.as_dict() if active else None}
+    _try_set_foreground(window.hwnd)
+    active, verified = _wait_for_focus(window.hwnd, settle_timeout=settle_timeout, settle_interval=settle_interval)
+    # `ok` must reflect reality, not just "the call was made": every caller in
+    # this codebase treats result.get("ok") is True as proof the action
+    # happened, so ok is tied to the INDEPENDENTLY verified outcome, not to
+    # whether SetForegroundWindow claimed success (Phase 64, Defects 1+2).
+    payload: dict[str, object] = {
+        "ok": verified,
+        "focused": verified,
+        "verified": verified,
+        "window": window.as_dict(),
+        "active_window": active.as_dict() if active else None,
+    }
+    if not verified:
+        payload["error"] = "focus_failed"
+    return payload
 
 
 def minimize_window(query: str) -> dict[str, object]:

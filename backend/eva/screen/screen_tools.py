@@ -11,10 +11,10 @@ from .form_filler import (
     _error_of,
     _looks_like_secret,
     _ok,
+    ensure_staged_window,
     is_vault_ref,
     pop_staged_form,
     vault_ref_name,
-    verify_staged_window,
 )
 from .screen_observer import observe_screen_once
 from .ui_locator import UiTarget
@@ -217,8 +217,11 @@ def screen_submit_form(spec_id: str, reason: str) -> dict[str, Any]:
         # rule (a stable window "identity", not exact title equality, so a
         # page rewriting its own document.title mid-fill does not itself
         # abort) and why an unrecorded staged title fails safe (refuse to
-        # type blind) rather than proceeding.
-        window_error = verify_staged_window(staged)
+        # type blind) rather than proceeding. Phase 64: ensure_staged_window
+        # additionally makes ONE best-effort attempt to restore focus to the
+        # staged window before giving up (focus_window can actually work now)
+        # -- the abort stays the fallback, only firing if that restore fails.
+        window_error = ensure_staged_window(staged)
         if window_error:
             steps.append(FillStep(label, "window_changed", secret, window_error[:200]))
             return _stop(FillOutcome(steps, filled, False, f"aborted before '{label}': {window_error}"))
@@ -288,9 +291,10 @@ def screen_submit_form(spec_id: str, reason: str) -> dict[str, Any]:
 
     # 3. The final submit action -- same direct-call rule as step 1 above.
     # Also re-verified against the window: submitting still ACTS on screen
-    # (a click, a keypress), so the same focus-theft window applies here too.
+    # (a click, a keypress), so the same focus-theft window applies here too
+    # (including the Phase 64 restore-then-reverify in ensure_staged_window).
     if staged.submit.mode in ("click", "press"):
-        window_error = verify_staged_window(staged)
+        window_error = ensure_staged_window(staged)
         if window_error:
             steps.append(FillStep(staged.submit.label or staged.submit.key, "window_changed", False, window_error[:200]))
             return _stop(FillOutcome(steps, filled, False, f"aborted before submitting: {window_error}"))

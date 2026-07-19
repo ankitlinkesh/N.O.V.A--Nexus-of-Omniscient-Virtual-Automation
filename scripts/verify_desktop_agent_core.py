@@ -51,6 +51,11 @@ class DryRegistry(ToolRegistry):
             }
         if name == "window_focus":
             return {"ok": True, "verified": True, "window": {"title": kwargs.get("query", "chrome"), "process_name": "chrome.exe"}}
+        if name == "app.focus":
+            # Phase 64: the typed-console "focus"/"switch to" command now routes
+            # through app.focus (console/internal-only) instead of the
+            # planner-visible window_focus; same result shape either way.
+            return {"ok": True, "verified": True, "window": {"title": kwargs.get("query", "chrome"), "process_name": "chrome.exe"}}
         if name == "desktop_observe":
             return {
                 "ok": True,
@@ -122,8 +127,11 @@ def main() -> int:
     registry.calls.clear()
     focus_response = fast("switch to chrome", registry, session_context)
     failures += emit(
-        "switch_to_chrome_routes_window_focus",
-        bool(focus_response and registry.calls and registry.calls[-1]["tool"] == "window_focus" and registry.calls[-1]["args"].get("query") == "chrome"),
+        # Phase 64: redirected from window_focus to app.focus (same
+        # underlying eva.desktop.windows.focus_window; app.focus is the
+        # console/internal-scoped tool, not planner-visible).
+        "switch_to_chrome_routes_app_focus",
+        bool(focus_response and registry.calls and registry.calls[-1]["tool"] == "app.focus" and registry.calls[-1]["args"].get("query") == "chrome"),
         response=focus_response,
         calls=registry.calls,
     )

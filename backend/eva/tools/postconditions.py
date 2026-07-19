@@ -9,16 +9,51 @@ real state *after* the handler runs, so Eva never claims an unproven effect.
 The load-bearing idea here is **provenance** — how much we actually know:
 
   * ``independent`` — verified against real OS/file state we read ourselves
-    (the file exists / is gone / contains the expected text). This is proof.
+    (the file exists / is gone / contains the expected text, or — Phase 64 —
+    the real foreground window matches the one we just tried to focus). This
+    is proof.
   * ``self_reported`` — we only trust the tool's own success flag (e.g. a local
     read returning a dict). Fine for reads, but not proof of a world change.
-  * ``observed`` — a local UI/network effect (a click, a keystroke, a launch)
-    we cannot confirm without perception; the operator should eyeball it.
-  * ``unverified`` — no verification method applies; we say so plainly.
+  * ``observed`` — reserved for a local UI/network effect (a click, a
+    keystroke, a launch) independently confirmed via perception. Nothing in
+    this codebase can do that yet, so no verification method currently
+    produces this provenance (see Phase 64: it used to be claimed anyway —
+    see ``unverified`` below).
+  * ``unverified`` — no verification method applies, *or* one applies in
+    principle but nothing here can independently check it (e.g. "does this
+    screen now show the typed text") — either way we say so plainly rather
+    than borrow confidence from the tool's own self-report.
 
 Only ``independent`` failure is treated as a hard "the action did not happen";
 the weaker classes never *upgrade* confidence into a false claim of success.
 Everything here is pure (no registry import → no import cycle) and fail-safe.
+
+Phase 64 note: before this phase, every ``_OBSERVED_METHODS`` entry (including
+``app_window_active``) reported ``provenance="observed"`` with ``verified``
+silently borrowed from the tool's own self-reported ``ok`` — so a tool that
+itself lied about success (e.g. the old ``focus_window``, see
+``eva.desktop.windows``) had that lie laundered into an apparent
+independent-looking "verified" confirmation. ``app_window_active`` now has a
+real independent check (below); everything else in ``_OBSERVED_METHODS``
+instead honestly reports ``unverified`` and ``verified=False`` — it was never
+actually observed, so it no longer claims to have been.
+
+Phase 64 follow-up (the mirror-image regression): giving ``app_window_active``
+a real independent check initially broke ``app.open``, which also declared
+that method. "Opened" is not "focused" — an app can launch correctly without
+taking the foreground (another process holding the foreground lock is the
+*ordinary* case, not an edge case) — so a real foreground check made a
+perfectly successful launch independently fail, demoting ``ok`` to ``False``
+for work that actually worked. The fix is **not** a name heuristic bolted onto
+``app_window_active`` (that already happened once for ``app.close_request``
+below, and piling a third case onto it was exactly the wrong direction): each
+tool now declares the ``verification_method`` that actually describes its own
+postcondition — ``app.open`` → ``app_window_open`` (a window now exists,
+independent of focus), ``app.focus`` → ``app_window_active`` (foreground IS
+the postcondition), ``app.close_request`` → ``command_result_success``
+(nothing here independently checks "window now absent" yet, so it declares
+what it actually gets rather than routing through a method that does not
+apply). No tool-name sniffing is needed for any of the three.
 """
 
 from __future__ import annotations
@@ -32,12 +67,15 @@ PROVENANCE_SELF_REPORTED = "self_reported"
 PROVENANCE_OBSERVED = "observed"
 PROVENANCE_UNVERIFIED = "unverified"
 
-# Verification methods (from ToolSpec.verification_method) we can check against
-# real file state ourselves. Everything else is self-reported or observed.
+# Verification methods (from ToolSpec.verification_method) that describe a
+# local UI/network effect nothing here can independently confirm (no
+# perception capability is wired up to check them). ``app_window_active`` is
+# deliberately NOT in this set: Phase 64 gave it a real independent check (see
+# verify_postcondition below), because "is this window the foreground window"
+# is something we CAN read from the OS ourselves.
 _OBSERVED_METHODS = {
     "screen_state_changed",
     "text_field_contains",
-    "app_window_active",
     "url_opened",
     "message_draft_prepared",
     "message_sent_likely",
@@ -106,6 +144,26 @@ def derive_postcondition(tool_name: str, verification_method: str, args: dict[st
         path = _first(args, "dst", "dest", "destination", "target", "path")
         return PostCondition("file_exists", {"path": path}, f"{path or 'file'} exists")
 
+    if method == "app_window_open":
+        # app.open declares this: "opened" means a window now exists, NOT
+        # that it took the foreground (that would be app_window_active, and
+        # conflating the two was a real regression -- an app can launch
+        # correctly while another process holds the foreground lock, which
+        # is the ordinary case, not an edge case).
+        query = _first(args, "app", "query", "target")
+        return PostCondition("app_window_open", {"query": query}, f"{query or 'the requested app'} has an open window")
+
+    if method == "app_window_active":
+        # Only app.focus declares this now (app.open uses app_window_open
+        # above; app.close_request declares command_result_success directly
+        # on its ToolSpec, since a successful close's postcondition -- the
+        # window is now ABSENT -- is the opposite of "still focused" and
+        # nothing here independently checks that yet). No name sniffing
+        # needed: each tool declares the verification_method that actually
+        # applies to it, rather than this function guessing from the name.
+        query = _first(args, "query", "app", "target")
+        return PostCondition("app_window_active", {"query": query}, f"{query or 'the requested window'} is the active foreground window")
+
     if method in _OBSERVED_METHODS:
         return PostCondition(method, {}, "local UI/network effect (not independently verifiable)")
 
@@ -161,18 +219,75 @@ def verify_postcondition(post: PostCondition, result: Any) -> PostConditionResul
                 0.95 if ok else 0.1, f"file_contains({path})={ok}",
                 None if ok else "expected content not found; restore checkpoint or rewrite",
             )
-    except Exception as exc:  # filesystem hiccup — be honest, don't crash
+        if method == "app_window_open":
+            # Regression fix: "opened" is not "focused". Uses
+            # verify_app_opened -- which already retries/settles, because a
+            # launch can take a moment to produce a window -- and checks
+            # OPEN, not FOREGROUND. Ignores `result` entirely on purpose,
+            # same as app_window_active below: this is proof, not a
+            # self-report.
+            query = str(post.params.get("query") or "")
+            if not query:
+                return PostConditionResult(
+                    method, False, False, PROVENANCE_UNVERIFIED, 0.2,
+                    "app_window_open: no target app was recorded to verify against", "verify manually",
+                )
+            from ..desktop.verifier import verify_app_opened
+
+            outcome = verify_app_opened(query)
+            ok = bool(outcome.get("verified"))
+            return PostConditionResult(
+                method, ok, True, PROVENANCE_INDEPENDENT,
+                0.95 if ok else 0.1, f"app_window_open({query})={ok}",
+                None if ok else f"no window found for '{query}' after opening it",
+            )
+        if method == "app_window_active":
+            # Phase 64: independently check the REAL foreground window rather
+            # than trusting the tool's self-reported ok (that self-report is
+            # exactly what was False-positive for the old focus_window bug --
+            # see backend/tests for the regression pin using that exact
+            # payload). Ignores `result` entirely on purpose: this is proof,
+            # not a self-report.
+            query = str(post.params.get("query") or "")
+            if not query:
+                # Defensive only: every currently-registered app_window_active
+                # tool requires query/app as an arg, so this should not be
+                # reachable in practice. Without a target we have nothing to
+                # check -- that is "we don't know", not "we proved it failed",
+                # so this stays unverified rather than independently False
+                # (which would fabricate a demotion in ToolExecutor).
+                return PostConditionResult(
+                    method, False, False, PROVENANCE_UNVERIFIED, 0.2,
+                    "app_window_active: no target window was recorded to verify against", "verify manually",
+                )
+            from ..desktop.verifier import verify_window_focused
+
+            outcome = verify_window_focused(query)
+            ok = bool(outcome.get("verified"))
+            active = outcome.get("active_window") if isinstance(outcome.get("active_window"), dict) else {}
+            foreground_title = str(active.get("title") or "") if isinstance(active, dict) else ""
+            return PostConditionResult(
+                method, ok, True, PROVENANCE_INDEPENDENT,
+                0.97 if ok else 0.05, f"app_window_active({query})={ok} (foreground={foreground_title or 'unknown'})",
+                None if ok else f"'{query}' is not the active foreground window (foreground is {foreground_title or 'unknown'})",
+            )
+    except Exception as exc:  # filesystem/OS hiccup — be honest, don't crash
         return PostConditionResult(
             method, False, False, PROVENANCE_UNVERIFIED, 0.2,
             f"verification error: {type(exc).__name__}: {exc}", "verify manually",
         )
 
     if method in _OBSERVED_METHODS:
-        ok = _result_reports_success(result)
+        # Phase 64: this used to derive `verified` from the tool's own
+        # self-reported `ok` while still labeling it PROVENANCE_OBSERVED --
+        # i.e. claiming an independent-looking observation that never
+        # happened (nothing here has a perception capability wired up to
+        # actually look). Say so plainly instead: unverified, not observed,
+        # and never verified=True on the strength of a self-report alone.
         return PostConditionResult(
-            method, ok, False, PROVENANCE_OBSERVED,
-            0.5 if ok else 0.3, f"{method}: local effect not independently verifiable",
-            "confirm the visible state (Eva cannot prove this without perception)",
+            method, False, False, PROVENANCE_UNVERIFIED,
+            0.2, f"{method}: cannot be independently verified (no perception capability wired up)",
+            "confirm the visible state yourself (Eva cannot prove this without perception)",
         )
 
     if method == "no_verification_available":

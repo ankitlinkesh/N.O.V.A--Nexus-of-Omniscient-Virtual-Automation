@@ -70,11 +70,20 @@ class _InputRecorder:
 def gated_screen(monkeypatch, tmp_path):
     """Real registry, real gate, real confirmation round-trip. Fakes stay
     below the tool-level gate: which controls exist, the pyautogui actuator,
-    and (each test sets its own) the foreground-window reader."""
+    and (each test sets its own) the foreground-window reader.
+
+    Phase 64: a window mismatch is no longer immediately fatal -- screen_tools
+    now makes one best-effort restore attempt (form_filler.restore_window_focus)
+    before re-checking. That restore attempt is ALSO stubbed out here (to a
+    no-op that records calls) so this file stays what it has always been: a
+    pure gate/ledger test that never touches a real window, on a machine that
+    may or may not even have one titled "Sign in - Google Chrome".
+    """
     monkeypatch.setenv("EVA_GUI_GROUNDING_ENABLED", "1")
     monkeypatch.setenv("EVA_VAULT_ENABLED", "1")
     monkeypatch.setenv("EVA_VAULT_PATH", str(tmp_path / "vault.json"))
     monkeypatch.setattr(grounding, "_default_provider", lambda: list(FORM_ELEMENTS))
+    monkeypatch.setattr(form_filler, "restore_window_focus", lambda window_title: None)
 
     recorder = _InputRecorder()
     monkeypatch.setattr(screen_controller, "click", recorder.click)
@@ -125,7 +134,10 @@ def test_window_mismatch_types_nothing(gated_screen, monkeypatch):
 
 def test_focus_theft_mid_form_stops_after_field_one(gated_screen, monkeypatch):
     staged_title = "Sign in - Google Chrome"
-    titles = iter([staged_title, "Slack"])  # field 1 check matches, field 2 check does not
+    # Field 1 check matches; field 2 check does not, and (Phase 64) neither
+    # does the post-restore re-check right after it -- restore_window_focus
+    # is stubbed to a no-op by gated_screen, so the mismatch is still real.
+    titles = iter([staged_title, "Slack", "Slack"])
     monkeypatch.setattr(form_filler, "foreground_window_title", lambda: next(titles))
 
     staged = stage_form(

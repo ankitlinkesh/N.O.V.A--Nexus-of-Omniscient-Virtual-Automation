@@ -198,10 +198,17 @@ def _run() -> int:
     saved_type_text = screen_controller.type_text
     saved_press = screen_controller.press
     saved_window_title_fn = form_filler.foreground_window_title
+    saved_restore_fn = form_filler.restore_window_focus
     grounding._default_provider = lambda: list(form_elements)
     screen_controller.click = recorder.click
     screen_controller.type_text = recorder.type_text
     screen_controller.press = recorder.press
+    # Phase 64: a window mismatch now triggers one best-effort restore attempt
+    # (form_filler.restore_window_focus) before re-checking. Stubbed to a
+    # no-op here so this verifier -- like backend/tests/test_form_submit_window_guard.py
+    # it mirrors -- never touches a real window, on a machine that may or may
+    # not even have one titled "Sign in - Google Chrome".
+    form_filler.restore_window_focus = lambda window_title: None
 
     def confirm_and_execute(spec_id: str, reason: str) -> dict:
         gate_result = registry.run("screen.submit_form", spec_id=spec_id, reason=reason)
@@ -234,7 +241,11 @@ def _run() -> int:
         recorder.clicks.clear()
         recorder.typed.clear()
         staged_title = "Sign in - Google Chrome"
-        titles = iter([staged_title, "Slack"])
+        # Field 1 check matches; field 2 check does not, and (Phase 64)
+        # neither does the post-restore re-check right after it -- the
+        # restore attempt is stubbed to a no-op above, so the mismatch is
+        # still real.
+        titles = iter([staged_title, "Slack", "Slack"])
         form_filler.foreground_window_title = lambda: next(titles)
         staged = stage_form(
             [FormField("Email", "me@example.com"), FormField("Password", "hunter2xyz")],
@@ -299,6 +310,7 @@ def _run() -> int:
         screen_controller.type_text = saved_type_text
         screen_controller.press = saved_press
         form_filler.foreground_window_title = saved_window_title_fn
+        form_filler.restore_window_focus = saved_restore_fn
 
     # Registration.
     name = "verify_eva_phase63_live_fixes.py"

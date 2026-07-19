@@ -11,6 +11,15 @@ DEFAULT_MAX_AGENT_STEPS = 6
 DEFAULT_MAX_TOOLS_PER_TASK = 10
 DEFAULT_MAX_WEB_SEARCHES_PER_TASK = 4
 DEFAULT_MAX_SCREEN_CAPTURES_PER_TASK = 2
+# Phase 64: how many planned tool calls ToolExecutor.execute_all() will run in
+# one batch. This used to be a hardcoded `calls[:3]` with no name and no way
+# to configure it; the default stays 3 (no behavior change out of the box),
+# but it is now named and overridable, and — critically — execute_all() now
+# REPORTS when this cap actually truncates a plan instead of silently
+# dropping the rest (see executor.py). Distinct from max_tools_per_task(),
+# which is the whole-task budget enforced in runner.py; this is the smaller
+# per-batch slice within a single non-agentic chat turn.
+DEFAULT_MAX_TOOLS_PER_STEP = 3
 # Phase 39 reliability budgets: how many consecutive failed steps to tolerate
 # (attempting recovery/replan between them) before stopping honestly, and how
 # many steps without progress before declaring a stall.
@@ -106,6 +115,10 @@ def max_agent_steps() -> int:
 
 def max_tools_per_task() -> int:
     return max(1, env_int("MAX_TOOLS_PER_TASK", DEFAULT_MAX_TOOLS_PER_TASK))
+
+
+def max_tools_per_step() -> int:
+    return max(1, env_int("EVA_MAX_TOOLS_PER_STEP", DEFAULT_MAX_TOOLS_PER_STEP))
 
 
 def max_web_searches_per_task() -> int:

@@ -37,12 +37,39 @@ class ToolExecutor:
         self.registry = registry
 
     def execute_all(self, calls: list[PlannedToolCall]) -> list[ToolExecutionResult]:
+        from .policies import max_tools_per_step
+
+        limit = max_tools_per_step()
         results: list[ToolExecutionResult] = []
-        for call in calls[:3]:
+        stopped_for_confirmation = False
+        for call in calls[:limit]:
             result = self.execute(call)
             results.append(result)
             if result.requires_confirmation:
+                stopped_for_confirmation = True
                 break
+
+        # Phase 64 (Defect 4): calls beyond `limit` used to be dropped with no
+        # error, no warning, and nothing told to the model or the user -- the
+        # agent would proceed believing the whole plan ran. Only report this
+        # when the cap itself is why calls were skipped; a stop for
+        # confirmation is already surfaced through requires_confirmation and
+        # is not silent truncation.
+        if not stopped_for_confirmation and len(calls) > limit:
+            skipped = calls[limit:]
+            skipped_tools = [call.tool for call in skipped]
+            results.append(
+                ToolExecutionResult(
+                    ok=False,
+                    tool="plan_truncated",
+                    error=(
+                        f"Stopped after {limit} tool call(s) this step: {len(skipped)} more were planned "
+                        f"but not executed ({', '.join(skipped_tools)}). Increase EVA_MAX_TOOLS_PER_STEP or "
+                        "split the request into smaller steps."
+                    ),
+                    result={"truncated": True, "limit": limit, "executed": len(results), "skipped_tools": skipped_tools},
+                )
+            )
         return results
 
     def execute(self, call: PlannedToolCall) -> ToolExecutionResult:

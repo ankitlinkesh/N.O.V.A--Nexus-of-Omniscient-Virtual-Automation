@@ -46,8 +46,17 @@ def main() -> int:
     # Weaker provenance classes never fabricate independent proof.
     read = verify_tool_effect("workspace_status", "command_result_success", {}, {"ok": True})
     check(read.provenance == "self_reported" and read.independent is False, "a read must be self_reported, not independent")
+    # Phase 64: this used to assert provenance == "observed" -- i.e. that a
+    # screen effect nothing in this codebase can actually check was reported
+    # as if it had been independently confirmed (verified was silently
+    # borrowed from the tool's own self-reported ok). Nothing here has a
+    # perception capability wired up to look at the screen, so "observed" was
+    # never true; it is honestly "unverified" now, and verified must not be
+    # True on the strength of the self-report alone. See
+    # scripts/verify_eva_phase64_honest_effects.py for the full Phase 64 spec.
     screen = verify_tool_effect("screen.type_text", "text_field_contains", {"text": "hi"}, {"ok": True})
-    check(screen.provenance == "observed" and screen.independent is False, "a screen effect must be observed, not independent")
+    check(screen.provenance == "unverified" and screen.independent is False, "a screen effect must be unverified, not independent")
+    check(screen.verified is False, "a screen effect must not claim verified=True from a self-report alone")
     unknown = verify_tool_effect("mystery_tool", "no_verification_available", {}, {"ok": True})
     check(unknown.provenance == "unverified", "a tool with no verification method must be unverified")
 

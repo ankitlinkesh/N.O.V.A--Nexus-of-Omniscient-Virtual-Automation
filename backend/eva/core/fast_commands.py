@@ -1658,6 +1658,11 @@ def _run_tool(tools: ToolRegistry, name: str, session_context: dict | None = Non
             return _format_screen_result(result), "desktop-tool"
         if name.startswith("window_"):
             return _format_window_result(result, mode=name.removeprefix("window_")), "desktop-tool"
+        if name == "app.focus":
+            # Same result shape as window_focus (both call focus_window), so
+            # the existing "focus" formatting mode -- including the honest
+            # "Windows did not confirm focus" message -- applies unchanged.
+            return _format_window_result(result, mode="focus"), "desktop-tool"
         if name == "desktop_observe":
             return _format_window_result(result, mode="observe"), "desktop-tool"
         if name == "verify_last_action":
@@ -5515,9 +5520,16 @@ def maybe_handle_fast_command(
     if normalized in {"what is open", "what's open", "list windows", "list open windows", "open windows"}:
         return _run_tool(tools, "window_list", session_context, limit=40)
 
-    focus_target = _after_prefix(normalized, ("switch to ", "focus ", "go to window ", "bring up "))
+    # Phase 64: routed through app.focus (allow-class, console/internal-only --
+    # not a planner tool) rather than the planner-visible window_focus, so the
+    # typed console command exercises the tool actually scoped for it. Both
+    # ultimately call the same eva.desktop.windows.focus_window, so this is a
+    # behavior-preserving redirect, not a new capability. "focus window "
+    # must be checked before the bare "focus " prefix so "focus window
+    # chrome" extracts "chrome", not "window chrome".
+    focus_target = _after_prefix(normalized, ("switch to ", "focus window ", "focus ", "go to window ", "bring up "))
     if focus_target:
-        return _run_tool(tools, "window_focus", session_context, query=focus_target)
+        return _run_tool(tools, "app.focus", session_context, query=focus_target)
 
     minimize_target = _after_prefix(normalized, ("minimize ", "minimise "))
     if minimize_target:
