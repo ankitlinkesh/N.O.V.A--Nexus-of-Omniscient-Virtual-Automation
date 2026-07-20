@@ -44,6 +44,7 @@ policy still looked permissive.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -211,6 +212,26 @@ def tier_for(role: str | None, tool: str) -> RoleTier:
     if policy is None:
         return RoleTier.RED
     return policy.tier_for(tool)
+
+
+# Most restrictive first. Used to intersect a stack of nested roles.
+_RESTRICTIVENESS = {RoleTier.RED: 2, RoleTier.ORANGE: 1, RoleTier.GREEN: 0}
+
+
+def effective_tier(roles: Sequence[str], tool: str) -> RoleTier | None:
+    """The tier for a tool under EVERY role currently in force.
+
+    Returns the most restrictive tier across the stack, so a nested delegation
+    can only ever subtract capability. `None` means no role is active at all,
+    which is the top-level case where this layer does not apply -- deliberately
+    distinct from GREEN, which is an active decision that a role may proceed.
+
+    A research sub-task that opens a `desktop` scope must NOT thereby gain
+    screen access; intersecting rather than replacing is what prevents that.
+    """
+    if not roles:
+        return None
+    return max((tier_for(role, tool) for role in roles), key=lambda tier: _RESTRICTIVENESS[tier])
 
 
 def describe_role(role: str) -> str:

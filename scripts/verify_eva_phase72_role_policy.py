@@ -255,6 +255,37 @@ def main() -> int:
     check(active_role() is None, "the active role leaked after a raising sub-task")
 
     # ------------------------------------------------------------------ 11
+    # NESTING ONLY NARROWS. A delegated sub-task that opens a further scope may
+    # subtract capability, never add it. Were nesting a REPLACEMENT, a research
+    # sub-task could open a `desktop` scope and gain precisely the screen access
+    # its own role exists to deny -- a containment escape reachable the moment
+    # any delegation runner exists.
+    from eva.agents.role_context import active_roles
+    from eva.agents.role_policy import effective_tier
+
+    registry, probe = _registry_with_probe("screen.click")
+    with role_scope("research"):
+        with role_scope("desktop"):
+            nested = registry.run("screen.click", label="X")
+            check(active_roles() == ("research", "desktop"), "nested scopes did not accumulate")
+    check(
+        nested.get("role_denied") is True,
+        "CONTAINMENT ESCAPE: a research sub-task regained screen access by nesting a desktop scope",
+    )
+    check(not probe.ran, "a nested scope reached a handler its outer role denies")
+    check(nested.get("role") == "research", "the refusal did not name the outer role that actually denied it")
+
+    # ... while a role that legitimately holds the grant alone still proceeds,
+    # so the intersection is not simply denying everything.
+    check(effective_tier(("desktop",), "screen.click") is RoleTier.GREEN, "desktop alone lost its own grant")
+    check(effective_tier(("desktop", "research"), "screen.click") is RoleTier.RED, "nesting failed to subtract")
+    check(
+        effective_tier(("research", "code"), "workspace_read_file") is RoleTier.GREEN,
+        "intersection denied a tool BOTH roles allow",
+    )
+    check(effective_tier((), "screen.click") is None, "an empty role stack must not read as a tier")
+
+    # ------------------------------------------------------------------ 12
     # Registered with the suite.
     import verify_eva_all
 

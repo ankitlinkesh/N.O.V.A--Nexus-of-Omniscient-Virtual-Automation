@@ -16,12 +16,13 @@ from __future__ import annotations
 
 import pytest
 
-from eva.agents.role_context import active_role, role_scope
+from eva.agents.role_context import active_role, active_roles, role_scope
 from eva.agents.role_policy import (
     ROLE_POLICIES,
     RolePolicy,
     RoleTier,
     describe_role,
+    effective_tier,
     escalate_one_step,
     known_roles,
     tier_for,
@@ -129,12 +130,55 @@ class TestRoleScope:
                 raise RuntimeError("sub-task failure")
         assert active_role() is None
 
-    def test_nests(self) -> None:
+    def test_nesting_accumulates_rather_than_replaces(self) -> None:
+        """Every enclosing role stays in force.
+
+        If a nested scope REPLACED the outer one, a research sub-task could
+        open a `desktop` scope and gain exactly the screen access its own role
+        exists to deny. Nesting is therefore an intersection.
+        """
         with role_scope("research"):
+            assert active_roles() == ("research",)
             with role_scope("desktop"):
+                assert active_roles() == ("research", "desktop")
+                # active_role() reports the innermost for messages only --
+                # authorization must never read it alone.
                 assert active_role() == "desktop"
-            assert active_role() == "research"
-        assert active_role() is None
+            assert active_roles() == ("research",)
+        assert active_roles() == ()
+
+    def test_none_role_does_not_clear_the_stack(self) -> None:
+        """A no-op scope must not silently drop the containment above it."""
+        with role_scope("research"):
+            with role_scope(None):
+                assert active_roles() == ("research",)
+
+
+class TestNestingOnlyNarrows:
+    """A delegated sub-task may subtract capability, never add it."""
+
+    def test_inner_role_cannot_regain_what_outer_denies(self) -> None:
+        """The containment escape: research -> desktop must NOT yield screen access."""
+        assert effective_tier(("research", "desktop"), "screen.click") is RoleTier.RED
+        assert effective_tier(("desktop",), "screen.click") is RoleTier.GREEN
+
+    def test_inner_role_can_subtract(self) -> None:
+        assert effective_tier(("desktop", "research"), "screen.click") is RoleTier.RED
+
+    def test_most_restrictive_wins_for_orange(self) -> None:
+        # file.write_text is ORANGE for `file`, RED for `code`.
+        assert effective_tier(("file",), "file.write_text") is RoleTier.ORANGE
+        assert effective_tier(("file", "code"), "file.write_text") is RoleTier.RED
+
+    def test_empty_stack_is_not_a_tier(self) -> None:
+        """No active role is distinct from GREEN: one means this layer does not
+        apply, the other is a decision that a role may proceed. Collapsing them
+        would make a missing stack look like an affirmative grant."""
+        assert effective_tier((), "screen.click") is None
+
+    def test_shared_grant_survives_nesting(self) -> None:
+        """Intersection must not deny something BOTH roles allow."""
+        assert effective_tier(("research", "code"), "workspace_read_file") is RoleTier.GREEN
 
 
 class TestPolicyHygiene:

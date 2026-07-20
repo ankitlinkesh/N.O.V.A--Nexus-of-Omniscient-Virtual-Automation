@@ -108,6 +108,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase66_tool_reachability.py",
     "verify_eva_phase67_origin_binding.py",
     "verify_eva_phase72_role_policy.py",
+    "verify_eva_phase73_delegation.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -191,6 +192,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase66_tool_reachability.py",
     "verify_eva_phase67_origin_binding.py",
     "verify_eva_phase72_role_policy.py",
+    "verify_eva_phase73_delegation.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -238,6 +240,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase66_tool_reachability.py": ("phase66", "tools", "reachability"),
     "verify_eva_phase67_origin_binding.py": ("phase67", "screen", "vault", "origin-binding", "anti-phishing"),
     "verify_eva_phase72_role_policy.py": ("phase72", "agents", "permissions", "role-policy", "containment"),
+    "verify_eva_phase73_delegation.py": ("phase73", "agents", "delegation", "sub-tasks"),
 }
 
 

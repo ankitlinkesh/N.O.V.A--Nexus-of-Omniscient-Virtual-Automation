@@ -6,6 +6,7 @@ import re
 from ..diagnostics.health import get_eva_health_summary
 from ..diagnostics.providers import format_llm_status
 from .fast_command_ask import _authority_decision_from_natural_route, _handle_eva_ask_command
+from .fast_command_delegation import _handle_delegation_command
 from .fast_command_formatters import (
     _format_activation_status,
     _format_agent_status,
@@ -697,6 +698,14 @@ def maybe_handle_fast_command(
     ask = _handle_eva_ask_command(normalized, original, tools, session_context, memory, session_id)
     if ask:
         return ask
+
+    # Phase 73 role-scoped delegation. Placed early because its prefixes
+    # (`delegate `, `role `, `roles`) collide with no existing branch, and
+    # console-only by design -- see fast_command_delegation for why the choice
+    # of role and goal must never be reachable from the planner.
+    delegation = _handle_delegation_command(normalized, original, tools, session_context, memory, session_id)
+    if delegation:
+        return delegation
 
     if normalized in {
         "eva browser read status",

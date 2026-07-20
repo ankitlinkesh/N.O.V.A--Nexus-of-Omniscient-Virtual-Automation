@@ -1512,7 +1512,7 @@ class ToolRegistry:
         # name its own role would simply claim whichever role unlocks the tool
         # it wants. The role is ambient, set by the delegation boundary in
         # source (agents/role_context.role_scope), never taken from arguments.
-        from ..agents.role_context import ROLE_KWARG_NAMES, active_role
+        from ..agents.role_context import ROLE_KWARG_NAMES, active_roles
 
         call_args = {
             key: value
@@ -1523,14 +1523,29 @@ class ToolRegistry:
         # Phase 72 role containment. Only applies INSIDE a delegated sub-task;
         # with no active role this block is a single None check and ordinary
         # console/planner behavior is unchanged.
-        role = active_role()
-        if role is not None:
-            from ..agents.role_policy import RoleTier, tier_for
+        # Authorization reads the WHOLE stack, never just the innermost role:
+        # a nested scope may only subtract capability, so a research sub-task
+        # that opens a `desktop` scope does not thereby gain screen access.
+        roles = active_roles()
+        if roles:
+            from ..agents.role_policy import RoleTier, effective_tier
             from ..observability.context import trace_gate_decision
 
-            role_tier = tier_for(role, name)
+            role = roles[-1]
+            role_tier = effective_tier(roles, name)
             if role_tier is RoleTier.RED:
+                # Name the role that actually denied it, which under nesting is
+                # not necessarily the innermost one -- an outer role holding the
+                # line is the interesting fact, not the one that asked.
+                from ..agents.role_policy import tier_for
+
+                denying = next((r for r in roles if tier_for(r, name) is RoleTier.RED), role)
                 trace_gate_decision(name, "role_denied", spec)
+                # Surface the attempt to whoever started the sub-task. A refusal
+                # that dies inside the sub-task wastes the signal.
+                from ..agents.role_context import record_denial
+
+                record_denial(denying, name)
                 # Deliberately reports the ROLE and the TOOL only. The arguments
                 # are not echoed: a refusal triggered by injected content must
                 # not become a channel for relaying that content to the user
@@ -1539,11 +1554,12 @@ class ToolRegistry:
                 return {
                     "ok": False,
                     "role_denied": True,
-                    "role": role,
+                    "role": denying,
+                    "role_stack": list(roles),
                     "tool": name,
                     "injection_signal": True,
                     "message": (
-                        f"Refused: the `{role}` sub-task may not call `{name}`. "
+                        f"Refused: the `{denying}` sub-task may not call `{name}`. "
                         f"This restriction is fixed in source and cannot be granted at runtime. "
                         f"If you did not ask for this, treat it as a signal — content this sub-task "
                         f"read may have tried to make it act. Run `{name}` yourself from the console "
