@@ -112,6 +112,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase74_bounded_runner.py",
     "verify_eva_phase75_explainer.py",
     "verify_eva_phase76_agent_scope.py",
+    "verify_eva_phase77_live_drive.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -199,6 +200,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase74_bounded_runner.py",
     "verify_eva_phase75_explainer.py",
     "verify_eva_phase76_agent_scope.py",
+    "verify_eva_phase77_live_drive.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -250,6 +252,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase74_bounded_runner.py": ("phase74", "shell", "bounded-commands", "no-shell"),
     "verify_eva_phase75_explainer.py": ("phase75", "agents", "explainer", "approval-legibility"),
     "verify_eva_phase76_agent_scope.py": ("phase76", "agents", "ui", "agent-scope", "containment"),
+    "verify_eva_phase77_live_drive.py": ("phase77", "diagnostics", "live-drive", "no-silent-no-llm"),
 }
 
 
