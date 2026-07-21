@@ -50,6 +50,13 @@ executor = ToolExecutor(tools)
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     session_id: str | None = None
+    # Phase 76: restrict this request to a delegated role's tool surface.
+    # Safe to accept unauthenticated because every role is a strict SUBSET of
+    # full access -- there is no role that grants anything the default lacks --
+    # so this field can only ever narrow what the request may do. That is the
+    # same only-ever-adds-friction property that makes Phase 55 safe to apply
+    # unconditionally. `None` means today's behavior, unchanged.
+    agent_scope: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -1136,6 +1143,19 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
 
 @router.post("/chat/stream")
 async def chat_stream(payload: ChatRequest, request: Request) -> StreamingResponse:
+    # Phase 76. Validated BEFORE the stream opens, and rejected rather than
+    # ignored: silently dropping an unrecognised scope would leave a user who
+    # asked for containment running with full access while believing otherwise.
+    # Failing closed here means the request does not happen at all.
+    from ..agents.role_policy import known_roles
+
+    requested_scope = (payload.agent_scope or "").strip() or None
+    if requested_scope is not None and requested_scope not in known_roles():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown agent scope `{requested_scope}`. Known scopes: {', '.join(known_roles())}.",
+        )
+
     async def stream() -> AsyncIterator[str]:
         started_at = time.perf_counter()
         session_id = payload.session_id or uuid4().hex
@@ -1332,7 +1352,25 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         yield _json_line({"type": "token", "text": reply})
         yield _json_line({"type": "done", "reply": reply})
  
-    return StreamingResponse(stream(), media_type="application/x-ndjson")
+    if requested_scope is None:
+        return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+    async def scoped_stream() -> AsyncIterator[str]:
+        """Drive the stream inside the role scope.
+
+        Wrapping the generator rather than re-indenting its body keeps the diff
+        small, and the scope is active while the inner code runs because the
+        `async for` drives it from inside the `with`. The scope is per-task, and
+        `role_scope` resets in a `finally`, so a stream that raises cannot leak
+        a role onto whatever the task handles next.
+        """
+        from ..agents.role_context import role_scope
+
+        with role_scope(requested_scope):
+            async for chunk in stream():
+                yield chunk
+
+    return StreamingResponse(scoped_stream(), media_type="application/x-ndjson")
 
 
 @router.get("/screen/snapshot")

@@ -95,6 +95,18 @@
                 <option value="local">Local Only</option>
               </select>
             </label>
+            <label class="model-dropdown">
+              <span>Agent scope</span>
+              <select id="scopeSelect" aria-label="Restrict which tools this request may use">
+                <option value="">Full access</option>
+                <option value="research">Research — no screen, files or messaging</option>
+                <option value="desktop">Desktop — no network or files</option>
+                <option value="file">File — workspace only, never deletes</option>
+                <option value="code">Code — read-only codebase</option>
+                <option value="media">Media — playback only</option>
+              </select>
+            </label>
+            <p class="scope-note" id="scopeNote">Restricts which tools a request may use. For containment, not speed.</p>
             <div class="mini-readout">
               <span>Model</span>
               <strong id="modelName">Checking</strong>

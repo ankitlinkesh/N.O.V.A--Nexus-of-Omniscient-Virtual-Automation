@@ -27,6 +27,8 @@ const micButton = document.querySelector("#micButton");
 const micLabel = document.querySelector("#micLabel");
 const voiceTranscript = document.querySelector("#voiceTranscript");
 const brainSelect = document.querySelector("#brainSelect");
+const scopeSelect = document.querySelector("#scopeSelect");
+const scopeNote = document.querySelector("#scopeNote");
 const evaCoreVideo = document.querySelector("#evaCoreVideo");
 const nimChip = document.querySelector("#nimChip");
 const chatStateLabel = document.querySelector("#chatStateLabel");
@@ -712,7 +714,7 @@ async function sendStreamingChat(message) {
   const response = await fetch("/api/chat/stream", {
     method: "POST",
     headers: {"Content-Type": "application/json", "X-Eva-Client": "1"},
-    body: JSON.stringify({message, session_id: sessionId}),
+    body: JSON.stringify({message, session_id: sessionId, agent_scope: currentAgentScope()}),
   });
 
   if (!response.ok || !response.body) {
@@ -1046,3 +1048,37 @@ initSpeechRecognition();
 loadHealth();
 messageInput.focus();
 
+
+
+// --- Agent scope (Phase 76) -------------------------------------------------
+// Restricts which tools a request may use. Every scope is a strict SUBSET of
+// full access, so this can only ever narrow what a request does -- which is
+// why the backend accepts it without authentication. It is a containment
+// control, not a speed one: sub-tasks run sequentially either way.
+function currentAgentScope() {
+  const value = (scopeSelect?.value || "").trim();
+  return value === "" ? null : value;
+}
+
+function describeScope(value) {
+  if (!value) return "Restricts which tools a request may use. For containment, not speed.";
+  const option = scopeSelect?.querySelector(`option[value="${value}"]`);
+  const label = option ? option.textContent : value;
+  return `This request may only use ${label.split("—")[0].trim().toLowerCase()} tools. Anything else is refused before it runs.`;
+}
+
+scopeSelect?.addEventListener("change", () => {
+  const value = currentAgentScope();
+  localStorage.setItem("eva-agent-scope", value || "");
+  if (scopeNote) scopeNote.textContent = describeScope(value);
+});
+
+(function restoreAgentScope() {
+  if (!scopeSelect) return;
+  const saved = localStorage.getItem("eva-agent-scope") || "";
+  // Only restore a scope the current build still offers; a stale value from an
+  // older build would otherwise be rejected by the backend on every request.
+  const known = Array.from(scopeSelect.options).map((option) => option.value);
+  scopeSelect.value = known.includes(saved) ? saved : "";
+  if (scopeNote) scopeNote.textContent = describeScope(currentAgentScope());
+})();
