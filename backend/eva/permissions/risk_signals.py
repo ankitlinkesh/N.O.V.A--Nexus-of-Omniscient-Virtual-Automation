@@ -25,6 +25,12 @@ Two hard invariants make it safe by construction:
 
 Escalation strictly dominates the Phase 42 trust de-escalation: an action the
 risk layer raises is never then auto-allowed for having been approved before.
+That dominance is not purely from ordering — a sensitive-target READ escalates
+allow->confirm and lands where de-escalation can still see it. It holds because
+the reading types that stop at ``confirm`` are absent from
+``trust_policy.TRUST_ELIGIBLE_ACTION_TYPES`` (pinned by verify_eva_phase78), so
+only ``MCP_TOOL_CALL`` is de-escalatable and that escalates confirm->override
+(off confirm) on a sensitive target.
 
 Pure and deterministic: string/path reasoning only, no filesystem access (so a
 ``..`` traversal toward a system dir is caught by the literal path text, not by

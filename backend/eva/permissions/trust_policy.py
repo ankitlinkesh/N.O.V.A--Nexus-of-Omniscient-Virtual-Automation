@@ -38,6 +38,16 @@ _CONFIRMED_STATUSES = {"confirmed", "confirmed_but_executor_unavailable", "execu
 # silently trust-eligible. Destructive/system/privacy actions are override-class
 # and never reach here; external message/post and power actions are excluded on
 # purpose even though they are confirm-class.
+#
+# This set is also load-bearing for Phase 55's guarantee that its argument-aware
+# risk escalation strictly dominates this de-escalation (see risk_signals.py and
+# registry.run). A sensitive-target READ (SAFE_LOCAL_READ) escalates allow->
+# confirm and lands where de-escalation can see it; the only thing stopping it
+# from being handed back to "allow" is that the reading types are NOT in this
+# set. Adding any reading/target-acting type here would silently break that
+# dominance, so membership is pinned by verify_eva_phase78 /
+# test_trust_eligibility_pin, which fail on any change and require the invariant
+# to be re-argued.
 TRUST_ELIGIBLE_ACTION_TYPES = frozenset({"MCP_TOOL_CALL"})
 
 

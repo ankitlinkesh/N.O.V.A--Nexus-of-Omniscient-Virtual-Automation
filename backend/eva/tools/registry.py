@@ -1640,7 +1640,18 @@ class ToolRegistry:
         # policies are explicitly enabled, and NEVER for override/hard_block
         # (those cannot be de-escalated here). Guarded by the flag so the default
         # path is byte-identical: no ledger read, no behavior change, when off.
-        # A risk-escalated action is off "confirm" already, so it is never reached.
+        #
+        # Phase 55's dominance over this block is subtler than "escalation moved
+        # it off confirm", which is FALSE in general: a sensitive-target READ
+        # (SAFE_LOCAL_READ, allow-class) escalates allow->confirm and lands
+        # EXACTLY here. Dominance holds instead because of a disjointness: the
+        # only trust-eligible action type (MCP_TOOL_CALL) escalates confirm->
+        # override on a sensitive target — off confirm, so this block is skipped —
+        # while the reading types that stop AT confirm are deliberately NOT in
+        # TRUST_ELIGIBLE_ACTION_TYPES. That is the real invariant, and it is
+        # pinned by verify_eva_phase78 / test_trust_eligibility_pin: if a reading
+        # type were ever added to the allowlist, a risk-escalated read of ~/.ssh
+        # could be trust-de-escalated back to allow, undoing the escalation.
         if decision == "confirm":
             from ..permissions.trust_policy import calibrate, count_approvals, trust_policies_enabled
 
