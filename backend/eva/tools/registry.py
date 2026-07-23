@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import inspect
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -237,6 +238,20 @@ def _media_control(action: str) -> str:
 
 def _lock_laptop() -> str:
     return system_power("lock")
+
+
+def _handler_accepts_confirmed(handler: Callable[..., Any]) -> bool:
+    """True if `handler` declares a `confirmed` parameter (directly or via
+    **kwargs). Used only by run_approved to re-inject the ledger-confirmed
+    flag; a handler that does not accept it (e.g. the file lambdas that drop
+    it) is left untouched so we never raise TypeError."""
+    try:
+        params = inspect.signature(handler).parameters
+    except (TypeError, ValueError):
+        return False
+    if "confirmed" in params:
+        return True
+    return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
 def _guarded_power_action(action: str, confirmed: bool = False) -> str:
@@ -1723,6 +1738,23 @@ class ToolRegistry:
             return {"ok": False, "error": f"Unknown tool for pending action: {stored['tool']}."}
 
         tool_gate.pop_pending_call(pending_id)
+        # Phase 88: re-inject the `confirmed=True` flag that registry.run STRIPS
+        # at the untrusted entry (self-approval defense, see line ~1554). A few
+        # gated handlers self-guard on `confirmed` as a SECOND check beyond the
+        # gate -- system_power/guarded_power_action (returns "say confirm ...")
+        # and message.send_via_ui (re-evaluates the gate with user_confirmed).
+        # Because the flag was stripped, run_approved replayed them WITHOUT it,
+        # so an override-approved shutdown/restart/sleep/message did not execute
+        # -- it just re-asked for confirmation forever. run_approved is the ONE
+        # trusted path: it is unreachable unless action.status is already
+        # `confirmed` (checked above), so a real ledger confirmation HAS
+        # occurred and re-adding the flag here faithfully represents it. Only
+        # injected for handlers that actually accept a `confirmed` parameter, so
+        # handlers whose lambda drops it (file.write_text/copy/move/delete --
+        # gate is their sole enforcement) are byte-identical to before.
+        args = dict(stored["args"])
+        if "confirmed" not in args and _handler_accepts_confirmed(spec.handler):
+            args["confirmed"] = True
         # Phase 86: a gated call can be missing a required arg (e.g. screen.observe
         # without `reason`) yet still create a pending -- args_schema is never
         # checked before gating. Approving it used to reach spec.handler(**args)
@@ -1730,7 +1762,7 @@ class ToolRegistry:
         # Convert that into a clean, reported failure; the normal (ungated) run
         # path still calls _invoke directly and is unaffected.
         try:
-            return self._invoke(spec, dict(stored["args"]))
+            return self._invoke(spec, args)
         except Exception as exc:
             return {"ok": False, "error": f"execution failed: {type(exc).__name__}: {exc}"}
 
