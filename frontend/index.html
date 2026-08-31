@@ -4,257 +4,218 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>N.O.V.A</title>
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles.css?v=orb-v2">
+    <script type="importmap">
+      { "imports": { "three": "/vendor/three.module.js" } }
+    </script>
   </head>
   <body data-eva-state="idle">
     <div class="space-noise" aria-hidden="true"></div>
     <div class="star-grid" aria-hidden="true"></div>
 
-    <header class="stitch-topbar" aria-label="Eva shell navigation">
-      <button class="topbar-brand" type="button" onclick="location.hash='evaHero'" aria-label="Go to Eva core">
-        <span>E01</span>
+    <!-- The orb owns the whole screen -->
+    <canvas id="orbCanvas" class="orb-canvas" aria-label="N.O.V.A presence orb"></canvas>
+    <div class="orb-fallback" aria-hidden="true"><span></span></div>
+
+    <!-- Minimal presence line (top) -->
+    <header class="presence-bar">
+      <div class="presence-brand">
+        <span class="presence-dot"></span>
         <strong>N.O.V.A</strong>
-      </button>
-      <nav class="topbar-nav" aria-label="Eva views">
-        <a href="#evaHero">Systems</a>
-        <a href="#commandDeck">Command Deck</a>
-        <a href="#commandDeck">Memory</a>
-      </nav>
-      <div class="topbar-actions">
-        <span class="system-chip">Core linked</span>
-        <span class="system-chip ghost">Ankit</span>
+      </div>
+      <div class="presence-state">
+        <span class="status-chip" id="statusPill">Online</span>
+        <span class="presence-sub"><strong id="chatStateLabel">Online</strong></span>
+      </div>
+      <div class="presence-meta">
+        <span id="uplinkStatus">Syncing</span>
+        <span id="localTime">--:--</span>
+        <span class="status-chip ghost" id="nimChip" hidden>Provider Ready</span>
       </div>
     </header>
 
-    <aside class="stitch-rail" aria-label="Eva quick navigation">
-      <a href="#evaHero" class="rail-mark" aria-label="Eva neural core">E01</a>
-      <a href="#evaHero" class="rail-item active"><span>◎</span><strong>Neural Core</strong></a>
-      <a href="#commandDeck" class="rail-item"><span>⌘</span><strong>Command Deck</strong></a>
-      <a href="#commandDeck" class="rail-item"><span>◈</span><strong>Diagnostics</strong></a>
-      <button type="button" class="rail-init" data-prompt="operator status">Initialize</button>
-    </aside>
+    <!-- Scrim behind an open drawer -->
+    <div class="orb-scrim" id="orbScrim" aria-hidden="true"></div>
 
-    <main class="app-shell">
-      <section class="eva-hero" id="evaHero" aria-label="Eva core">
-        <nav class="hero-nav" aria-label="Eva status">
-          <div class="brand-chip">
-            <span class="brand-dot"></span>
-            <strong>N.O.V.A</strong>
-          </div>
-          <div class="hero-nav-status">
-            <span id="uplinkStatus">Syncing</span>
-            <span id="localTime">--:--</span>
-          </div>
-        </nav>
+    <!-- Dock: the only other thing on the main screen -->
+    <nav class="orb-dock" aria-label="N.O.V.A controls">
+      <button type="button" class="dock-btn" id="dockChat" aria-controls="drawerChat" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H8l-4 4z"/></svg>
+        <span>Chat</span>
+      </button>
+      <button type="button" class="dock-btn" id="dockLogs" aria-controls="drawerLogs" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        <span>Logs</span>
+      </button>
+      <button type="button" class="dock-btn" id="dockStatus" aria-controls="drawerStatus" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14l4-5 4 3 4-7 4 6"/><path d="M4 20h16"/></svg>
+        <span>Status</span>
+      </button>
+      <button type="button" class="dock-btn" id="dockSettings" aria-controls="drawerSettings" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
 
-        <div class="eva-core-stage">
-          <div class="eva-core-glow" aria-hidden="true"></div>
-          <div class="eva-hud-ring ring-a" aria-hidden="true"></div>
-          <div class="eva-hud-ring ring-b" aria-hidden="true"></div>
-          <div class="eva-hud-ring ring-c" aria-hidden="true"></div>
-          <div class="eva-core-video-wrap">
-            <video class="eva-core-video" id="evaCoreVideo" autoplay muted loop playsinline preload="auto">
-              <source src="/assets/eva-core-loop.webm" type="video/webm">
-              <source src="/assets/eva-core-loop.mp4" type="video/mp4">
-            </video>
-            <div class="eva-core-fallback" aria-hidden="true">
-              <span></span>
-            </div>
+    <!-- ===================== Chat drawer ===================== -->
+    <section class="drawer drawer-chat" id="drawerChat" aria-label="Conversation">
+      <header class="drawer-head">
+        <div><p class="eyebrow">Conversation</p><h2>Session Core</h2></div>
+        <div class="chat-state"><span class="state-orb"></span><strong>Live</strong></div>
+        <button type="button" class="drawer-close" aria-label="Close">✕</button>
+      </header>
+      <div class="message-list" id="timeline">
+        <article class="message eva">
+          <span>NOVA</span>
+          <p id="startupGreeting">Yo Ankit, how are you doing today?</p>
+        </article>
+      </div>
+      <div class="voice-transcript" id="voiceTranscript" aria-live="polite"></div>
+      <form class="composer" id="composer">
+        <div class="input-shell">
+          <span>//</span>
+          <input id="messageInput" autocomplete="off" placeholder="Ask N.O.V.A anything..." />
+          <button type="button" class="mic-button" id="micButton" aria-label="Push to talk">
+            <span class="mic-dot"></span>
+            <span id="micLabel">Mic</span>
+          </button>
+        </div>
+        <button type="submit">Send</button>
+      </form>
+    </section>
+
+    <!-- ===================== Logs drawer ===================== -->
+    <section class="drawer drawer-logs" id="drawerLogs" aria-label="Subsystem logs">
+      <header class="drawer-head">
+        <div><p class="eyebrow">Diagnostics</p><h2>Subsystem Logs</h2></div>
+        <button type="button" class="drawer-close" aria-label="Close">✕</button>
+      </header>
+      <div class="log-stream" id="logStream">
+        <div class="log-line success">[BOOT] N.O.V.A core shell loaded</div>
+        <div class="log-line">[UPLINK] Local command deck online</div>
+        <div class="log-line warn">[SAFETY] Power actions guarded</div>
+      </div>
+    </section>
+
+    <!-- ===================== Status drawer ===================== -->
+    <section class="drawer drawer-status" id="drawerStatus" aria-label="System status">
+      <header class="drawer-head">
+        <div><p class="eyebrow">Telemetry</p><h2>System Status</h2></div>
+        <button type="button" class="drawer-close" aria-label="Close">✕</button>
+      </header>
+      <div class="status-grid">
+        <div class="panel-card">
+          <p class="eyebrow">Mode</p>
+          <strong id="activeMode">Safe Demo + Catalog</strong>
+          <span>Report-only roadmap</span>
+        </div>
+        <div class="panel-card">
+          <p class="eyebrow">Provider</p>
+          <strong id="activeProvider">Auto</strong>
+          <span id="activeModel">NIM first</span>
+        </div>
+        <div class="panel-card">
+          <p class="eyebrow">Research DB</p>
+          <strong id="researchDbStatus">SQLite local</strong>
+          <span>Knowledge stored locally</span>
+        </div>
+        <div class="panel-card vision-card">
+          <div class="vision-card-head">
+            <div><p class="eyebrow">Vision</p><strong>Screen Vision</strong></div>
+            <span class="privacy-chip">On demand</span>
+          </div>
+          <div class="vision-readout">
+            <div><span>Status</span><strong id="visionStatus">Checking</strong></div>
+            <div><span>Last scan</span><strong id="lastScan">none</strong></div>
+          </div>
+          <button class="secondary" id="screenButton">Analyze Screen</button>
+          <div class="screen-frame">
+            <img id="screenImage" alt="Laptop screen preview appears here after capture">
+            <div id="screenEmpty" class="screen-empty"><span></span><p>Awaiting visual request</p></div>
           </div>
         </div>
-
-        <div class="hero-copy">
-          <p class="eyebrow">Local Agent Core</p>
-          <h1>E.V.A</h1>
-          <p class="hero-subtitle">Ask. Command. Inspect. Orchestrate.</p>
-          <div class="status-chip-row" aria-label="Eva capabilities">
-            <span class="status-chip" id="statusPill">Online</span>
-            <span class="status-chip">Report-only Roadmap</span>
-            <span class="status-chip" id="nimChip">Provider Ready</span>
-            <span class="status-chip">Execution Boundaries</span>
-          </div>
-          <a class="deck-jump" href="#commandDeck">Open Command Deck</a>
+        <div class="panel-card module-stack">
+          <p class="eyebrow">Modules</p>
+          <div class="metric"><span>Voice diagnostics</span><strong id="voiceStatus">Modular</strong></div>
+          <div class="metric"><span>Screen</span><strong>No camera</strong></div>
+          <div class="metric"><span>Memory</span><strong>SQLite</strong></div>
+          <div class="metric"><span>Phone</span><strong>LAN ready</strong></div>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <section class="command-deck" id="commandDeck" aria-label="Eva command deck">
-        <aside class="control-rail glass-panel">
-          <div class="rail-section">
-            <p class="eyebrow">Brain</p>
-            <label class="model-dropdown">
-              <span>Active brain</span>
-              <select id="brainSelect" aria-label="Choose Eva brain">
-                <option value="auto">Auto</option>
-                <option value="nvidia_nim">NVIDIA NIM</option>
-                <option value="gemini">Gemini</option>
-                <option value="openrouter">OpenRouter</option>
-                <option value="groq">Groq</option>
-                <option value="clod">CLōD</option>
-                <option value="qwen">Ollama Qwen</option>
-                <option value="llama">Ollama Llama</option>
-                <option value="local">Local Only</option>
-              </select>
-            </label>
-            <label class="model-dropdown">
-              <span>Agent scope</span>
-              <select id="scopeSelect" aria-label="Restrict which tools this request may use">
-                <option value="">Full access</option>
-                <option value="research">Research — no screen, files or messaging</option>
-                <option value="desktop">Desktop — no network or files</option>
-                <option value="file">File — workspace only, never deletes</option>
-                <option value="code">Code — read-only codebase</option>
-                <option value="media">Media — playback only</option>
-              </select>
-            </label>
-            <p class="scope-note" id="scopeNote">Restricts which tools a request may use. For containment, not speed.</p>
-            <div class="mini-readout">
-              <span>Model</span>
-              <strong id="modelName">Checking</strong>
-            </div>
-          </div>
-
-          <div class="rail-section rail-actions">
-            <button type="button" class="ghost-button" data-prompt="eva roadmap status">Roadmap status</button>
-            <button type="button" class="ghost-button" data-prompt="eva execution boundaries">Execution boundaries</button>
-            <button type="button" class="ghost-button" data-prompt="research status">Research status</button>
-            <button type="button" class="ghost-button" data-prompt="llm status">LLM status</button>
-          </div>
-
-          <div class="rail-section neural-nodes">
-            <p class="eyebrow">Recent neural nodes</p>
-            <button type="button" data-prompt="project structure"><span>SYS</span> Project structure</button>
-            <button type="button" data-prompt="where is agent runner implemented"><span>RUN</span> Agent runner map</button>
-            <button type="button" data-prompt="where is Tavily implemented"><span>WEB</span> Tavily wiring</button>
-          </div>
-
-          <div class="rail-section voice-console" aria-label="Eva voice controls">
-            <div class="voice-head">
-              <div>
-                <p class="eyebrow">Voice</p>
-                <strong id="voiceMode">Loading voices</strong>
-              </div>
-              <label class="voice-toggle">
-                <input id="voiceToggle" type="checkbox">
-                <span>On</span>
-              </label>
-            </div>
-            <select id="ttsProviderSelect" aria-label="Select Eva speech engine">
-              <option value="browser">Browser voice</option>
-              <option value="piper">Piper offline</option>
+    <!-- ===================== Settings drawer ===================== -->
+    <section class="drawer drawer-settings" id="drawerSettings" aria-label="Settings">
+      <header class="drawer-head">
+        <div><p class="eyebrow">Configuration</p><h2>Settings</h2></div>
+        <button type="button" class="drawer-close" aria-label="Close">✕</button>
+      </header>
+      <div class="settings-body">
+        <div class="rail-section">
+          <p class="eyebrow">Brain</p>
+          <label class="model-dropdown">
+            <span>Active brain</span>
+            <select id="brainSelect" aria-label="Choose N.O.V.A brain">
+              <option value="auto">Auto</option>
+              <option value="nvidia_nim">NVIDIA NIM</option>
+              <option value="gemini">Gemini</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="groq">Groq</option>
+              <option value="clod">CLōD</option>
+              <option value="qwen">Ollama Qwen</option>
+              <option value="llama">Ollama Llama</option>
+              <option value="local">Local Only</option>
             </select>
-            <select id="voiceSelect" aria-label="Select Eva voice"></select>
-            <div class="voice-button-row">
-              <button type="button" class="mini-button ghost" id="refreshVoicesButton">Refresh voices</button>
-              <button type="button" class="mini-button" id="testVoiceButton">Test voice</button>
-              <button type="button" class="mini-button ghost" id="stopVoiceButton">Stop speaking</button>
-            </div>
-            <div class="voice-sliders">
-              <label>Rate <input id="voiceRate" type="range" min="0.85" max="1.25" step="0.01"></label>
-              <label>Pitch <input id="voicePitch" type="range" min="0.9" max="1.15" step="0.01"></label>
-              <label>Volume <input id="voiceVolume" type="range" min="0.4" max="1.0" step="0.01"></label>
-            </div>
-          </div>
+          </label>
+          <label class="model-dropdown">
+            <span>Agent scope</span>
+            <select id="scopeSelect" aria-label="Restrict which tools this request may use">
+              <option value="">Full access</option>
+              <option value="research">Research — no screen, files or messaging</option>
+              <option value="desktop">Desktop — no network or files</option>
+              <option value="file">File — workspace only, never deletes</option>
+              <option value="code">Code — read-only codebase</option>
+              <option value="media">Media — playback only</option>
+            </select>
+          </label>
+          <p class="scope-note" id="scopeNote">Restricts which tools a request may use. For containment, not speed.</p>
+          <div class="mini-readout"><span>Model</span><strong id="modelName">Checking</strong></div>
+        </div>
 
-          <div class="rail-section quick-grid" aria-label="Quick commands">
-            <button type="button" class="quick-chip" data-prompt="yo Eva">Yo Eva</button>
-            <button type="button" class="quick-chip" data-prompt="eva release smoke test">Safe Demo</button>
-            <button type="button" class="quick-chip" data-prompt="eva roadmap status">Roadmap</button>
-            <button type="button" class="quick-chip" data-prompt="eva execution boundaries">Boundaries</button>
+        <div class="rail-section voice-console" aria-label="Voice controls">
+          <div class="voice-head">
+            <div><p class="eyebrow">Voice</p><strong id="voiceMode">Loading voices</strong></div>
+            <label class="voice-toggle"><input id="voiceToggle" type="checkbox"><span>On</span></label>
           </div>
-        </aside>
+          <select id="ttsProviderSelect" aria-label="Select N.O.V.A speech engine">
+            <option value="browser">Browser voice</option>
+            <option value="piper">Piper offline</option>
+          </select>
+          <select id="voiceSelect" aria-label="Select N.O.V.A voice"></select>
+          <div class="voice-button-row">
+            <button type="button" class="mini-button ghost" id="refreshVoicesButton">Refresh voices</button>
+            <button type="button" class="mini-button" id="testVoiceButton">Test voice</button>
+            <button type="button" class="mini-button ghost" id="stopVoiceButton">Stop speaking</button>
+          </div>
+          <div class="voice-sliders">
+            <label>Rate <input id="voiceRate" type="range" min="0.85" max="1.25" step="0.01"></label>
+            <label>Pitch <input id="voicePitch" type="range" min="0.9" max="1.15" step="0.01"></label>
+            <label>Volume <input id="voiceVolume" type="range" min="0.4" max="1.0" step="0.01"></label>
+          </div>
+        </div>
 
-        <section class="chat-panel glass-panel" aria-label="Conversation">
-          <header class="chat-header">
-            <div>
-              <p class="eyebrow">Conversation</p>
-              <h2>Session Core: N.O.V.A</h2>
-            </div>
-            <div class="chat-state">
-              <span class="state-orb"></span>
-              <strong id="chatStateLabel">Online</strong>
-            </div>
-          </header>
+        <div class="rail-section quick-grid" aria-label="Quick commands">
+          <button type="button" class="quick-chip" data-prompt="yo Eva">Yo N.O.V.A</button>
+          <button type="button" class="quick-chip" data-prompt="eva release smoke test">Safe Demo</button>
+          <button type="button" class="quick-chip" data-prompt="eva roadmap status">Roadmap</button>
+          <button type="button" class="quick-chip" data-prompt="eva execution boundaries">Boundaries</button>
+          <button type="button" class="quick-chip" data-prompt="research status">Research</button>
+          <button type="button" class="quick-chip" data-prompt="llm status">LLM status</button>
+        </div>
+      </div>
+    </section>
 
-          <div class="message-list" id="timeline">
-            <article class="message eva">
-              <span>NOVA</span>
-              <p id="startupGreeting">Yo Ankit, how are you doing today?</p>
-            </article>
-          </div>
-
-          <div class="voice-transcript" id="voiceTranscript" aria-live="polite"></div>
-          <form class="composer" id="composer">
-            <div class="input-shell">
-              <span>//</span>
-              <input id="messageInput" autocomplete="off" placeholder="Ask Eva anything..." />
-              <button type="button" class="mic-button" id="micButton" aria-label="Push to talk with Eva">
-                <span class="mic-dot"></span>
-                <span id="micLabel">Mic</span>
-              </button>
-            </div>
-            <button type="submit">Send</button>
-          </form>
-        </section>
-
-        <aside class="status-panel glass-panel">
-          <div class="panel-card">
-            <p class="eyebrow">Mode</p>
-            <strong id="activeMode">Safe Demo + Catalog</strong>
-            <span>Report-only roadmap</span>
-          </div>
-          <div class="panel-card">
-            <p class="eyebrow">Provider</p>
-            <strong id="activeProvider">Auto</strong>
-            <span id="activeModel">NIM first</span>
-          </div>
-          <div class="panel-card">
-            <p class="eyebrow">Research DB</p>
-            <strong id="researchDbStatus">SQLite local</strong>
-            <span>Knowledge stored locally</span>
-          </div>
-          <div class="panel-card vision-card">
-            <div class="vision-card-head">
-              <div>
-                <p class="eyebrow">Vision</p>
-                <strong>Screen Vision</strong>
-              </div>
-              <span class="privacy-chip">On demand</span>
-            </div>
-            <div class="vision-readout">
-              <div>
-                <span>Status</span>
-                <strong id="visionStatus">Checking</strong>
-              </div>
-              <div>
-                <span>Last scan</span>
-                <strong id="lastScan">none</strong>
-              </div>
-            </div>
-            <button class="secondary" id="screenButton">Analyze Screen</button>
-            <div class="screen-frame">
-              <img id="screenImage" alt="Laptop screen preview appears here after capture">
-              <div id="screenEmpty" class="screen-empty">
-                <span></span>
-                <p>Awaiting visual request</p>
-              </div>
-            </div>
-          </div>
-          <div class="panel-card module-stack">
-            <p class="eyebrow">Modules</p>
-            <div class="metric"><span>Voice diagnostics</span><strong id="voiceStatus">Modular</strong></div>
-            <div class="metric"><span>Screen</span><strong>No camera</strong></div>
-            <div class="metric"><span>Memory</span><strong>SQLite</strong></div>
-            <div class="metric"><span>Phone</span><strong>LAN ready</strong></div>
-          </div>
-          <div class="panel-card subsystem-log">
-            <p class="eyebrow">Subsystem logs</p>
-            <div class="log-line success">[BOOT] N.O.V.A core shell loaded</div>
-            <div class="log-line">[UPLINK] Local command deck online</div>
-            <div class="log-line warn">[SAFETY] Power actions guarded</div>
-          </div>
-        </aside>
-      </section>
-    </main>
-    <script src="/app.js?v=voice-soft-v1"></script>
+    <script src="/app.js?v=orb-v2"></script>
+    <script type="module" src="/orb-bootstrap.js?v=orb-v2"></script>
   </body>
 </html>

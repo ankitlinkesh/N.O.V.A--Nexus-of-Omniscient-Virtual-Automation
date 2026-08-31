@@ -1162,3 +1162,231 @@ body[data-eva-state="listening"] .mic-dot {
     max-width: 94%;
   }
 }
+
+
+/* ==== v2: Living-orb UI (orb + dock + drawers) ==== */
+
+html, body { height: 100%; }
+body {
+  overflow: hidden;                 /* orb owns the viewport; drawers scroll internally */
+  min-height: 100vh;
+}
+
+/* The orb fills the screen, above the ambient background layers */
+.orb-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+/* CSS fallback orb when WebGL is unavailable */
+.orb-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  place-items: center;
+}
+.orb-no-webgl .orb-canvas { display: none; }
+.orb-no-webgl .orb-fallback { display: grid; }
+.orb-fallback span {
+  width: min(46vmin, 340px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 34%, rgba(255,255,255,0.9), transparent 34%),
+    radial-gradient(circle at 50% 50%, var(--cyan), var(--blue) 46%, rgba(9,19,38,0.2) 74%);
+  box-shadow: 0 0 90px rgba(116,244,255,0.5), inset 0 0 70px rgba(110,162,255,0.5);
+  animation: orbPulse 4.5s ease-in-out infinite;
+}
+@keyframes orbPulse { 0%,100% { transform: scale(0.97); } 50% { transform: scale(1.03); } }
+
+/* Presence line */
+.presence-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.4rem;
+  pointer-events: none;
+}
+.presence-bar > * { pointer-events: auto; }
+.presence-brand { display: flex; align-items: center; gap: 0.55rem; font-weight: 600; letter-spacing: 0.12em; }
+.presence-brand strong { font-size: 0.95rem; }
+.presence-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 14px var(--cyan);
+  animation: orbPulse 3s ease-in-out infinite;
+}
+.presence-state { display: flex; align-items: center; gap: 0.6rem; }
+.presence-sub { color: var(--muted); font-size: 0.82rem; }
+.presence-sub strong { color: var(--text); }
+.presence-meta { display: flex; align-items: center; gap: 0.9rem; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+
+/* Scrim behind an open drawer */
+.orb-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(2, 6, 16, 0.5);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.28s ease, visibility 0.28s ease;
+}
+.orb-scrim.open { opacity: 1; visibility: visible; }
+
+/* Dock — the only chrome on the main screen */
+.orb-dock {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.4rem;
+  border-radius: 18px;
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+.dock-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 68px;
+  padding: 0.55rem 0.7rem;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+}
+.dock-btn svg {
+  width: 22px; height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dock-btn:hover { color: var(--text); background: rgba(116,244,255,0.08); transform: translateY(-2px); }
+.dock-btn[aria-expanded="true"] {
+  color: var(--void);
+  background: linear-gradient(160deg, var(--cyan), var(--blue));
+  box-shadow: 0 0 20px rgba(116,244,255,0.4);
+}
+
+/* Drawers — glass sheets that slide up over the orb */
+.drawer {
+  position: fixed;
+  left: 50%;
+  bottom: 100px;
+  transform: translate(-50%, 40px);
+  z-index: 25;
+  width: min(620px, 94vw);
+  max-height: min(74vh, 720px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), visibility 0.3s ease;
+  overflow: hidden;
+}
+.drawer.open { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid var(--line);
+}
+.drawer-head > div:first-child { flex: 1; }
+.drawer-head h2 { margin: 0.15rem 0 0; font-size: 1.1rem; }
+.drawer-head .eyebrow { margin: 0; }
+.drawer-close {
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.05);
+  color: var(--muted);
+  font-size: 0.9rem;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.drawer-close:hover { background: rgba(255,111,147,0.16); color: var(--danger); }
+
+/* Chat drawer internals */
+.drawer-chat .message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.2rem;
+  min-height: 120px;
+}
+.drawer-chat .voice-transcript { padding: 0 1.2rem; }
+.drawer-chat .composer { padding: 0.9rem 1.2rem 1.1rem; }
+
+/* Logs drawer */
+.log-stream {
+  overflow-y: auto;
+  padding: 1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 0.8rem;
+}
+
+/* Status drawer */
+.status-grid {
+  overflow-y: auto;
+  padding: 1.1rem 1.2rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+}
+.status-grid .vision-card { grid-column: 1 / -1; }
+
+/* Settings drawer */
+.settings-body {
+  overflow-y: auto;
+  padding: 1.1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+.settings-body .quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+
+/* State-tinted ambient glow behind the orb (complements the WebGL colors) */
+body[data-eva-state="thinking"] { --presence-accent: var(--violet); }
+body[data-eva-state="acting"]   { --presence-accent: var(--pink); }
+body[data-eva-state="speaking"] { --presence-accent: var(--blue); }
+body[data-eva-state="listening"] { --presence-accent: var(--mint); }
+.presence-dot { background: var(--presence-accent, var(--cyan)); box-shadow: 0 0 14px var(--presence-accent, var(--cyan)); }
+
+@media (max-width: 640px) {
+  .drawer { width: 100vw; left: 0; transform: translate(0, 40px); bottom: 92px; border-radius: 20px 20px 0 0; max-height: 78vh; }
+  .drawer.open { transform: translate(0, 0); }
+  .status-grid { grid-template-columns: 1fr; }
+  .dock-btn { min-width: 60px; font-size: 0.68rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb-fallback span, .presence-dot { animation: none; }
+  .drawer, .orb-scrim { transition: opacity 0.2s ease; }
+}
+

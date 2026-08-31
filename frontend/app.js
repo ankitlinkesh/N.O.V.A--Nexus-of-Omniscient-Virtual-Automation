@@ -127,6 +127,9 @@ function setEvaState(state) {
   if (state === "acting") statusPill.textContent = "Acting";
   if (state === "speaking") statusPill.textContent = "Speaking";
   if (chatStateLabel) chatStateLabel.textContent = statusPill.textContent;
+  // Drive the living orb (loaded by orb-bootstrap.js as a module; guarded so
+  // ordering is irrelevant).
+  if (window.evaOrb) window.evaOrb.setMode(state);
 }
 
 function setActivityLabel(label) {
@@ -488,18 +491,28 @@ async function speakWithPiper(speech, speechId = speechSequence) {
   activePiperUrl = URL.createObjectURL(blob);
   activePiperAudio = new Audio(activePiperUrl);
   activePiperAudio.volume = clampNumber(voiceSettings.volume, DEFAULT_VOICE_VOLUME, MIN_VOICE_VOLUME, MAX_VOICE_VOLUME);
+  // Route this offline-TTS element through the orb's analyser so the orb pulses
+  // to the real voice waveform while speaking.
+  if (window.evaOrbAudio) {
+    window.evaOrbAudio.attachElement(activePiperAudio);
+  }
   activePiperAudio.onplay = () => {
     console.debug("[EvaVoice] speech_start");
     setEvaState("speaking");
+    if (window.evaOrbAudio && window.evaOrb) {
+      window.evaOrbAudio.startMeter((level) => window.evaOrb.setAudioLevel(level));
+    }
   };
   activePiperAudio.onended = () => {
     cleanupPiperAudio();
+    stopOrbMeter();
     console.debug("[EvaVoice] speech_end");
     setEvaState("idle");
     processSpeechQueue();
   };
   activePiperAudio.onerror = () => {
     cleanupPiperAudio();
+    stopOrbMeter();
     setEvaState("idle");
     processSpeechQueue();
   };
@@ -511,6 +524,11 @@ async function speakWithPiper(speech, speechId = speechSequence) {
   };
   console.info("[EvaVoice]", window.evaVoiceDebug);
   await activePiperAudio.play();
+}
+
+function stopOrbMeter() {
+  if (window.evaOrbAudio) window.evaOrbAudio.stopMeter();
+  if (window.evaOrb) window.evaOrb.setAudioLevel(0);
 }
 
 function cleanupPiperAudio() {
@@ -532,6 +550,7 @@ function cancelActiveSpeech(reason = "program", resetState = true) {
   activeUtterance = null;
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   cleanupPiperAudio();
+  stopOrbMeter();
   if (reason === "user") console.debug("[EvaVoice] speech_cancel_user");
   if (resetState) {
     setEvaState("idle");
