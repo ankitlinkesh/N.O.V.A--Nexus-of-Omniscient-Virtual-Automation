@@ -556,6 +556,16 @@ def _local_tool_summary(results: list[ToolExecutionResult]) -> str:
             chunks.append(f"{result.tool} failed." if not result.error else f"{result.tool} failed: {result.error}")
     if len(chunks) == 1 and chunks[0].startswith(("Done,", "Copied ")):
         return chunks[0]
+    # "Done." asserts that what was asked for actually happened, so it is earned
+    # from the results themselves rather than assumed and then denylisted. A
+    # result that is awaiting approval or that failed still contributes a chunk
+    # (the approval explainer, or the error), and prefixing that with a success
+    # word tells the user the opposite of the truth -- the Phase 64/87 defect.
+    # The prefix-based guard below stays as a second line of defence for
+    # success-path phrasings that already read as a complete sentence.
+    everything_ran = all(result.ok and not result.requires_confirmation for result in results)
+    if not everything_ran:
+        return " ".join(chunks)
     if chunks and chunks[0].startswith(("Verified.", "I can't", "I could not", "I couldn't")):
         return " ".join(chunks)
     return "Done. " + " ".join(chunks)
