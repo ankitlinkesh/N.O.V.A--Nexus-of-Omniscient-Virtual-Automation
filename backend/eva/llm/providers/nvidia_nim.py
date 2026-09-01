@@ -6,8 +6,8 @@ from ...core.config import ModelSettings
 from ._openai_compatible import OpenAICompatibleProvider
 
 
-DEFAULT_NIM_MODEL = "nvidia/nemotron-3-nano-30b-a3b"
-DEFAULT_NIM_FALLBACKS = "openai/gpt-oss-120b,deepseek-ai/deepseek-v4-flash"
+DEFAULT_NIM_MODEL = "openai/gpt-oss-120b"
+DEFAULT_NIM_FALLBACKS = "nvidia/nemotron-3.5-lightning-30b-a3b"
 
 
 def _csv(value: str) -> list[str]:
@@ -17,14 +17,18 @@ def _csv(value: str) -> list[str]:
 def nvidia_nim_role_models() -> dict[str, str]:
     return {
         "planner": os.environ.get("NVIDIA_NIM_PLANNER_MODEL", DEFAULT_NIM_MODEL).strip() or DEFAULT_NIM_MODEL,
-        "deep_reasoning": os.environ.get("NVIDIA_NIM_DEEP_REASONING_MODEL", "nvidia/nemotron-3-super-120b-a12b").strip(),
-        "code": os.environ.get("NVIDIA_NIM_CODE_MODEL", "deepseek-ai/deepseek-v4-flash").strip(),
-        "vision": os.environ.get("NVIDIA_NIM_VISION_MODEL", "nvidia/nemotron-nano-12b-v2-vl").strip(),
-        "screen_reason": os.environ.get("NVIDIA_NIM_SCREEN_REASON_MODEL", "cosmos-reason2-8b").strip(),
-        "embed": os.environ.get("NVIDIA_NIM_EMBED_MODEL", "nvidia/llama-nemotron-embed-1b-v2").strip(),
-        "rerank": os.environ.get("NVIDIA_NIM_RERANK_MODEL", "nvidia/llama-nemotron-rerank-1b-v2").strip(),
-        "safety": os.environ.get("NVIDIA_NIM_SAFETY_MODEL", "nvidia/nemotron-3-content-safety").strip(),
-        "pii": os.environ.get("NVIDIA_NIM_PII_MODEL", "nvidia/gliner-pii").strip(),
+        "deep_reasoning": os.environ.get("NVIDIA_NIM_DEEP_REASONING_MODEL", "deepseek-ai/deepseek-v4-pro-0813").strip(),
+        "code": os.environ.get("NVIDIA_NIM_CODE_MODEL", "openai/gpt-oss-120b").strip(),
+        "vision": os.environ.get("NVIDIA_NIM_VISION_MODEL", "meta/llama-3.2-11b-vision-instruct").strip(),
+        "screen_reason": os.environ.get("NVIDIA_NIM_SCREEN_REASON_MODEL", "meta/llama-3.2-11b-vision-instruct").strip(),
+        "embed": os.environ.get("NVIDIA_NIM_EMBED_MODEL", "nvidia/nemotron-3-embed-1b").strip(),
+        # No rerank NIM is available on this account (checked 2026-09-01); "" means
+        # "unconfigured" rather than naming a model that 404s. No caller reads this today.
+        "rerank": os.environ.get("NVIDIA_NIM_RERANK_MODEL", "").strip(),
+        "safety": os.environ.get("NVIDIA_NIM_SAFETY_MODEL", "nvidia/nemotron-3.5-content-safety").strip(),
+        # No pii NIM is available on this account (checked 2026-09-01); "" means
+        # "unconfigured" rather than naming a model that 404s. No caller reads this today.
+        "pii": os.environ.get("NVIDIA_NIM_PII_MODEL", "").strip(),
         "asr": os.environ.get("NVIDIA_NIM_ASR_MODEL", "nvidia/parakeet-tdt-0.6b-v2").strip(),
         "tts": os.environ.get("NVIDIA_NIM_TTS_MODEL", "nvidia/magpie-tts-zeroshot").strip(),
     }

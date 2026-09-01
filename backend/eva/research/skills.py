@@ -54,7 +54,7 @@ def research_status(store: ResearchStore | None = None) -> dict[str, Any]:
             {
                 "ok": True,
                 "nim_embedding_configured": bool(os.environ.get("NVIDIA_NIM_API_KEY", "").strip())
-                and bool(os.environ.get("NVIDIA_NIM_EMBED_MODEL", "nvidia/llama-nemotron-embed-1b-v2").strip()),
+                and bool(os.environ.get("NVIDIA_NIM_EMBED_MODEL", "nvidia/nemotron-3-embed-1b").strip()),
                 "retrieval_mode": "keyword",
                 "rerank_mode": "keyword",
             }

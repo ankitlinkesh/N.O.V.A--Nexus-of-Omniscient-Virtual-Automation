@@ -10,7 +10,7 @@ from ..core.config import ModelSettings
 from .providers.clod import ClodProvider
 from .providers.gemini import GeminiProvider
 from .providers.groq import GroqEmergencyProvider, GroqProvider
-from .providers.nvidia_nim import NvidiaNIMProvider, nvidia_nim_models_for_purpose, nvidia_nim_role_models
+from .providers.nvidia_nim import DEFAULT_NIM_MODEL, NvidiaNIMProvider, nvidia_nim_models_for_purpose, nvidia_nim_role_models
 from .providers.ollama import OllamaProvider
 from .providers.openrouter import OpenRouterProvider
 from .rate_limiter import LLMRateLimiter, provider_limits, provider_token_limits
@@ -135,7 +135,7 @@ def _provider_current_model(name: str) -> str:
     if name == "gemini":
         return os.environ.get("GEMINI_MODEL", settings.smart_model or "gemini-2.5-flash")
     if name == "nvidia_nim":
-        return os.environ.get("NVIDIA_NIM_MODEL", "nvidia/nemotron-3-nano-30b-a3b")
+        return os.environ.get("NVIDIA_NIM_MODEL", DEFAULT_NIM_MODEL)
     if name == "openrouter":
         return os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
     if name == "groq":
@@ -497,7 +497,7 @@ def get_llm_status(settings: ModelSettings | None = None) -> dict:
         "groq": os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
         "groq_fallback": os.environ.get("GROQ_FALLBACK_MODEL", "llama-3.1-8b-instant"),
         "openrouter": os.environ.get("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free"),
-        "nvidia_nim": os.environ.get("NVIDIA_NIM_MODEL", "nvidia/nemotron-3-nano-30b-a3b"),
+        "nvidia_nim": os.environ.get("NVIDIA_NIM_MODEL", DEFAULT_NIM_MODEL),
         "clod": os.environ.get("CLOD_MODEL", "DeepSeek V3"),
         "ollama": ollama_model_for_mode(settings),
     }
