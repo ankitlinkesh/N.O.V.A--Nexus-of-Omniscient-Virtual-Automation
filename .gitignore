@@ -1,4 +1,4 @@
-﻿.venv/
+.venv/
 venv/
 
 __pycache__/
@@ -45,3 +45,28 @@ Thumbs.db
 # Local voice comparison samples (Phase 49 exploration)
 voice_samples/
 nova_voice_test.wav
+
+# Backups and merge leftovers. `.env.*` already catches .env.local.bak-*, but a
+# backup of a secrets file is the easiest way to leak one into a public repo,
+# so catch the general shapes too.
+*.bak
+*.bak-*
+*.orig
+*.rej
+*~
+
+# Credential material that should never be committed
+*.pem
+*.key
+!**/*.key.example
+
+# Agent/tool local state, alongside the .claude/ entry above
+.agents/
+.codex/
+
+# Test and lint caches
+.coverage
+coverage.xml
+htmlcov/
+.ruff_cache/
+.mypy_cache/
