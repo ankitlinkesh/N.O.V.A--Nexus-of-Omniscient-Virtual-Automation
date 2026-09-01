@@ -8,6 +8,40 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+# Capability flags an operator may set in .env / .env.local for real day-to-day
+# use. backend/eva/main.py calls load_project_env() at import time, so without
+# this fixture those personal settings leak into the suite and quietly flip the
+# defaults the tests exist to pin -- a developer with real input enabled sees
+# "off by default" assertions fail on their machine and nowhere else.
+#
+# These are cleared, never set: a test that wants a capability ON must opt in
+# with monkeypatch.setenv, which keeps "off by default" the thing being proved
+# rather than the thing being assumed.
+CAPABILITY_FLAGS = (
+    "EVA_ENABLE_REAL_INPUT",
+    "EVA_GUI_GROUNDING_ENABLED",
+    "EVA_MCP_ENABLED",
+    "EVA_V2_PLAYWRIGHT_ENABLED",
+    "EVA_V2_PYAUTOGUI_ENABLED",
+    "EVA_V2_RUNTIME_ENABLED",
+    "EVA_VOICE_ENABLED",
+    "EVA_VOICE_INPUT_ENABLED",
+    "EVA_PERCEPTION_ENABLED",
+    "EVA_PROACTIVITY_ENABLED",
+    "EVA_BACKGROUND_WORKER_ENABLED",
+    "EVA_DURABLE_QUEUE_ENABLED",
+    "EVA_SELF_IMPROVEMENT_ENABLED",
+    "EVA_PROFILE",
+)
+
+
+@pytest.fixture(autouse=True)
+def eva_capability_flags_off(monkeypatch):
+    """Run every test against the shipped defaults, not the operator's .env.local."""
+    for flag in CAPABILITY_FLAGS:
+        monkeypatch.delenv(flag, raising=False)
+
+
 @pytest.fixture(autouse=True)
 def eva_pending_action_ledger_path(tmp_path, monkeypatch):
     """Point EVA_PENDING_ACTION_LEDGER_PATH at a throwaway file for every test.
