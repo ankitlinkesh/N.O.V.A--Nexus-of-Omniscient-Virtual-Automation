@@ -111,6 +111,15 @@ ABOUT_ME_COMMANDS = {
     "who am i to you",
     "what do you remember about me",
     "what do u remember about me",
+    # Phase 91: phrasings the deleted three-clause heuristic used to reach.
+    # Listing them is narrower than inferring them, and each is a whole
+    # utterance rather than a substring that can appear inside another request.
+    "tell me what you know about me",
+    "tell me what u know about me",
+    "tell me what you remember about me",
+    "tell me what u remember about me",
+    "what do you know about myself",
+    "remind me what you know about me",
 }
 ABOUT_EVA_COMMANDS = {
     "tell me about yourself",
@@ -255,14 +264,42 @@ def _looks_like_identity_joke(original: str, payload: str) -> bool:
     return bool(re.search(r"\b(my name is|i am|i'm|call me)\b", text)) and any(marker in text for marker in ("lmao", "lol", "jk", "joking", "just kidding"))
 
 
+# Filler a real person types in front of a question. Stripped before matching so
+# an exact-match rule stays usable without reopening substring matching.
+_FILLER_PREFIXES = ("hey", "hi", "hello", "yo", "ok", "okay", "so", "please", "eva", "nova")
+
+
+def _is_whole_utterance(text: str, commands: set[str]) -> bool:
+    """True only when the WHOLE message is one of these fixed questions.
+
+    These two identity commands used to match with ``command in text``, so any
+    message merely *containing* one of the phrases was swallowed by the
+    deterministic path and answered with a canned summary. The command sets
+    include ``"about me"``, ``"who are you"`` and ``"what are you"``, which are
+    substrings of countless ordinary requests -- "How do I like my answers
+    formatted? Answer from what you know about me" got the generic about-me dump
+    instead of an answer, and it also meant the ``"what have you learned about
+    me"`` branch further down could never be reached, because "about me" matched
+    first.
+
+    Every other command in this file matches with ``normalized in {...}``; these
+    two were the exceptions. This restores the file's own convention, allowing
+    only leading filler and trailing punctuation, so a fast command can no longer
+    shadow an ordinary request. Anything longer falls through to the planner --
+    the same refusal-by-default the Phase 54 rule parser makes.
+    """
+    cleaned = " ".join(text.lower().split()).strip(" ?!.,")
+    for _ in range(3):
+        head, _, rest = cleaned.partition(" ")
+        if head.strip(" ,") in _FILLER_PREFIXES and rest:
+            cleaned = rest.strip(" ,")
+            continue
+        break
+    return cleaned.strip(" ?!.,") in commands
+
+
 def _is_about_me_command(text: str) -> bool:
-    if any(command in text for command in ABOUT_ME_COMMANDS):
-        return True
-    return (
-        ("what" in text or "tell" in text or "remember" in text)
-        and ("know" in text or "remember" in text)
-        and ("about me" in text or "abt me" in text or "about myself" in text)
-    )
+    return _is_whole_utterance(text, ABOUT_ME_COMMANDS)
 
 
 def _is_local_memory_question(text: str) -> bool:
@@ -3077,7 +3114,7 @@ def maybe_handle_fast_command(
     if normalized in {"resume task", "resume agent task"}:
         return "There is no paused task runner to resume yet. Say the goal again and I’ll start a fresh bounded task.", "fast-command"
 
-    if any(command in normalized for command in ABOUT_EVA_COMMANDS):
+    if _is_whole_utterance(normalized, ABOUT_EVA_COMMANDS):
         return EVA_IDENTITY_SUMMARY, "fast-command"
 
     if normalized in {"status", "system status", "laptop status", "pc status", "computer status"}:

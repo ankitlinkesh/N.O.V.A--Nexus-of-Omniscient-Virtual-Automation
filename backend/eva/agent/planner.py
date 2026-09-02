@@ -670,6 +670,7 @@ Rules:
 - Use lock_laptop for lock requests.
 - For shutdown, restart, sleep, sign out, or log out, do not call a tool unless the user explicitly confirms in this same message. If not confirmed, use type "confirmation_required" and final_response should ask for confirmation.
 - Use analyze_screen when the user asks Eva to understand, check, inspect, analyze, or identify an error on the screen. Use capture_screen only for a raw screenshot/capture request.
+- Use system_time for the current time, date, day of the week, or timezone. Never guess the time and never open a website to read a clock.
 - Use window_active/window_list for active or open window questions. Use window_focus/window_minimize/window_maximize for explicit window-management requests. Use desktop_observe for a bounded desktop state snapshot; it returns window metadata only and never a screenshot. To look at the screen use analyze_screen or capture_screen, which require the user's confirmation.
 - Use code_search, code_find_symbol, code_project_map, code_explain_feature, code_debug_traceback, or code_plan_change for codebase/symbol/implementation/debugging/patch-plan questions. These tools are read-only and do not edit files.
 - Use workspace_search, workspace_read_file, workspace_list_files, workspace_summarize_file, or workspace_project_summary for generic safe file inspection. Workspace tools are read-only.
@@ -729,6 +730,7 @@ Rules:
 - Use research_recall first, then research_web for research knowledge-base goals where the user wants to save, remember, build knowledge, make Eva a superbrain, or research a topic over time.
 - Use open_app/open_folder/open_url only for explicit desktop/navigation goals.
 - Use analyze_screen when the user explicitly asks to inspect/look/check/analyze the screen or identify a visible error. Use capture_screen only for raw screenshot capture.
+- Use system_time for the current time, date, day of the week, or timezone. Never guess the time and never open a website to read a clock.
 - Use window_active/window_list for active or open window questions. Use window_focus/window_minimize/window_maximize for explicit window-management steps. Use verify_last_action after desktop actions when the task depends on knowing whether an action succeeded.
 - Use code tools for Eva codebase questions. Prefer code_explain_feature for "where is X implemented", code_project_map for architecture/project map, code_find_symbol for symbol lookup, code_debug_traceback for pasted errors, and code_plan_change for requested patch plans.
 - Use workspace tools for generic safe file reads/listing. Use workspace_read_file only when a relative file path is explicit.

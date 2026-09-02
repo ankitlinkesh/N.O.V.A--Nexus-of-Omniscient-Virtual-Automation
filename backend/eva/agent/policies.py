@@ -277,6 +277,12 @@ def describe_tool_observation(tool: str, result: Any) -> str:
             windows = result.get("open_windows") if isinstance(result.get("open_windows"), list) else []
             head = f"desktop_observe active={result.get('active_window_title') or 'unknown'} windows={len(windows)}."
             return "\n".join([head] + _window_lines(windows))
+        if tool == "system_time":
+            return (
+                f"system_time is {result.get('local_time_12h') or result.get('local_time')} "
+                f"({result.get('local_time')}) on {result.get('weekday')} {result.get('local_date')}, "
+                f"timezone {result.get('timezone')}."
+            )
         if tool == "window_list":
             windows = result.get("windows") if isinstance(result.get("windows"), list) else []
             head = f"window_list found {len(windows)} visible windows."

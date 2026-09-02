@@ -65,7 +65,12 @@ def check(value: object, message: str) -> None:
 # Phase 82 moved close_app from allow -> confirm (requires_confirmation=True):
 # closing an app can discard unsaved work, so it now asks first. allow 83->82,
 # confirm 8->9.
-EXPECTED_CLASS_COUNTS = {"allow": 82, "override": 10, "confirm": 9}
+# Phase 91 added exactly one tool, `system_time` (SAFE_LOCAL_READ, listed in
+# AUDITED_SAFE_LOCAL_READ's status group): it reads the system clock, touches no
+# pixels, mutates nothing and reaches no network. allow 82 -> 83; override and
+# confirm unchanged. This pin fired before it was updated, which is the point of
+# having it.
+EXPECTED_CLASS_COUNTS = {"allow": 83, "override": 10, "confirm": 9}
 
 SCREEN_CAPTURE_TOOLS = ("capture_screen", "analyze_screen", "screen.observe")
 

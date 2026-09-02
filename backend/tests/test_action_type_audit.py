@@ -114,4 +114,7 @@ def test_relabelling_is_gate_preserving(registry):
     # message alone -- which is the whole reason a counts-only pin earns its
     # keep despite being invisible to name-based searching.
     # Phase 82: close_app moved allow -> confirm (it can discard unsaved work).
-    assert counts == {"allow": 82, "override": 10, "confirm": 9}, f"gate class counts drifted: {counts}"
+    # Phase 91: `system_time` added, allow 82 -> 83. A clock read is
+    # non-sensitive local state with no pixels, no mutation and no network --
+    # the claim AUDITED_SAFE_LOCAL_READ's docstring says listing a tool makes.
+    assert counts == {"allow": 83, "override": 10, "confirm": 9}, f"gate class counts drifted: {counts}"

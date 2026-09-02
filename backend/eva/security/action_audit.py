@@ -39,6 +39,7 @@ _STATUS_TOOLS = frozenset(
         "browser_status",
         "spotify_status",
         "spotify_now_playing_status",
+        "system_time",
         "verify_last_action",
     }
 )

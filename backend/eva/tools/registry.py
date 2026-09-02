@@ -207,6 +207,34 @@ def _status() -> dict[str, Any]:
     return asdict(system_status())
 
 
+def _system_time() -> dict[str, Any]:
+    """Read the system clock. Local time, UTC, and the zone, in one call.
+
+    Added in Phase 91 because there was no clock among 101 tools, so the single
+    most ordinary question a desktop assistant gets -- "what time is it" -- had
+    no honest answer. The agent would spend a `status` call (OS, shell, cwd),
+    find no time in it, and say so; in one live run it opened a browser to a
+    time website rather than read the clock three inches away.
+
+    Returns every field the model might want pre-formatted, so it never has to
+    do arithmetic on an ISO string to answer "what time is it" -- reading a
+    clock should not need a second tool call.
+    """
+    now = datetime.now().astimezone()
+    return {
+        "ok": True,
+        "local_time": now.strftime("%H:%M:%S"),
+        "local_time_12h": now.strftime("%I:%M %p").lstrip("0"),
+        "local_date": now.strftime("%Y-%m-%d"),
+        "weekday": now.strftime("%A"),
+        "timezone": now.tzname() or "local",
+        "utc_offset": now.strftime("%z"),
+        "iso": now.isoformat(timespec="seconds"),
+        "utc_iso": now.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        "epoch_seconds": int(now.timestamp()),
+    }
+
+
 def _run_bounded_command(command: str, args: list[str] | tuple[str, ...] | None = None, timeout: int | None = None) -> dict[str, Any]:
     """Phase 74. All policy lives in bounded_runner.validate, which is pure and
     exhaustively tested; this is only the registry seam."""
@@ -1205,6 +1233,14 @@ class ToolRegistry:
                     explicit_screen_intent=False,
                 ),
             ),
+            "system_time": ToolSpec(
+                name="system_time",
+                description="Return the current local date and time, the weekday, the timezone, and the UTC equivalent.",
+                args_schema=_schema({}),
+                safety_level="safe",
+                action_type="SAFE_LOCAL_READ",
+                handler=_system_time,
+            ),
             "window_list": ToolSpec(
                 name="window_list",
                 description="List visible open windows with titles and process names.",
@@ -1470,6 +1506,7 @@ class ToolRegistry:
     def planner_specs(self) -> list[dict[str, Any]]:
         visible = [
             "status",
+            "system_time",
             "open_app",
             "open_folder",
             "open_url",

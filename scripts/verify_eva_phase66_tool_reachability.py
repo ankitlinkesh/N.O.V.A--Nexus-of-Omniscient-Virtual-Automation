@@ -226,9 +226,16 @@ EXCLUDED_FILES = (REGISTRY_FILE, CATALOG_FILE)
 # Ground truth measured directly against the registry. A drift in either
 # number means tools were added/removed or the planner surface changed --
 # either is fine, but it must be a deliberate, reviewed edit to this file.
-EXPECTED_TOOL_COUNT = 101
-EXPECTED_DEFAULT_PLANNER_VISIBLE_COUNT = 72
-EXPECTED_PLAYWRIGHT_PLANNER_VISIBLE_COUNT = 79
+# Phase 91 added `system_time` (101 -> 102); it is planner-reachable.
+EXPECTED_TOOL_COUNT = 102
+# Phase 91 made `system_time` planner-visible (72 -> 73 default, 79 -> 80 with
+# Playwright). It had to be: registered + audited + referenced from production
+# source satisfied the reachability check above while the model still could not
+# call it, so a time question kept being answered from nothing. These two pins
+# are the ones that would have caught it -- reachable-by-grep is not
+# reachable-by-planner.
+EXPECTED_DEFAULT_PLANNER_VISIBLE_COUNT = 73
+EXPECTED_PLAYWRIGHT_PLANNER_VISIBLE_COUNT = 80
 
 # The reviewed set of intentionally-exempt tools: name -> justification.
 # Growing this list is a deliberate act with a real reason, not a place to
