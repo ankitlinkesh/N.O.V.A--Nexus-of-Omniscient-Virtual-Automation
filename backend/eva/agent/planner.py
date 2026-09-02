@@ -93,6 +93,44 @@ def _memory_block(notes: list[str]) -> str:
     )
 
 
+def _spec_schema(spec: Any) -> dict[str, Any]:
+    """The args schema of a ToolSpec (or of a plain dict spec), or {}."""
+    if isinstance(spec, dict):
+        schema = spec.get("args_schema")
+    else:
+        schema = getattr(spec, "args_schema", None)
+    return schema if isinstance(schema, dict) else {}
+
+
+def _clean_args(schema: dict[str, Any], args: Any) -> dict[str, Any]:
+    """Drop argument keys a closed schema cannot accept.
+
+    Models routinely invent plausible-sounding arguments for no-argument tools
+    -- ``window_active(include_windows=False)`` was seen live -- and some
+    providers emit a malformed empty key (``{"": {}}``). Both made
+    ``executor._validate_args`` reject the whole step with
+    "Unknown arguments: ...", spending a failure-budget slot on an argument the
+    handler would never have read.
+
+    Only keys the schema *cannot* accept are removed, and only when the schema
+    declares ``additionalProperties: false`` -- by definition those keys carry
+    no meaning for the handler, so dropping them is strictly safer than failing
+    the step. Nothing is ever added or rewritten, so a well-formed call is
+    unchanged.
+
+    ``executor._validate_args`` is deliberately left in place: direct
+    ``/api/tools`` calls never pass through the planner, so it is still the
+    last-resort guard rather than dead code.
+    """
+    if not isinstance(args, dict):
+        return {}
+    cleaned = {k: v for k, v in args.items() if isinstance(k, str) and k.strip()}
+    if schema.get("additionalProperties") is False:
+        properties = schema.get("properties") or {}
+        cleaned = {k: v for k, v in cleaned.items() if k in properties}
+    return cleaned
+
+
 class ToolCallPlanner:
     def __init__(self, settings: ModelSettings, registry: ToolRegistry) -> None:
         self.settings = settings
@@ -138,6 +176,62 @@ class ToolCallPlanner:
             return fallback
         raise PlannerError("I could not plan that safely. Try a simpler command.")
 
+    def _native_progress_messages(self, task_context: dict[str, Any]) -> list[dict[str, str]]:
+        """Feed the steps already taken, and what they returned, back to the model.
+
+        Without this the native function-calling path rebuilt the same
+        ``[system, goal]`` pair on every iteration of the agent loop: the model
+        was asked the identical question with no record of what it had just run,
+        so it re-issued the same tool until the repeated-action guard or the
+        failure budget stopped the task. The observation was *stored* on
+        ``task.steps[i].observation`` and never *arrived* at the model.
+
+        Deliberately plain ``assistant``/``user`` text rather than the OpenAI
+        ``tool_calls`` / ``role: "tool"`` protocol. ``llm/providers/gemini.py``
+        converts messages by text only and skips any message with empty content,
+        so a protocol-shaped tool message would silently vanish on the fallback
+        provider -- reintroducing exactly the failure this fixes. Text arrives on
+        every provider in the router. Roles also stay strictly alternating
+        (goal -> assistant -> user), which Gemini's ``contents`` conversion wants.
+
+        The recap of *actions* is the assistant's own turn; tool *output* stays in
+        a user turn, because observations may carry untrusted content (the runner
+        wraps it) and untrusted data must not be presented as the model's own words.
+
+        Returns [] when nothing has happened yet, so the first step of a task
+        builds a byte-identical prompt to before. The caller applies this only in
+        ``agent_step`` mode: ``single_turn`` is the one-shot chat planner with no
+        loop to make progress in, so its prompt is unchanged by definition.
+        """
+        steps = [item for item in (task_context.get("steps") or []) if isinstance(item, dict)]
+        performed = [item for item in steps if item.get("tool_name") and item.get("observation")]
+        if not performed:
+            return []
+
+        actions: list[str] = []
+        results: list[str] = []
+        for item in performed[-6:]:
+            try:
+                rendered = json.dumps(item.get("tool_args") or {}, ensure_ascii=False)
+            except (TypeError, ValueError):
+                rendered = "{}"
+            actions.append(f"{item.get('tool_name')}({rendered})")
+            results.append(f"- {item.get('tool_name')} returned: {str(item.get('observation'))[:600]}")
+
+        recap = "So far in this task I have called: " + "; ".join(actions) + "."
+        feedback = (
+            "Results of those calls:\n"
+            + "\n".join(results)
+            + "\n\nUse these results. If they already answer the goal, reply in plain text "
+            "with the final answer and call no tool. Do not repeat any call listed above -- "
+            "it will return the same thing. If a call failed, either try a different tool or "
+            "say plainly what you cannot do."
+        )
+        return [
+            {"role": "assistant", "content": recap},
+            {"role": "user", "content": feedback},
+        ]
+
     async def _native_plan(
         self,
         message: str,
@@ -150,15 +244,26 @@ class ToolCallPlanner:
             specs = self.registry.planner_specs()
             tools = to_openai_tools(specs)
             valid_names = {s["name"] for s in specs}
+            schemas = {s["name"]: (s.get("args_schema") or {}) for s in specs}
 
-            system_prompt = (
-                "You are Eva's action planner. If the user wants an action performed, "
-                "call the single most appropriate tool. If it is a question you can answer "
-                "directly, reply in plain text without calling a tool."
-            )
+            if mode == "agent_step":
+                system_prompt = (
+                    "You are Eva's bounded agent-step planner. You are part-way through a "
+                    "task and have been given the results of every step already taken. "
+                    "Call the single most appropriate tool to make progress. If the results "
+                    "you can already see answer the goal, do NOT call a tool -- reply in "
+                    "plain text with the final answer for the user. Never repeat a call "
+                    "whose result you can already see."
+                )
+            else:
+                system_prompt = (
+                    "You are Eva's action planner. If the user wants an action performed, "
+                    "call the single most appropriate tool. If it is a question you can answer "
+                    "directly, reply in plain text without calling a tool."
+                )
             messages = [{"role": "system", "content": system_prompt}] + list(history or []) + [
                 {"role": "user", "content": message}
-            ]
+            ] + (self._native_progress_messages(task_context) if mode == "agent_step" else [])
 
             routed = await complete_with_fallback(
                 messages,
@@ -183,7 +288,7 @@ class ToolCallPlanner:
                     except (json.JSONDecodeError, TypeError):
                         args = {}
                     if name in valid_names:
-                        calls.append(PlannedToolCall(tool=name, args=args if isinstance(args, dict) else {}))
+                        calls.append(PlannedToolCall(tool=name, args=_clean_args(schemas.get(name) or {}, args)))
                 if calls:
                     return PlannerDecision(
                         type="tool_calls",
@@ -669,9 +774,10 @@ Rules:
             args = item.get("args") or {}
             if not isinstance(args, dict):
                 raise PlannerError(f"Tool args for {name} must be an object.")
-            if self.registry.get(name) is None:
+            spec = self.registry.get(name)
+            if spec is None:
                 raise PlannerError(f"Planner requested unknown tool: {name}")
-            calls.append(PlannedToolCall(tool=name, args=args))
+            calls.append(PlannedToolCall(tool=name, args=_clean_args(_spec_schema(spec), args)))
 
         final_response = str(data.get("final_response") or "").strip()
         reason = str(data.get("reason") or "").strip()[:260]

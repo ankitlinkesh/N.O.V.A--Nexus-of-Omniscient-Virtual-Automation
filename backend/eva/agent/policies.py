@@ -274,9 +274,13 @@ def describe_tool_observation(tool: str, result: Any) -> str:
         if tool == "research_start_topic":
             return str(result.get("message") or "research_start_topic completed.")
         if tool == "desktop_observe":
-            return f"desktop_observe active={result.get('active_window_title') or 'unknown'} windows={len(result.get('open_windows') or [])}."
+            windows = result.get("open_windows") if isinstance(result.get("open_windows"), list) else []
+            head = f"desktop_observe active={result.get('active_window_title') or 'unknown'} windows={len(windows)}."
+            return "\n".join([head] + _window_lines(windows))
         if tool == "window_list":
-            return f"window_list found {len(result.get('windows') or [])} visible windows."
+            windows = result.get("windows") if isinstance(result.get("windows"), list) else []
+            head = f"window_list found {len(windows)} visible windows."
+            return "\n".join([head] + _window_lines(windows))
         if tool == "window_active":
             window = result.get("window") if isinstance(result.get("window"), dict) else {}
             return f"window_active observed {window.get('title') or 'unknown window'}."
@@ -288,6 +292,28 @@ def describe_tool_observation(tool: str, result: Any) -> str:
         if tool == "verify_last_action":
             return str(result.get("message") or ("verified" if result.get("verified") else "verification inconclusive"))
     return f"{tool} returned {str(result)[:300]}"
+
+
+def _window_lines(windows: list) -> list[str]:
+    """Name the windows an observation counted.
+
+    These two observations used to report only a COUNT ("window_list found 5
+    visible windows"), so a goal like "list the windows that are currently open"
+    was unanswerable from the observation: the tool had the titles, the summary
+    threw them away, and the model re-called the same tool looking for data that
+    was never going to arrive. Bounded to a dozen entries so a busy desktop
+    cannot flood the prompt.
+    """
+    lines: list[str] = []
+    for item in windows[:12]:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        process = str(item.get("process") or item.get("app") or item.get("process_name") or "").strip()
+        label = " - ".join(part for part in (process, title) if part)
+        if label:
+            lines.append(f"- {label[:160]}")
+    return lines
 
 
 def is_unsupported_capability(message: str) -> bool:

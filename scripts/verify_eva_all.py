@@ -124,6 +124,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase86_gate_execution.py",
     "verify_eva_phase87_power_result_honesty.py",
     "verify_eva_phase88_approved_confirmed_reinjected.py",
+    "verify_eva_phase89_native_planner_observation_arrival.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -223,6 +224,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase86_gate_execution.py",
     "verify_eva_phase87_power_result_honesty.py",
     "verify_eva_phase88_approved_confirmed_reinjected.py",
+    "verify_eva_phase89_native_planner_observation_arrival.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -286,6 +288,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase86_gate_execution.py": ("phase86", "permissions", "gate-execution", "honest-effects", "graceful-failure"),
     "verify_eva_phase87_power_result_honesty.py": ("phase87", "permissions", "confirmation", "string-result", "honest-effects"),
     "verify_eva_phase88_approved_confirmed_reinjected.py": ("phase88", "registry", "run_approved", "confirmed", "power", "message", "gate"),
+    "verify_eva_phase89_native_planner_observation_arrival.py": ("phase89", "planner", "native-function-calling", "agent-loop", "observation-arrival", "args"),
 }
 
 
