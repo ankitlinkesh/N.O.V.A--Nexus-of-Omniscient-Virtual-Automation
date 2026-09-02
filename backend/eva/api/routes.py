@@ -883,6 +883,22 @@ def _handle_capability_route(
     return None
 
 
+def _voice_output_enabled() -> bool:
+    """Whether speech output is on, read from the flag that actually governs it.
+
+    ``/api/health`` used to report ``voice_enabled`` from ``config/eva.toml``'s
+    ``[features] voice_enabled``, which defaults to false and has no other
+    consumer anywhere in the backend -- it governs nothing. The value that does
+    govern voice is ``EVA_VOICE_ENABLED``, which the same payload already
+    reported two keys lower as ``voice.enabled``. So a fully working voice stack
+    (Piper synthesising, wake word ready, speech-to-text installed) was
+    advertised as off, and ``frontend/app.js`` renders exactly that key as the
+    "Voice" status -- labelling live voice "Modular". Both keys now read one
+    source, so the readout cannot disagree with itself or with the system.
+    """
+    return os.environ.get("EVA_VOICE_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
+
+
 @router.get("/health")
 async def health(request: Request) -> dict:
     settings = request.app.state.settings
@@ -896,7 +912,7 @@ async def health(request: Request) -> dict:
         "smart_provider": settings.models.smart_provider,
         "smart_model": settings.models.smart_model,
         "screen_capture": settings.features.screen_capture,
-        "voice_enabled": settings.features.voice_enabled,
+        "voice_enabled": _voice_output_enabled(),
         "camera_always_on": settings.features.camera_always_on,
         "assistant_name": os.environ.get("EVA_ASSISTANT_NAME", ASSISTANT_NAME),
         "user_name": os.environ.get("EVA_USER_NAME", USER_NAME),
@@ -904,7 +920,7 @@ async def health(request: Request) -> dict:
         "persona_style": os.environ.get("EVA_PERSONA_STYLE", PERSONA_STYLE),
         "offline_message": f"Yo {os.environ.get('EVA_USER_NAME', USER_NAME)}, backend looks offline right now. Some controls won't work till it's back.",
         "voice": {
-            "enabled": os.environ.get("EVA_VOICE_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
+            "enabled": _voice_output_enabled(),
             "provider": os.environ.get("EVA_TTS_PROVIDER", "browser"),
             "gender": os.environ.get("EVA_VOICE_GENDER", "female"),
             "rate": float(os.environ.get("EVA_VOICE_RATE", "2.35")),
