@@ -130,6 +130,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase92_provider_rot_detection.py",
     "verify_eva_phase93_loop_exit_honesty.py",
     "verify_eva_phase94_detector_precision.py",
+    "verify_eva_phase95_tool_wire_names.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -235,6 +236,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase92_provider_rot_detection.py",
     "verify_eva_phase93_loop_exit_honesty.py",
     "verify_eva_phase94_detector_precision.py",
+    "verify_eva_phase95_tool_wire_names.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -304,6 +306,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase92_provider_rot_detection.py": ("phase92", "llm", "providers", "doctor", "router", "reachability"),
     "verify_eva_phase93_loop_exit_honesty.py": ("phase93", "agent-loop", "runner", "planner", "honesty", "arrival"),
     "verify_eva_phase94_detector_precision.py": ("phase94", "threat-defense", "detector", "false-positives", "reflection"),
+    "verify_eva_phase95_tool_wire_names.py": ("phase95", "llm", "tool-schema", "providers", "planner"),
 }
 
 

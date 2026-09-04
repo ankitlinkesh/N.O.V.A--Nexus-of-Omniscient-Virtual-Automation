@@ -44,7 +44,12 @@ def test_to_openai_tools_converts_specs():
 
     first = tools[0]
     assert first["type"] == "function"
-    assert first["function"]["name"] == "web.open_url"
+    # Phase 95: the wire name is sanitized. This line used to assert
+    # "web.open_url", i.e. it pinned the exact defect -- one dotted name in the
+    # payload makes NVIDIA NIM reject the WHOLE request with HTTP 400, so the
+    # planner could never use NIM. The tool's real name is unchanged; only what
+    # goes on the wire is, and the planner resolves it back on the way in.
+    assert first["function"]["name"] == "web_open_url"
     assert first["function"]["description"] == "Open a URL in the browser."
     assert first["function"]["parameters"] == {
         "type": "object",
@@ -52,7 +57,7 @@ def test_to_openai_tools_converts_specs():
     }
 
     second = tools[1]
-    assert second["function"]["name"] == "no.schema"
+    assert second["function"]["name"] == "no_schema"
     assert second["function"]["description"] == "Has no args_schema."
     assert second["function"]["parameters"] == {"type": "object", "properties": {}}
 

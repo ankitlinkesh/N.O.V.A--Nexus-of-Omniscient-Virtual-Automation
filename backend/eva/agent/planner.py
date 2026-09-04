@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from ..core.config import ModelSettings
 from ..llm.router import attempts_as_dicts, complete_with_fallback
-from ..llm.tool_schema import to_openai_tools
+from ..llm.tool_schema import resolve_tool_name, to_openai_tools
 from ..tools.registry import ToolRegistry
 
 DecisionType = Literal["answer", "tool_calls", "confirmation_required", "done"]
@@ -282,7 +282,13 @@ class ToolCallPlanner:
                 calls: list[PlannedToolCall] = []
                 for entry in routed.response.tool_calls:
                     fn = entry.get("function") or {}
-                    name = fn.get("name")
+                    # The model answers with the WIRE name it was given, which for
+                    # a dotted tool is `web_click`, not `web.click`. Resolve it
+                    # back BEFORE the whitelist check, or a perfectly good tool
+                    # call fails `name in valid_names` and the planner reports no
+                    # call at all. A real name resolves to itself, so this is
+                    # correct for providers that accepted the dots too.
+                    name = resolve_tool_name(fn.get("name"), specs)
                     try:
                         args = json.loads(fn.get("arguments") or "{}")
                     except (json.JSONDecodeError, TypeError):
