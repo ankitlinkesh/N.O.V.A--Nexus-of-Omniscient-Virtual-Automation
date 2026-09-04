@@ -105,6 +105,81 @@ def _compact_tool_result(result: ToolExecutionResult) -> dict[str, Any]:
     return payload
 
 
+_UNTRUSTED_OPEN = "[UNTRUSTED "
+_UNTRUSTED_CLOSE = "[END UNTRUSTED "
+_MAX_REPORTED_STEPS = 8
+_MAX_REPORTED_CHARS = 400
+
+
+def _readable_observation(observation: str) -> tuple[str, bool]:
+    """An observation as a person should read it, plus whether it was untrusted.
+
+    Tool output that came from outside is wrapped in an explicit trust-boundary
+    banner for the *model's* benefit. Showing that banner to the user is noise,
+    but silently dropping the fact that the text is external would be worse than
+    noise -- so the wrapper is stripped and the flag is returned instead.
+    """
+    text = (observation or "").strip()
+    untrusted = text.startswith(_UNTRUSTED_OPEN)
+    if untrusted:
+        _, _, rest = text.partition("]\n")
+        text = rest or text
+        cut = text.find(_UNTRUSTED_CLOSE)
+        if cut != -1:
+            text = text[:cut]
+    text = " ".join(text.split())
+    if len(text) > _MAX_REPORTED_CHARS:
+        text = text[:_MAX_REPORTED_CHARS].rstrip() + "..."
+    return text, untrusted
+
+
+def summarize_progress(task: AgentTask, reason: str) -> str:
+    """``reason`` plus what the loop actually gathered, when it stops early.
+
+    Phase 93. Every early exit in this loop set a fixed sentence, logged
+    ``task.observations`` to the event log, and showed the user none of them.
+    The step-cap one even claimed to have kept the progress -- "I reached my
+    maximum step limit, so I stopped with the progress I had." -- and then
+    reported none of it.
+
+    That was not academic. Driving "find the file that defines run_agentic_task
+    and tell me what it does", ``code_search`` returned the correct file at STEP
+    2; the loop spent four more steps, hit the cap, and returned the fixed
+    sentence while six observations -- one of them the answer -- sat in the task.
+
+    ``reason`` is kept verbatim rather than replaced, because *why* a run stopped
+    is not the same fact as *what* it found, and the caller is the only thing
+    that knows the first. Six exits share this helper and each keeps its own.
+
+    Deliberately deterministic: no LLM call. This path is reached when a run has
+    already gone wrong, and a summary that cannot fail, cannot cost quota and
+    cannot invent anything is worth more here than a fluent one. It says plainly
+    that the goal was NOT completed, so partial work is never mistaken for a
+    finished answer.
+    """
+    performed = [step for step in task.steps if step.tool_name and (step.observation or "").strip()]
+    if not performed:
+        return f"{reason} I have nothing to show for it -- none of the steps returned anything usable."
+
+    lines = [f"{reason} That is not a complete answer, but here is what I actually found:"]
+    shown = performed[:_MAX_REPORTED_STEPS]
+    for step in shown:
+        text, untrusted = _readable_observation(step.observation)
+        if not text:
+            continue
+        # "quoted output", not "external": the trust wrapper is applied to LOCAL
+        # tool results too (the banner reads UNTRUSTED TRUSTED_TOOL CONTENT), so
+        # calling a workspace search "external content" was itself a false claim
+        # -- caught by reading a real reply rather than a test.
+        marker = " (quoted output, unverified)" if untrusted else ""
+        lines.append(f"- {step.tool_name}{marker}: {text}")
+    remaining = len(performed) - len(shown)
+    if remaining > 0:
+        lines.append(f"- ...and {remaining} more step(s) not shown.")
+    lines.append("Tell me which of those to follow up on and I can go further.")
+    return "\n".join(lines)
+
+
 def _provenance_suffix(verification: dict[str, Any] | None) -> str:
     """Short suffix so Eva never narrates an unproven action as plain done.
 
@@ -392,7 +467,7 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
                 step.status = "failed"
                 step.error = "tool_limit_reached"
                 task.status = "failed"
-                task.final_response = "I stopped because the tool-call limit was reached."
+                task.final_response = summarize_progress(task, "I stopped because the tool-call limit was reached.")
                 safety_stops.append("tool_limit_reached")
                 return _return_task(task, session_context, ok=False, events=events, safety_stops=safety_stops)
 
@@ -400,7 +475,7 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
                 step.status = "failed"
                 step.error = "web_search_limit_reached"
                 task.status = "failed"
-                task.final_response = "I stopped because the web-search limit was reached."
+                task.final_response = summarize_progress(task, "I stopped because the web-search limit was reached.")
                 safety_stops.append("web_search_limit_reached")
                 return _return_task(task, session_context, ok=False, events=events, safety_stops=safety_stops)
 
@@ -416,7 +491,7 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
                     step.status = "failed"
                     step.error = "screen_capture_limit_reached"
                     task.status = "failed"
-                    task.final_response = "I stopped because the screen-capture limit was reached."
+                    task.final_response = summarize_progress(task, "I stopped because the screen-capture limit was reached.")
                     safety_stops.append("screen_capture_limit_reached")
                     return _return_task(task, session_context, ok=False, events=events, safety_stops=safety_stops)
 
@@ -433,7 +508,7 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
                 step.status = "failed"
                 step.error = "repeated_action_without_progress"
                 task.status = "failed"
-                task.final_response = "I stopped because the same action repeated without a new observation."
+                task.final_response = summarize_progress(task, "I stopped because the same action repeated without a new observation.")
                 safety_stops.append(f"repeated_action:{tool_signature(call)}")
                 return _return_task(task, session_context, ok=False, events=events, safety_stops=safety_stops)
 
@@ -595,7 +670,7 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
                     return _return_task(task, session_context, ok=False, events=events, safety_stops=safety_stops)
                 if state.stalled(max_no_progress):
                     task.status = "failed"
-                    task.final_response = "I stopped because I wasn't making progress toward the goal."
+                    task.final_response = summarize_progress(task, "I stopped because I wasn't making progress toward the goal.")
                     safety_stops.append("no_progress")
                     _safe_log(memory, session_id, "agent_task_failed", {"task_id": task.id, "reason": "no_progress", "observation": observation})
                     return _return_task(task, session_context, ok=False, events=events, safety_stops=safety_stops)
@@ -638,7 +713,11 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
                 return _finalize_success(task, state, contract, session_context, events=events, safety_stops=safety_stops, memory=memory, session_id=session_id)
 
         task.status = "failed"
-        task.final_response = "I reached my maximum step limit, so I stopped with the progress I had."
+        # Phase 93: this used to be a fixed sentence claiming "I stopped with the
+        # progress I had", while every observation went to the event log and none
+        # of it to the user. The run still FAILED -- status and safety_stops are
+        # unchanged -- but failing is not a reason to withhold work already done.
+        task.final_response = summarize_progress(task, f"I hit my {task.max_steps}-step limit before finishing.")
         safety_stops.append("max_steps_reached")
         _safe_log(memory, session_id, "agent_task_failed", {"task_id": task.id, "reason": "max_steps_reached", "observations": task.observations})
         return _return_task(task, session_context, ok=False, events=events, safety_stops=safety_stops)

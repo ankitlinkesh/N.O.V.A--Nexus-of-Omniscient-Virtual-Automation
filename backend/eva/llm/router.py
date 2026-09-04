@@ -251,10 +251,25 @@ async def _call_provider(
 ) -> tuple[LLMResponse, bool]:
     estimate = _estimated_tokens(messages, max_tokens)
     response = await provider.complete(messages, temperature=temperature, max_tokens=max_tokens, tools=tools)
-    # The planner-JSON guard only applies to the JSON-prompt path. A native
-    # function-calling response carries tool_calls (and often empty text), which
-    # is valid even though the text isn't JSON -- don't reject it.
-    if response.ok and purpose == "planner" and not response.tool_calls and not _json_is_valid(response.text):
+    # The planner-JSON guard only applies to the JSON-prompt path -- which is
+    # exactly the path that passes no `tools`. That is what the condition now
+    # says; before Phase 93 it only exempted a response CARRYING tool_calls, and
+    # a native planner has TWO valid replies. The agent-step prompt explicitly
+    # asks for the second one ("If the results you can already see answer the
+    # goal, do NOT call a tool -- reply in plain text with the final answer for
+    # the user"), and plain text is not JSON, so the model's correct final answer
+    # was rewritten into `invalid_planner_json` and thrown away on the last step
+    # of every errand. Proven with one request, same model, only purpose changed:
+    # purpose="chat" returned "Task complete."; purpose="planner" returned
+    # ok=False with the text discarded.
+    asked_for_json = tools is None
+    if (
+        response.ok
+        and purpose == "planner"
+        and asked_for_json
+        and not response.tool_calls
+        and not _json_is_valid(response.text)
+    ):
         response = LLMResponse(
             provider=response.provider,
             model=response.model,
