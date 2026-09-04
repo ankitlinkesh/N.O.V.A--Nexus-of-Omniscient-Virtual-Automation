@@ -29,6 +29,32 @@ def screen_observe(reason: str) -> dict[str, Any]:
     return {**observation.as_dict(), "ui_events": [{"type": "observing_screen", "reason": reason}]}
 
 
+def _try_vision_fallback(label: str, required_confidence: float):
+    """Look at the screen only when BOTH switches are on. Never raises.
+
+    Returns (target-or-None, report-or-None). A `None` report means vision was
+    never consulted at all, which the caller reports differently from "vision
+    looked and declined" -- an operator debugging a refusal needs to know which.
+
+    The GUI-scope requirement is the load-bearing half. `EVA_VISION_CLICK_ENABLED`
+    is a persistent operator choice, but a persistent flag alone would mean any
+    planner-reachable path could eventually cause a screenshot to be sent to
+    Google. Requiring a scope means a person typed `gui:` for this specific task.
+    """
+    try:
+        from .gui_scope import gui_scope_open
+        from .vision_click import locate_by_vision, vision_click_enabled
+
+        if not vision_click_enabled() or not gui_scope_open():
+            return None, None
+        floor = max(float(required_confidence), 0.80)
+        return locate_by_vision(label, min_confidence=floor)
+    except Exception:
+        # Fail closed and quiet: an unavailable fallback must look like "no
+        # target found", never like an error that might tempt a retry loop.
+        return None, None
+
+
 def screen_click(
     x: int | None = None,
     y: int | None = None,
@@ -60,12 +86,24 @@ def screen_click(
             }
         ui_target = resolution.target
         if ui_target is None:
-            return {
-                "ok": False,
-                "error": "ui_target_not_found",
-                "message": f"I couldn't confidently find '{label}' on the screen, so I did not click.",
-                "ui_events": [{"type": "ui_target_low_confidence", "reason": "grounding_no_match", "label": str(label)}],
-            }
+            # Phase 98 vision fallback, for apps that expose no accessibility
+            # tree at all (Electron, canvas UIs, games) -- exactly the case where
+            # there is no shell command either. Reached ONLY after the tree has
+            # declined, and only with two independent switches on: the persistent
+            # EVA_VISION_CLICK_ENABLED, and a console-opened GUI scope for this
+            # one task. Untrusted content can flip neither.
+            vision_target, vision_report = _try_vision_fallback(str(label), float(required_confidence))
+            if vision_target is not None:
+                ui_target = vision_target
+            else:
+                message = f"I couldn't confidently find '{label}' on the screen, so I did not click."
+                events: list[dict[str, Any]] = [
+                    {"type": "ui_target_low_confidence", "reason": "grounding_no_match", "label": str(label)}
+                ]
+                if vision_report is not None:
+                    message += f" Looking at the screen did not help either ({vision_report.reason or 'no match'})."
+                    events.append({"type": "vision_declined", **vision_report.as_dict()})
+                return {"ok": False, "error": "ui_target_not_found", "message": message, "ui_events": events}
     if ui_target is None:
         return {
             "ok": False,
@@ -95,6 +133,34 @@ def screen_click(
 def screen_type_text(text: str, reason: str) -> dict[str, Any]:
     if not str(reason or "").strip():
         return {"ok": False, "error": "reason_required", "message": "Typing requires an active task reason."}
+    # Phase 98: this tool types SAFE DATA only. A live secret value reaching it
+    # means the value passed through the model's context to get here, and typing
+    # it would put it on screen and into whatever field happens to be focused --
+    # which, on the vision path, may not be the field anyone intended. Secrets
+    # have their own route: `screen.submit_form` resolves a `@vault:name` AFTER
+    # approval, immediately before typing, bound to the page origin, and never
+    # places the value in the model's context at all.
+    #
+    # The error deliberately does not echo the offending text: a refusal must not
+    # become the channel that relays the secret (the Phase 68 lesson).
+    try:
+        from ..privacy.secrets_broker import contains_secret_leak
+
+        leaked = bool(contains_secret_leak(text))
+    except Exception:
+        # Fail cautious: if the check itself is unavailable, refuse rather than
+        # type something nobody could screen.
+        leaked = True
+    if leaked:
+        return {
+            "ok": False,
+            "error": "secret_value_refused",
+            "message": (
+                "That text contains a live credential, so I did not type it. Secrets go through "
+                "`fill form:` with a @vault: reference, which resolves the value after you approve "
+                "and never puts it in my context."
+            ),
+        }
     obs = screen_controller.type_text_visible(text, reason)
     return {"ok": obs.success, **obs.as_dict()}
 

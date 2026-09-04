@@ -1,0 +1,230 @@
+"""Locate a control by LOOKING at the screen, when the accessibility tree is blank.
+
+Phases 56-60 click by walking the Windows UIAutomation tree and matching a
+control's accessible name. That is exact, local and cheap, and it is blind: an
+Electron app, a canvas UI or a game exposes no named controls, so `resolve()`
+returns nothing and the click is honestly refused. For those apps there is no
+shell command either -- that is the gap this closes.
+
+**This path is strictly worse than the tree, and is only ever a fallback.** It is
+worth being explicit about what it gives up, because two of the properties the
+GUI arc was built on do not survive it:
+
+  * **A screenshot leaves the machine.** The tree path sends nothing anywhere;
+    this sends a JPEG of the whole primary screen to Google's Gemini API. Every
+    window that is open is in that image.
+  * **Coordinates are asserted by a model, not measured.** A tree target's
+    bounds are facts read from the OS; these are a guess, and a confident-sounding
+    wrong guess looks exactly like a right one.
+
+So the design is: never first, never silent, never unbounded.
+
+  * **Tree first, always.** Only called after `grounding.resolve()` has declined.
+  * **Off unless asked for.** `EVA_VISION_CLICK_ENABLED` is default-off, and the
+    caller must ALSO be inside a console-opened GUI scope, so two independent
+    switches -- one persistent, one per-task and human-typed -- stand between a
+    web page and a vision-driven click.
+  * **Bounded to the screen.** Coordinates outside the display are rejected
+    rather than clamped: a model that returns nonsense should fail, not click a
+    corner.
+  * **It declines like the tree does.** Below the confidence floor, or if the
+    model reports it cannot see the control, the answer is no target -- the same
+    "refuse rather than guess" the grounding path holds.
+  * **It says what it saw.** The returned target carries the model's own
+    description, so the reply can tell the user what was clicked and on what
+    evidence, rather than presenting a guess as a measurement.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+from dataclasses import dataclass
+from typing import Any, Callable
+
+from .ui_locator import UiTarget
+
+# Normalised coordinate space asked of the model. Models are markedly better at
+# "this is 62% across and 40% down" than at pixel counts on a screen whose size
+# they cannot know, and it makes the result resolution-independent.
+_GRID = 1000
+
+# Higher than the tree path's 0.75. A tree match at 0.75 is a real control whose
+# name merely scored imperfectly; a vision match at 0.75 is a model that is a bit
+# unsure where something is, which is a different and worse kind of uncertain.
+DEFAULT_VISION_CONFIDENCE = 0.80
+
+
+def vision_click_enabled(environ: dict[str, str] | None = None) -> bool:
+    env = environ if environ is not None else os.environ
+    raw = str(env.get("EVA_VISION_CLICK_ENABLED", "") or "").strip().lower()
+    return raw not in {"", "0", "false", "no", "off"}
+
+
+@dataclass(frozen=True)
+class VisionResolution:
+    """What the model reported, before it is trusted."""
+
+    found: bool
+    x: int = 0
+    y: int = 0
+    confidence: float = 0.0
+    description: str = ""
+    reason: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "found": self.found,
+            "x": self.x,
+            "y": self.y,
+            "confidence": self.confidence,
+            "description": self.description,
+            "reason": self.reason,
+        }
+
+
+def build_prompt(query: str) -> str:
+    """The instruction sent with the screenshot.
+
+    Asks for a refusal path explicitly: a model given only "where is X" will
+    invent a location for an X that is not there, and an invented location is the
+    one failure mode this whole module has to avoid.
+    """
+    clean = " ".join(str(query or "").split())[:200]
+    return (
+        "You are locating one on-screen control for a desktop automation agent.\n"
+        f"Find: {clean}\n\n"
+        "Reply with JSON only, no prose, in exactly this shape:\n"
+        '{"found": true|false, "x": 0-1000, "y": 0-1000, "confidence": 0.0-1.0, '
+        '"description": "what is actually at that point"}\n\n'
+        "x and y are the CENTRE of the control, on a 0-1000 grid where (0,0) is "
+        "the top-left of the image and (1000,1000) the bottom-right.\n"
+        "If you cannot see that control, reply {\"found\": false, \"confidence\": 0, "
+        '"description": "what you see instead"}. A wrong location makes the agent '
+        "click the wrong thing, so say false rather than guess. Do not describe or "
+        "transcribe anything on the screen beyond the control asked for."
+    )
+
+
+def parse_vision_reply(text: str) -> VisionResolution:
+    """Read the model's JSON. Anything malformed is a refusal, never a guess."""
+    raw = str(text or "").strip()
+    if raw.startswith("```"):
+        raw = raw.strip("`")
+        raw = re.sub(r"^json\s*", "", raw, flags=re.IGNORECASE).strip()
+    match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
+    if not match:
+        return VisionResolution(found=False, reason="unparseable_reply")
+    try:
+        data = json.loads(match.group(0))
+    except (json.JSONDecodeError, TypeError):
+        return VisionResolution(found=False, reason="unparseable_reply")
+    if not isinstance(data, dict) or not data.get("found"):
+        return VisionResolution(
+            found=False,
+            reason="model_did_not_find_it",
+            description=str(data.get("description") or "")[:200] if isinstance(data, dict) else "",
+        )
+    try:
+        x = int(float(data.get("x")))
+        y = int(float(data.get("y")))
+        confidence = float(data.get("confidence") or 0.0)
+    except (TypeError, ValueError):
+        return VisionResolution(found=False, reason="unparseable_coordinates")
+    if not (0 <= x <= _GRID and 0 <= y <= _GRID):
+        # Rejected, never clamped: a model that answers off-grid did not
+        # understand the question, and clamping would turn that into a click.
+        return VisionResolution(found=False, reason="coordinates_out_of_range")
+    return VisionResolution(
+        found=True,
+        x=x,
+        y=y,
+        confidence=max(0.0, min(1.0, confidence)),
+        description=str(data.get("description") or "")[:200],
+    )
+
+
+def to_target(
+    resolution: VisionResolution,
+    *,
+    query: str,
+    screen_width: int,
+    screen_height: int,
+    min_confidence: float = DEFAULT_VISION_CONFIDENCE,
+) -> UiTarget | None:
+    """Turn a trusted-enough reply into a clickable target, or None."""
+    if not resolution.found or resolution.confidence < float(min_confidence):
+        return None
+    if screen_width <= 0 or screen_height <= 0:
+        return None
+    x = int(resolution.x * screen_width / _GRID)
+    y = int(resolution.y * screen_height / _GRID)
+    if not (0 <= x < screen_width and 0 <= y < screen_height):
+        return None
+    return UiTarget(
+        target_id=f"vision:{abs(hash((query, x, y))) & 0xFFFFFFFF:08x}",
+        # The label records that this was SEEN, not read from the OS, so nothing
+        # downstream can mistake a model's guess for a measured control.
+        label=f"{query} (seen: {resolution.description})" if resolution.description else str(query),
+        role="vision",
+        x=x,
+        y=y,
+        width=0,
+        height=0,
+        confidence=resolution.confidence,
+        method="vision",
+    )
+
+
+def locate_by_vision(
+    query: str,
+    *,
+    min_confidence: float = DEFAULT_VISION_CONFIDENCE,
+    analyzer: Callable[[str, str], dict[str, Any]] | None = None,
+    screen_size: Callable[[], tuple[int, int]] | None = None,
+) -> tuple[UiTarget | None, VisionResolution]:
+    """Find `query` on screen by looking at it. Returns (target or None, report).
+
+    `analyzer` and `screen_size` are injectable so every branch is testable with
+    no screenshot, no network and no display.
+    """
+    try:
+        if screen_size is not None:
+            width, height = screen_size()
+        else:
+            from PIL import ImageGrab
+
+            image = ImageGrab.grab()
+            width, height = image.size
+    except Exception:
+        return None, VisionResolution(found=False, reason="no_screen_size")
+
+    try:
+        if analyzer is not None:
+            result = analyzer(build_prompt(query), "")
+        else:
+            from ..tools.registry import _analyze_screen
+
+            result = _analyze_screen(question=build_prompt(query))
+    except Exception as exc:
+        return None, VisionResolution(found=False, reason=f"vision_error:{type(exc).__name__}")
+
+    if not isinstance(result, dict) or not result.get("ok", True):
+        return None, VisionResolution(found=False, reason=str((result or {}).get("error") or "vision_failed"))
+
+    # The analyzer normalises Gemini's reply into named fields; the JSON we asked
+    # for can land in any of them depending on how it answered.
+    blob = " ".join(
+        str(result.get(key) or "")
+        for key in ("summary", "detected_text", "possible_issue", "raw", "text")
+    )
+    resolution = parse_vision_reply(blob)
+    target = to_target(
+        resolution,
+        query=query,
+        screen_width=width,
+        screen_height=height,
+        min_confidence=min_confidence,
+    )
+    return target, resolution
