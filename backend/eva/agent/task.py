@@ -97,3 +97,34 @@ class AgentTask:
             "max_web_searches": self.max_web_searches,
             "max_screen_captures": self.max_screen_captures,
         }
+
+
+_UNTRUSTED_OPEN = "[UNTRUSTED "
+_UNTRUSTED_CLOSE = "[END UNTRUSTED "
+_MAX_REPORTED_CHARS = 400
+
+
+def readable_observation(observation: str) -> tuple[str, bool]:
+    """An observation as a person should read it, plus whether it was wrapped.
+
+    Tool output is fenced in an explicit trust-boundary banner for the *model's*
+    benefit. Showing that banner to a person is noise, but silently dropping the
+    fact that the text is quoted external data would be worse than noise -- so the
+    wrapper is stripped and the flag is returned instead.
+
+    Lives here rather than in ``runner`` because ``cognition`` needs it too and
+    ``runner`` imports ``cognition``; ``task`` is imported by both and imports
+    neither.
+    """
+    text = (observation or "").strip()
+    untrusted = text.startswith(_UNTRUSTED_OPEN)
+    if untrusted:
+        _, _, rest = text.partition("]\n")
+        text = rest or text
+        cut = text.find(_UNTRUSTED_CLOSE)
+        if cut != -1:
+            text = text[:cut]
+    text = " ".join(text.split())
+    if len(text) > _MAX_REPORTED_CHARS:
+        text = text[:_MAX_REPORTED_CHARS].rstrip() + "..."
+    return text, untrusted

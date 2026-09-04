@@ -25,7 +25,7 @@ from .policies import (
     tool_signature,
 )
 from .state import AgentRunState
-from .task import AgentStep, AgentTask
+from .task import AgentStep, AgentTask, readable_observation as _readable_observation
 from ..threat_defense.authorization import authorize_action
 from ..threat_defense.taint import assess as assess_taint, source_type_for_tool, wrap_as_untrusted_data
 from ..threat_defense.tool_scope import TaskToolScope
@@ -105,32 +105,7 @@ def _compact_tool_result(result: ToolExecutionResult) -> dict[str, Any]:
     return payload
 
 
-_UNTRUSTED_OPEN = "[UNTRUSTED "
-_UNTRUSTED_CLOSE = "[END UNTRUSTED "
 _MAX_REPORTED_STEPS = 8
-_MAX_REPORTED_CHARS = 400
-
-
-def _readable_observation(observation: str) -> tuple[str, bool]:
-    """An observation as a person should read it, plus whether it was untrusted.
-
-    Tool output that came from outside is wrapped in an explicit trust-boundary
-    banner for the *model's* benefit. Showing that banner to the user is noise,
-    but silently dropping the fact that the text is external would be worse than
-    noise -- so the wrapper is stripped and the flag is returned instead.
-    """
-    text = (observation or "").strip()
-    untrusted = text.startswith(_UNTRUSTED_OPEN)
-    if untrusted:
-        _, _, rest = text.partition("]\n")
-        text = rest or text
-        cut = text.find(_UNTRUSTED_CLOSE)
-        if cut != -1:
-            text = text[:cut]
-    text = " ".join(text.split())
-    if len(text) > _MAX_REPORTED_CHARS:
-        text = text[:_MAX_REPORTED_CHARS].rstrip() + "..."
-    return text, untrusted
 
 
 def summarize_progress(task: AgentTask, reason: str) -> str:

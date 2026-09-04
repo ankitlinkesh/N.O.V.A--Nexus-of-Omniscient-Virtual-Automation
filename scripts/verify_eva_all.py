@@ -129,6 +129,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase91_clock_and_identity_scope.py",
     "verify_eva_phase92_provider_rot_detection.py",
     "verify_eva_phase93_loop_exit_honesty.py",
+    "verify_eva_phase94_detector_precision.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -233,6 +234,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase91_clock_and_identity_scope.py",
     "verify_eva_phase92_provider_rot_detection.py",
     "verify_eva_phase93_loop_exit_honesty.py",
+    "verify_eva_phase94_detector_precision.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -301,6 +303,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase91_clock_and_identity_scope.py": ("phase91", "tools", "system_time", "planner-reachability", "fast-commands", "scope"),
     "verify_eva_phase92_provider_rot_detection.py": ("phase92", "llm", "providers", "doctor", "router", "reachability"),
     "verify_eva_phase93_loop_exit_honesty.py": ("phase93", "agent-loop", "runner", "planner", "honesty", "arrival"),
+    "verify_eva_phase94_detector_precision.py": ("phase94", "threat-defense", "detector", "false-positives", "reflection"),
 }
 
 
