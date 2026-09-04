@@ -702,6 +702,36 @@ def _llm_doctor_report() -> str:
         return "I couldn't read my provider configuration just now."
 
 
+def _llm_live_probe_report() -> str:
+    """Actually call the providers and report what answers (Phase 92).
+
+    The counterpart to `_llm_doctor_report`, which is offline by design and
+    therefore cannot see a retired model. This one spends real quota, which is
+    why it is typed-console-only and never reachable from the planner.
+
+    Always runs the coroutine on its own loop in a WORKER THREAD. That is not
+    defensive boilerplate: `maybe_handle_fast_command` is called synchronously
+    from inside `async def chat`, so a running event loop is the NORMAL case in
+    the shipped app -- and both obvious spellings break exactly there while
+    passing every synchronous test. `asyncio.run` raises "cannot be called from a
+    running event loop", and `run_until_complete` on a fresh loop raises "Cannot
+    run the event loop while another loop is running". A worker thread has no
+    loop of its own, so one spelling works from the HTTP route, from a test and
+    from a script alike.
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    try:
+        from ..llm.doctor import format_live_probe, live_probe
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            report = pool.submit(lambda: asyncio.run(live_probe())).result()
+        return format_live_probe(report)
+    except Exception as exc:
+        return f"I couldn't complete the provider probe: {type(exc).__name__}: {str(exc)[:160]}"
+
+
 def _set_llm_mode_reply(mode: str) -> str:
     selected = set_llm_mode(mode)
     labels = {
@@ -3080,6 +3110,16 @@ def maybe_handle_fast_command(
 
     if normalized in {"llm doctor", "provider health", "llm health", "check providers", "provider diagnostics"}:
         return _llm_doctor_report(), "fast-command"
+
+    # Phase 92. `llm doctor` reports CONFIGURATION and says so; this is the one
+    # that answers "does any of it still work". It shipped in Phase 48 as
+    # doctor.live_probe with no caller anywhere in the repository, so the rot
+    # detector could not be run at all -- and on the day NIM's model went
+    # end-of-life, `llm doctor` reported it healthy. Exact-match only, and never
+    # planner-visible: it spends real quota, so the person who types it is the
+    # one who pays for it.
+    if normalized in {"llm probe", "llm live probe", "probe providers", "probe llm", "llm doctor live"}:
+        return _llm_live_probe_report(), "fast-command"
 
     if normalized in {"learned skills", "my skills", "skill proposals", "list learned skills"}:
         return _learned_skills_list(), "fast-command"

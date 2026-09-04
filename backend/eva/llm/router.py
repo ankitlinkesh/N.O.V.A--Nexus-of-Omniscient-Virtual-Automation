@@ -170,6 +170,13 @@ def build_provider(name: str, settings: ModelSettings) -> LLMProvider | None:
     return cls(settings) if cls else None
 
 
+# A model that is retired or misspelled, as opposed to a provider that is down.
+# NVIDIA NIM returns 410 with an "end of life" detail; most OpenAI-compatible
+# backends return 404 for an unknown model id. Both mean "this model is gone",
+# which is a fact about the MODEL, never about the provider or the key.
+_MODEL_UNAVAILABLE_STATUS = {404, 410}
+
+
 def _is_retryable_failure(response: LLMResponse) -> bool:
     if response.ok and (response.text.strip() or response.tool_calls):
         return False
@@ -313,6 +320,17 @@ async def _try_nvidia_nim_models(
         attempts.append(_attempt_from_response(response, purpose, fallback_used=bool(attempts)))
         if response.status_code in {401, 403}:
             break
+        # A model that is GONE is the strongest possible reason to try the NEXT
+        # model in this list -- and until Phase 92 it was treated as a reason to
+        # abandon the provider entirely, so the configured fallback model was
+        # never once reached. `retryable` answers "should I retry this same
+        # model?", for which 404/410 is correctly False. This loop is asking a
+        # different question -- "should I try a DIFFERENT model?" -- and had
+        # inherited the wrong answer to it. Handled here rather than inside
+        # _is_retryable_failure, which is shared with the cross-provider loop
+        # below and must keep meaning what it says.
+        if response.status_code in _MODEL_UNAVAILABLE_STATUS:
+            continue
         if not retryable:
             break
     return None

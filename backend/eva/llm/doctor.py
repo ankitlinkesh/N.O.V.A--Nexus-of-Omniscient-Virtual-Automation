@@ -126,8 +126,36 @@ def format_configuration_report(report: dict[str, Any]) -> str:
         lines.append(f"  - {provider}: {state}{extra}")
     for warning in report.get("warnings") or []:
         lines.append(f"  ! {warning}")
-    lines.append("  (Run a live probe to see which keys/models actually answer — that costs real quota.)")
+    # Phase 92: this line used to point at a live probe that had no caller, so
+    # the advice could not be followed. Name the command now that one exists.
+    lines.append("  (Type `llm probe` to see which keys/models actually answer — that costs real quota.)")
     return "\n".join(lines)
+
+
+def _nim_models_to_probe() -> list[tuple[str, str]]:
+    """(role, model) for every NIM model an operator has actually configured.
+
+    Phase 92: probing one model per provider is not enough. NIM maps a DIFFERENT
+    model to each purpose, so `openai/gpt-oss-120b` could die as the general,
+    planner AND code model while a chat-only probe of some other model reported
+    the provider healthy. Rot hides in the map, so the map is what gets probed.
+    """
+    try:
+        from .providers.nvidia_nim import nvidia_nim_role_models
+    except Exception:  # pragma: no cover - defensive
+        return []
+    roles = nvidia_nim_role_models()
+    primary = str(os.environ.get("NVIDIA_NIM_MODEL", "") or "").strip()
+    pairs: list[tuple[str, str]] = []
+    if primary:
+        pairs.append(("general", primary))
+    # embed/rerank/pii/asr/tts are not chat-completions models; probing them with
+    # a chat message would report a false failure, which is worse than no answer.
+    for role in ("planner", "code", "deep_reasoning", "vision", "screen_reason", "safety"):
+        model = str(roles.get(role) or "").strip()
+        if model:
+            pairs.append((role, model))
+    return pairs
 
 
 async def live_probe(provider_names: list[str] | None = None, *, settings: Any = None) -> dict[str, Any]:
@@ -135,12 +163,31 @@ async def live_probe(provider_names: list[str] | None = None, *, settings: Any =
 
     Opt-in and never run by default or in CI: this spends real quota. Returns
     per-provider ok/model/error. Never raises.
+
+    Phase 92 additions, both earned by a real outage: NIM's per-purpose model map
+    is probed rather than one model, and each distinct model id is called at most
+    once however many roles share it (`gpt-oss-120b` filled three).
     """
+    from ..core.config import ModelSettings
     from .router import PROVIDER_CLASSES, LLMRateLimiter, _call_provider
 
-    results: dict[str, Any] = {"network_used": True, "providers": {}}
+    # A probe that reports a HEALTHY provider as dead is worse than no probe at
+    # all, and passing settings=None did exactly that: GeminiProvider reads
+    # settings.smart_model in its constructor, so gemini came back
+    # "DID NOT ANSWER - AttributeError: 'NoneType' object has no attribute
+    # 'smart_model'" while four working keys sat right there.
+    if settings is None:
+        settings = ModelSettings()
+
+    results: dict[str, Any] = {"network_used": True, "providers": {}, "models": {}}
     names = provider_names or [p for p in PROVIDER_KEY_ENV if p != "ollama"]
     messages = [{"role": "user", "content": "Reply with exactly: ok"}]
+    # Not 16. A reasoning model spends its budget thinking before it emits any
+    # content, so a tight cap returns empty text and the probe reports a
+    # perfectly healthy provider as `empty_response` -- gemini-2.5-flash did
+    # exactly that. The probe's own parameters must not manufacture the failure
+    # it is looking for. Still small enough to be cheap.
+    probe_max_tokens = 256
     limiter = LLMRateLimiter()
 
     for name in names:
@@ -150,7 +197,7 @@ async def live_probe(provider_names: list[str] | None = None, *, settings: Any =
                 results["providers"][name] = {"ok": False, "error": "unknown provider"}
                 continue
             provider = provider_cls(settings)
-            response, _ = await _call_provider(provider, limiter, messages, purpose="chat", temperature=0.0, max_tokens=16)
+            response, _ = await _call_provider(provider, limiter, messages, purpose="chat", temperature=0.0, max_tokens=probe_max_tokens)
             results["providers"][name] = {
                 "ok": bool(getattr(response, "ok", False)),
                 "model": str(getattr(response, "model", "")),
@@ -158,13 +205,82 @@ async def live_probe(provider_names: list[str] | None = None, *, settings: Any =
             }
         except Exception as exc:
             results["providers"][name] = {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:150]}"}
+
+    if "nvidia_nim" in names and PROVIDER_CLASSES.get("nvidia_nim") is not None:
+        probed: dict[str, dict[str, Any]] = {}
+        for role, model in _nim_models_to_probe():
+            if model in probed:
+                results["models"][f"nvidia_nim:{role}"] = dict(probed[model], model=model, deduped=True)
+                continue
+            try:
+                provider = PROVIDER_CLASSES["nvidia_nim"](settings, model=model)
+                response, _ = await _call_provider(
+                    provider, limiter, messages, purpose="chat", temperature=0.0, max_tokens=probe_max_tokens
+                )
+                entry = {
+                    "ok": bool(getattr(response, "ok", False)),
+                    "status_code": getattr(response, "status_code", None),
+                    "error": str(getattr(response, "error", "") or "")[:200],
+                }
+            except Exception as exc:
+                entry = {"ok": False, "status_code": None, "error": f"{type(exc).__name__}: {str(exc)[:150]}"}
+            probed[model] = entry
+            results["models"][f"nvidia_nim:{role}"] = dict(entry, model=model, deduped=False)
     return results
+
+
+def format_live_probe(report: dict[str, Any]) -> str:
+    """Human-readable live-probe report (no secret values, ever)."""
+    lines = ["LLM live probe (real network calls were made, real quota was spent):"]
+    for provider, entry in (report.get("providers") or {}).items():
+        if entry.get("ok"):
+            lines.append(f"  - {provider}: ANSWERED as {entry.get('model') or '(model unreported)'}")
+        else:
+            lines.append(f"  - {provider}: DID NOT ANSWER — {entry.get('error') or 'no reason reported'}")
+
+    models = report.get("models") or {}
+    if models:
+        lines.append("  NVIDIA NIM per-purpose models:")
+        for label, entry in models.items():
+            role = label.split(":", 1)[-1]
+            model = entry.get("model") or "(unset)"
+            if entry.get("ok"):
+                suffix = "  (same model, not re-probed)" if entry.get("deduped") else ""
+                lines.append(f"    - {role:<14} {model}  ANSWERED{suffix}")
+            else:
+                status = entry.get("status_code")
+                # Only 404/410 are grounds for saying a model is retired. Anything
+                # else -- a timeout, a network error, a provider returning nothing
+                # -- means "did not answer just now", and saying more than that
+                # would be the probe asserting what it does not know.
+                reason = str(entry.get("error") or "").strip()
+                if status in {404, 410}:
+                    lines.append(f"    - {role:<14} {model}  FAILED [{status}] <- THIS MODEL IS GONE {reason[:120]}")
+                else:
+                    detail = reason[:120] or "no answer and no error reported (usually a timeout); model may be fine"
+                    lines.append(f"    - {role:<14} {model}  NO ANSWER — {detail}")
+
+    dead = sorted(
+        {
+            str(entry.get("model"))
+            for entry in models.values()
+            if entry.get("status_code") in {404, 410} and entry.get("model")
+        }
+    )
+    if dead:
+        lines.append(
+            "  ! Retired or unknown model id(s): "
+            + ", ".join(dead)
+            + ". Point the matching NVIDIA_NIM_*_MODEL setting at a model that exists."
+        )
+    return "\n".join(lines)
 
 
 __all__ = [
     "configuration_report",
     "format_configuration_report",
     "live_probe",
+    "format_live_probe",
     "gemini_key_names",
     "PROVIDER_KEY_ENV",
 ]

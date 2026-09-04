@@ -6,7 +6,14 @@ from ...core.config import ModelSettings
 from ._openai_compatible import OpenAICompatibleProvider
 
 
-DEFAULT_NIM_MODEL = "openai/gpt-oss-120b"
+# Phase 92: openai/gpt-oss-120b reached end of life on 2026-09-03T08:00:00Z and
+# now returns HTTP 410 Gone. It was the default here for the general, planner AND
+# code roles, so an operator with no override got a dead model for three of them.
+# nemotron-3.5-lightning was already the configured fallback and was verified on
+# 2026-09-03 to answer, to return clean text in `content` (its reasoning goes to
+# `reasoning_content`, which _openai_compatible.py ignores), and -- the check that
+# actually matters for the planner -- to emit real `tool_calls`.
+DEFAULT_NIM_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
 DEFAULT_NIM_FALLBACKS = "nvidia/nemotron-3.5-lightning-30b-a3b"
 
 
@@ -18,7 +25,7 @@ def nvidia_nim_role_models() -> dict[str, str]:
     return {
         "planner": os.environ.get("NVIDIA_NIM_PLANNER_MODEL", DEFAULT_NIM_MODEL).strip() or DEFAULT_NIM_MODEL,
         "deep_reasoning": os.environ.get("NVIDIA_NIM_DEEP_REASONING_MODEL", "deepseek-ai/deepseek-v4-pro-0813").strip(),
-        "code": os.environ.get("NVIDIA_NIM_CODE_MODEL", "openai/gpt-oss-120b").strip(),
+        "code": os.environ.get("NVIDIA_NIM_CODE_MODEL", DEFAULT_NIM_MODEL).strip(),
         "vision": os.environ.get("NVIDIA_NIM_VISION_MODEL", "meta/llama-3.2-11b-vision-instruct").strip(),
         "screen_reason": os.environ.get("NVIDIA_NIM_SCREEN_REASON_MODEL", "meta/llama-3.2-11b-vision-instruct").strip(),
         "embed": os.environ.get("NVIDIA_NIM_EMBED_MODEL", "nvidia/nemotron-3-embed-1b").strip(),
