@@ -70,3 +70,6 @@ coverage.xml
 htmlcov/
 .ruff_cache/
 .mypy_cache/
+
+# uiautomation writes this next to the CWD on any lookup timeout (Phase 97).
+@AutomationLog.txt
