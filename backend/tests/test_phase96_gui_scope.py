@@ -174,3 +174,51 @@ def test_no_registered_tool_can_open_a_scope():
     for name in ("gui_scope", "open_gui_scope", "gui.open", "gui_mode"):
         assert name not in registry._tools
     assert "open_gui_scope" not in visible_names(registry)
+
+
+# ------------------------------------------- Phase 97: the foreground lock
+
+
+def test_the_alt_tap_fallback_is_gated_on_real_input():
+    """Focus needs a real input event here, so it lives behind the real-input flag.
+
+    Measured on this hardware: the AttachThreadInput dance leaves the foreground
+    unchanged while a tap of ALT immediately before SetForegroundWindow moves it
+    every time -- Windows releases the foreground lock for a process that has
+    just received real input. A synthetic ALT is used rather than a synthetic
+    CLICK because it needs no coordinates and so cannot land on a control; there
+    is no generally safe point to click on a title bar, Chrome's being its tab
+    strip.
+    """
+    import inspect
+
+    from backend.eva.desktop import windows
+
+    source = inspect.getsource(windows._try_set_foreground)
+    assert "real_input_enabled" in source, (
+        "the ALT tap is synthetic input and must stay behind the flag that says Eva may generate it"
+    )
+    assert "keybd_event" in source
+    assert "VK_MENU" in source
+    # A click would need coordinates and could press a control, so assert no
+    # click is ever ISSUED. Checked against the calls, not the prose -- the
+    # comment above the fix explains at length why a click was rejected, so a
+    # naive search for the word "click" matches the explanation itself.
+    assert "mouse_event" not in source
+    assert "pyautogui" not in source
+    assert ".click(" not in source
+
+
+def test_focus_reports_the_verified_outcome_not_the_attempt():
+    """Phase 64's invariant, checked by BEHAVIOUR rather than by source text.
+
+    The first version of this test asserted on a source substring and broke on
+    the assignment style (`payload["error"] = ...` vs a dict literal) while the
+    property it cared about was intact. Driving the real function is both
+    stronger and not hostage to formatting.
+    """
+    from backend.eva.desktop.windows import focus_window
+
+    result = focus_window("a window that certainly does not exist anywhere")
+    assert result.get("ok") is False, "focus must never claim success for a window it did not find"
+    assert result.get("error"), "a failure must say why"

@@ -295,6 +295,37 @@ def _try_set_foreground(hwnd: int) -> None:
             # returns).
             if attached:
                 user32.AttachThreadInput(t1, t2, False)
+
+        # Phase 97 fallback. Measured on this hardware: the dance above LEFT THE
+        # FOREGROUND UNCHANGED (Chrome stayed in front, reporting nothing wrong)
+        # while a tap of ALT immediately before SetForegroundWindow moved it
+        # every time. That is the documented shape of the foreground lock --
+        # Windows releases it for a process that has just received real input --
+        # and Phase 68 had already recorded that "a real input event is not
+        # subject to that lock".
+        #
+        # ALT specifically, and deliberately not a click: it needs no
+        # coordinates, so unlike a synthetic click it cannot land on a control.
+        # There is no generally safe point to click on a title bar -- Chrome's
+        # title bar IS its tab strip -- which is why this is a keystroke.
+        # Press-and-release of ALT alone only moves menu-bar focus in the window
+        # that already had it, and the focus change that follows undoes that.
+        #
+        # Gated on the real-input flag because this IS synthetic input and that
+        # flag is exactly the operator's statement that Eva may generate it.
+        # With the flag off this block does nothing and behaviour is unchanged.
+        if user32.GetForegroundWindow() != hwnd:
+            try:
+                from ..screen.screen_controller import real_input_enabled
+
+                if real_input_enabled():
+                    VK_MENU, KEYEVENTF_KEYUP = 0x12, 0x0002
+                    user32.keybd_event(VK_MENU, 0, 0, 0)
+                    time.sleep(0.03)
+                    user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+                    user32.SetForegroundWindow(hwnd)
+            except Exception:
+                pass
     except Exception:
         # Genuinely never raise: this is best-effort, and the caller
         # independently re-checks the real result via get_active_window(), so
