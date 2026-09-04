@@ -336,7 +336,19 @@ class ToolCallPlanner:
                     continue_after_tools=False,
                 )
 
-        if self._explicit_screen_request(text):
+        # A forced decision runs BEFORE the planner is shown any tool list, so it
+        # can return a tool that `planner_specs()` deliberately excluded -- which
+        # is exactly what happened inside a GUI scope. The scope hides
+        # analyze_screen (cloud vision, override-class) and this branch forced it
+        # anyway on three consecutive live runs, copying the whole injected
+        # control list into its `question` argument, bound for Google. Same shape
+        # as Phase 95's lesson: a filter fixes nothing while another path routes
+        # around it. Inside a GUI scope the user asked for GUI actions and the
+        # local control list is already in hand, so a forced screenshot is both
+        # unwanted and, by the scope's own rules, unavailable.
+        from ..screen.gui_scope import gui_scope_open
+
+        if self._explicit_screen_request(text) and not gui_scope_open():
             raw_capture_only = any(word in text for word in ("screenshot", "capture screen", "take a screenshot")) and not any(
                 word in text for word in ("what", "tell", "analyze", "analyse", "check", "inspect", "error", "open")
             )
@@ -677,6 +689,8 @@ Rules:
 - For shutdown, restart, sleep, sign out, or log out, do not call a tool unless the user explicitly confirms in this same message. If not confirmed, use type "confirmation_required" and final_response should ask for confirmation.
 - Use analyze_screen when the user asks Eva to understand, check, inspect, analyze, or identify an error on the screen. Use capture_screen only for a raw screenshot/capture request.
 - Use system_time for the current time, date, day of the week, or timezone. Never guess the time and never open a website to read a clock.
+- If screen.click is available you have been given the list of on-screen controls. Click a label EXACTLY as it appears there. Control names are words, not symbols -- a calculator's 7 key is named "Seven" -- so a guessed label finds nothing and wastes the attempt. The app is already open and focused: do not open it again.
+- During a GUI task NEVER call analyze_screen or capture_screen. You already have the control list, those tools send a screenshot of the whole screen off this machine, and they need an override approval that will stop the task. Never copy the control list into any tool argument.
 - Use window_active/window_list for active or open window questions. Use window_focus/window_minimize/window_maximize for explicit window-management requests. Use desktop_observe for a bounded desktop state snapshot; it returns window metadata only and never a screenshot. To look at the screen use analyze_screen or capture_screen, which require the user's confirmation.
 - Use code_search, code_find_symbol, code_project_map, code_explain_feature, code_debug_traceback, or code_plan_change for codebase/symbol/implementation/debugging/patch-plan questions. These tools are read-only and do not edit files.
 - Use workspace_search, workspace_read_file, workspace_list_files, workspace_summarize_file, or workspace_project_summary for generic safe file inspection. Workspace tools are read-only.
@@ -737,6 +751,8 @@ Rules:
 - Use open_app/open_folder/open_url only for explicit desktop/navigation goals.
 - Use analyze_screen when the user explicitly asks to inspect/look/check/analyze the screen or identify a visible error. Use capture_screen only for raw screenshot capture.
 - Use system_time for the current time, date, day of the week, or timezone. Never guess the time and never open a website to read a clock.
+- If screen.click is available you have been given the list of on-screen controls. Click a label EXACTLY as it appears there. Control names are words, not symbols -- a calculator's 7 key is named "Seven" -- so a guessed label finds nothing and wastes the attempt. The app is already open and focused: do not open it again.
+- During a GUI task NEVER call analyze_screen or capture_screen. You already have the control list, those tools send a screenshot of the whole screen off this machine, and they need an override approval that will stop the task. Never copy the control list into any tool argument.
 - Use window_active/window_list for active or open window questions. Use window_focus/window_minimize/window_maximize for explicit window-management steps. Use verify_last_action after desktop actions when the task depends on knowing whether an action succeeded.
 - Use code tools for Eva codebase questions. Prefer code_explain_feature for "where is X implemented", code_project_map for architecture/project map, code_find_symbol for symbol lookup, code_debug_traceback for pasted errors, and code_plan_change for requested patch plans.
 - Use workspace tools for generic safe file reads/listing. Use workspace_read_file only when a relative file path is explicit.

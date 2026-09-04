@@ -1591,6 +1591,28 @@ class ToolRegistry:
         # them (their specs are only present in self._tools when enabled+configured).
         specs.extend(self._public_spec(self._tools[name]) for name in sorted(self._tools) if name.startswith("mcp."))
 
+        # Phase 96. The GUI tools are visible ONLY while a human has a GUI scope
+        # open, and only the typed console can open one. Note what this is NOT:
+        # no environment flag turns it on, no tool argument reaches it, and
+        # nothing the model emits can open a scope. Outside a scope this adds
+        # nothing and `screen.*` is exactly as invisible as it has always been --
+        # which is what test_planner_reachability.py still asserts by default.
+        from ..screen.gui_scope import GUI_SCOPE_HIDDEN, GUI_SCOPE_TOOLS, gui_scope_open
+
+        if gui_scope_open():
+            specs.extend(
+                self._public_spec(self._tools[name]) for name in GUI_SCOPE_TOOLS if name in self._tools
+            )
+            # And REMOVE the cloud-vision screen tools for the duration. Told in
+            # the system prompt not to call analyze_screen during a GUI task, the
+            # model called it anyway, three runs running -- it is the obvious tool
+            # for "look at the screen" and a rule is not an enforcement. Inside a
+            # scope the agent already has the control list and a local
+            # screen.observe, so this removes nothing it needs while making the
+            # wrong choice unavailable rather than merely discouraged. A scope is
+            # strictly narrower than no scope on this axis.
+            specs = [spec for spec in specs if spec["name"] not in GUI_SCOPE_HIDDEN]
+
         return specs
 
     def get(self, name: str) -> ToolSpec | None:
@@ -1673,6 +1695,30 @@ class ToolRegistry:
                 }
         else:
             role_tier = None
+
+        # Phase 96 GUI scope budget. Counted here, where a tool actually RUNS,
+        # so the budget measures actions taken rather than actions planned -- a
+        # plan that never executes should not burn the window. Only counts the
+        # tools a scope grants: a scope-opened task calling `status` or
+        # `window_list` is not spending GUI actions.
+        from ..screen.gui_scope import GUI_SCOPE_TOOLS as _GUI_TOOLS
+        from ..screen.gui_scope import budget_remaining as _gui_remaining
+        from ..screen.gui_scope import gui_scope_open as _gui_open
+        from ..screen.gui_scope import record_action as _gui_record
+
+        if name in _GUI_TOOLS and _gui_open():
+            if _gui_remaining() <= 0:
+                return {
+                    "ok": False,
+                    "error": "gui_scope_budget_exhausted",
+                    "tool": name,
+                    "message": (
+                        f"This GUI task has used its action budget, so I stopped instead of continuing "
+                        f"to click. Nothing further was done. Start a new `gui:` task if you want me to "
+                        f"carry on."
+                    ),
+                }
+            _gui_record()
 
         decision = tool_gate.classify_tool_call(spec)
         # Flight recorder: record the gate's classification. Inert (no-op, no
