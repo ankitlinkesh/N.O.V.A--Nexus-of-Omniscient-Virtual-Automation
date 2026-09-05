@@ -74,6 +74,17 @@ def _observed(observation_or_tool_result: Any) -> dict[str, Any]:
     }
 
 
+def is_youtube_player_url(url: str) -> bool:
+    """Whether this URL is a page that actually plays something.
+
+    `/results?search_query=...` is not, however much its title says "YouTube".
+    Shorts and youtu.be links are, and a playlist watch URL is a `/watch` with
+    extra parameters, so it is covered by the first test.
+    """
+    text = str(url or "").lower()
+    return "/watch" in text or "/shorts/" in text or "youtu.be/" in text
+
+
 def verify_target(context: TaskContext | None, observation_or_tool_result: Any) -> TargetVerificationResult:
     if context is None:
         return TargetVerificationResult(
@@ -137,7 +148,17 @@ def verify_target(context: TaskContext | None, observation_or_tool_result: Any) 
     platform = str(expected.get("platform") or "").lower()
     if platform == "youtube":
         if context.needs_activation:
-            ok = "youtube.com" in observed_domain and ("/watch" in observed_url or "youtube" in observed_title.lower())
+            # `needs_activation` means the user asked for something to PLAY, so
+            # only a player URL counts. The old test also accepted
+            # `"youtube" in observed_title`, which EVERY YouTube page satisfies --
+            # the search results page is titled "pavazhamalli - YouTube" -- so the
+            # watch-page half could never decide anything. Asked to play a song,
+            # Eva activated nothing, sat on the results page, and reported "Done,
+            # I opened the top YouTube result". A check that cannot fail is not a
+            # check, and this one turned a plain failure into a success claim.
+            # The title says which SITE you are on; only the URL says whether
+            # anything is playing.
+            ok = "youtube.com" in observed_domain and is_youtube_player_url(observed_url)
             return TargetVerificationResult(
                 ok,
                 0.85 if ok else 0.45,

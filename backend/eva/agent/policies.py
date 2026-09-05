@@ -146,9 +146,61 @@ def agentic_goal(message: str) -> str:
     return clean
 
 
+# Words that begin a request for something to HAPPEN or be ANSWERED. Used only to
+# decide whether a clause is a request at all, never to choose a tool.
+_REQUEST_OPENERS = (
+    "open", "play", "pause", "stop", "close", "search", "find", "look", "show", "tell",
+    "give", "read", "write", "send", "click", "type", "start", "run", "check", "list",
+    "summarize", "summarise", "explain", "make", "set", "turn", "mute", "unmute", "skip",
+    "next", "focus", "minimize", "maximize", "what", "which", "where", "when", "who", "how",
+    "is", "are", "do", "does", "can",
+)
+
+# The ways a person joins two requests in one sentence.
+_CLAUSE_SPLITTERS = (" and then ", ", then ", " then ", " and ", "; ", " & ")
+
+
+def _is_request_clause(part: str) -> bool:
+    words = part.strip().split()
+    return bool(words) and words[0].strip(",.!?") in _REQUEST_OPENERS
+
+
+def asks_for_more_than_one_thing(message: str) -> bool:
+    """True when one message contains two or more separate requests.
+
+    The single-turn planner returns ONE tool call, so "open youtube and play
+    pavazhamalli" came back as `chrome_activate_top_youtube_result` alone --
+    activate a result with nothing searched -- and the user watched YouTube open
+    and stop. The agent loop plans that same request correctly (open, search,
+    then activate); it was simply never routed there, because `is_agentic_intent`
+    matched only fixed prefixes and topic keywords and this phrasing has none.
+
+    Deliberately structural rather than one more keyword: it splits on the ways
+    people join requests and asks whether BOTH halves are themselves requests.
+    "tell me about cats and dogs" splits into "tell me about cats" and "dogs" --
+    the second opens with no request word, so it stays single-turn and costs one
+    LLM call exactly as before. "what time is it and what app is in the
+    foreground" yields two question clauses and becomes a task, which is the
+    other reported failure of this same shape.
+    """
+    text = " ".join(str(message or "").lower().strip().split())
+    if not text:
+        return False
+    for splitter in _CLAUSE_SPLITTERS:
+        if splitter not in text:
+            continue
+        parts = [p for p in text.split(splitter) if p.strip()]
+        if len(parts) >= 2 and sum(1 for p in parts if _is_request_clause(p)) >= 2:
+            return True
+    return False
+
+
 def is_agentic_intent(message: str) -> bool:
     text = " ".join(message.lower().strip().split())
     if any(text.startswith(prefix) for prefix in AGENTIC_PREFIXES):
+        return True
+    # A message asking for two things needs a loop that can take two steps.
+    if asks_for_more_than_one_thing(text):
         return True
     if text.startswith(("find ", "search ", "look up ")) and "summarize" in text:
         return True

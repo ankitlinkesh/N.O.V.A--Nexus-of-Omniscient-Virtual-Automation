@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from typing import Any
 
 from ..agent.target_verifier import verify_target
@@ -195,10 +197,21 @@ def chrome_search_site(site: str, query: str, play: bool = False) -> dict[str, A
         last_tool="chrome_search_site",
         provenance="chrome_web_app",
     )
-    result = open_url_in_chrome(search_url)
-    activation = None
-    if bool(play) and str(site or "").strip().lower() in {"youtube", "you tube"}:
-        activation = activate_top_youtube_result(clean_query)
+    wants_play = bool(play) and str(site or "").strip().lower() in {"youtube", "you tube"}
+
+    # When the ask is "play X", go STRAIGHT to the video. Opening the results
+    # page first and then the watch page left the user with two tabs of the same
+    # song -- the search page was only ever a stepping stone to a click that no
+    # longer happens, so once a watch URL resolves there is nothing to search
+    # for. The results page is still opened when resolution fails, because then
+    # the keyboard fallback needs it.
+    watch_url = _resolve_youtube_watch_url(clean_query) if wants_play else None
+    if watch_url:
+        result = open_url_in_chrome(watch_url)
+        activation = _confirm_youtube_playback(watch_url, clean_query) if _ok_dict(result) else None
+    else:
+        result = open_url_in_chrome(search_url)
+        activation = activate_top_youtube_result(clean_query) if wants_play else None
     if activation is not None and activation.get("verified"):
         message = str(activation.get("message") or f"Done, I opened the top YouTube result for {clean_query}.")
     elif activation is not None:
@@ -227,10 +240,156 @@ def search_site_and_verify(site: str, query: str) -> dict[str, Any]:
     return {**result, "target_verification": verification}
 
 
+_YOUTUBE_HOSTS = frozenset({"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"})
+
+
+def _is_youtube_watch_url(url: str) -> bool:
+    """A player URL, on a YouTube host. Both halves matter.
+
+    The host check is the security half: candidate URLs come from a web search,
+    which is untrusted content, and "the top result for what the user asked for"
+    is exactly the position an attacker would want to occupy. Restricting to
+    YouTube's own hosts means a poisoned result can at worst send the user to the
+    wrong VIDEO, never to an arbitrary site.
+    """
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(str(url or ""))
+    except Exception:
+        return False
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    host = (parsed.hostname or "").lower()
+    if host not in _YOUTUBE_HOSTS:
+        return False
+    path_and_query = f"{parsed.path}?{parsed.query}".lower()
+    return host == "youtu.be" or "/watch" in path_and_query or "/shorts/" in path_and_query
+
+
+def _resolve_youtube_watch_url(query: str) -> str | None:
+    """Find a real watch URL, so playing needs no clicking at all.
+
+    The keyboard route below sends one TAB then ENTER, which on a YouTube results
+    page lands on "Skip navigation" rather than the first video -- measured, it
+    activated nothing every time while reporting ok. Rather than guess at a tab
+    count that changes whenever YouTube reshuffles its layout, resolve the video
+    by search and open its URL: deterministic, verifiable (the URL either is a
+    player page or is not), and it needs no synthetic input at all.
+    """
+    try:
+        from ..tools.tavily_search import tavily_search_sync
+
+        result = tavily_search_sync(f"{query} site:youtube.com")
+    except Exception:
+        return None
+    if not isinstance(result, dict) or not result.get("ok"):
+        return None
+    for item in result.get("results") or []:
+        url = str((item or {}).get("url") or "")
+        if _is_youtube_watch_url(url):
+            return url
+    return None
+
+
+def _ok_dict(result: Any) -> bool:
+    return isinstance(result, dict) and bool(result.get("ok"))
+
+
+def _await_player_url(timeout: float = 6.0, interval: float = 0.4) -> dict[str, Any]:
+    """Read the live URL, giving Chrome time to actually navigate first.
+
+    The first version read it immediately after opening the tab and usually saw
+    the PREVIOUS page, so a video that opened fine was reported as "I couldn't
+    confirm it is playing". That is not a cautious verification, it is a race:
+    the answer depended on whether Chrome had finished navigating within a few
+    milliseconds. Polling until the URL becomes a player -- or the timeout
+    expires -- makes an unverified result mean "it really did not get there",
+    which is the only thing a caution is worth reporting for.
+    """
+    from ..agent.target_verifier import is_youtube_player_url
+
+    deadline = time.monotonic() + max(0.0, float(timeout))
+    observed = discover_current_url()
+    while time.monotonic() < deadline:
+        if is_youtube_player_url(str((observed or {}).get("url") or "")):
+            return observed
+        time.sleep(interval)
+        observed = discover_current_url()
+    return observed
+
+
+def _confirm_youtube_playback(watch_url: str, query: str) -> dict[str, Any]:
+    """Record and verify that the player page is really what is open now."""
+    observed = _await_player_url()
+    context = update_task_context(
+        active_intent="play",
+        target_platform="youtube",
+        target_query=query,
+        target_domain="youtube.com",
+        target_url=watch_url,
+        expected_result="youtube watch page or visible player",
+        needs_activation=True,
+        last_action="open_youtube_watch_url",
+        last_tool="chrome_activate_top_youtube_result",
+        last_observation=observed,
+    )
+    verification = verify_target(context, observed)
+    return {
+        "ok": True,
+        "activated": True,
+        "method": "resolved_watch_url",
+        "watch_url": watch_url,
+        "verified": verification.verified,
+        "observed_url": str((observed or {}).get("url") or ""),
+        "message": (
+            f"Playing the top YouTube result for {query}."
+            if verification.verified
+            else f"I opened a YouTube video page for {query}, but could not confirm the player state."
+        ),
+        "ui_events": [
+            {"type": "locating_ui_target", "target": "top_youtube_result"},
+            {"type": "executing_visible_action", "action": "open_watch_url"},
+        ],
+    }
+
+
 def activate_top_youtube_result(query: str, task_id: str | None = None) -> dict[str, Any]:
     clean = " ".join(str(query or "").strip().split())
     if not clean:
         return {"ok": False, "error": "query_required", "message": "I need a YouTube query before activating a result."}
+
+    # Resolve-and-open first, because it actually works where the keyboard route
+    # never did. The keyboard attempt is kept below as the fallback for when no
+    # watch URL can be resolved (no search provider configured, or nothing but
+    # playlist and channel links came back).
+    # Already playing? Then do nothing. Without this, a caller that searches with
+    # play=True and then also calls this tool opens the SAME video in a second
+    # tab -- which is exactly what the user saw: "it worked but nova opened two
+    # tabs playing the same song". Opening a tab is not idempotent, so the check
+    # has to happen before the open, not be cleaned up after it.
+    from ..agent.target_verifier import is_youtube_player_url
+
+    current = discover_current_url()
+    current_url = str((current or {}).get("current_url") or (current or {}).get("url") or "")
+    if is_youtube_player_url(current_url):
+        return {
+            "ok": True,
+            "activated": True,
+            "method": "already_playing",
+            "watch_url": current_url,
+            "verified": True,
+            "observed_url": current_url,
+            "message": f"That is already playing for {clean}; I left it alone rather than opening it twice.",
+            "ui_events": [{"type": "verifying_target", "target": {"platform": "youtube", "query": clean}}],
+        }
+
+    watch_url = _resolve_youtube_watch_url(clean)
+    if watch_url:
+        opened = open_url_in_chrome(watch_url)
+        if _ok_dict(opened):
+            return _confirm_youtube_playback(watch_url, clean)
+
     action = chrome_activate_first_visible_result()
     if not action.get("ok"):
         return {
