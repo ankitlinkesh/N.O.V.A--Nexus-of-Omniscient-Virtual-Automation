@@ -42,8 +42,12 @@ Two properties carry the fix:
     served, because the browser was still running the copy cached under the
     unchanged version string.
 
-Every check is mutation-tested against an in-memory copy of the source: the
+Every source-level check is mutation-tested against an in-memory copy: the
 mutation is applied, the check must go red, and the original is never written.
+The two behavioural checks are not mutated but driven -- the serving-model
+readout against a fabricated router status, and the cache stamp against a real
+asset appearing on disk -- because a mutation of those would only restate the
+source text they are deliberately not reading.
 Fully offline: no network, no LLM, no provider, no browser.
 """
 
