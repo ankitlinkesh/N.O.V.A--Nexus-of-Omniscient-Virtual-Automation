@@ -1,8 +1,9 @@
 ﻿import asyncio
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import router
@@ -163,6 +164,30 @@ def create_app() -> FastAPI:
     _start_background_scheduler_if_enabled(app)
     app.include_router(router, prefix="/api")
     app.include_router(get_control_center_routes())
+    # Phase 102: serve index.html with a cache-buster derived from the assets
+    # themselves. It was hand-written as `?v=orb-v2` on three tags, and nobody
+    # bumps a constant -- so an edited app.js never reached a returning browser.
+    # Not hypothetical: a fix made minutes earlier was invisible in the UI while
+    # curl showed the new file being served, because the browser was still
+    # running the copy it had cached under the unchanged version string.
+    # Stamping from the newest asset mtime makes the query change exactly when
+    # the assets do, and never needs remembering.
+    @app.get("/", include_in_schema=False)
+    async def index() -> Response:
+        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+        try:
+            newest = max(
+                path.stat().st_mtime
+                for path in FRONTEND_DIR.glob("*.*")
+                if path.suffix in {".js", ".css"}
+            )
+            stamp = f"{int(newest):x}"
+        except Exception:
+            # Fail toward MORE cache-busting, never less: an unreadable mtime
+            # must not quietly restore the stale-forever behaviour.
+            stamp = uuid4().hex[:12]
+        return HTMLResponse(html.replace("v=orb-v2", f"v={stamp}"))
+
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
     return app
 

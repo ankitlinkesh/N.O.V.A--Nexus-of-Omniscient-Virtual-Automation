@@ -899,15 +899,54 @@ def _voice_output_enabled() -> bool:
     return os.environ.get("EVA_VOICE_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
 
 
+def _serving_model_fields() -> dict[str, object]:
+    """The provider/model a request would actually be served by, right now.
+
+    Reads the router's live view -- the provider order, which providers have
+    keys, and NVIDIA's per-purpose map -- rather than a static settings field.
+    The first configured provider in the order is the one that answers, so that
+    is what the status readout names.
+
+    Fails soft into the honest answer: if the router cannot be read, say unknown
+    rather than name a model on no evidence, which is the mistake being fixed.
+    """
+    try:
+        from ..llm.router import get_llm_status
+
+        status = get_llm_status()
+        order = list(status.get("provider_order") or [])
+        keys = status.get("configured_keys") or {}
+        models = status.get("models") or {}
+        serving = next((name for name in order if keys.get(name)), None)
+        if not serving:
+            return {"model": "none configured", "serving_provider": "none", "fast_model": "none configured"}
+        model = str(models.get(serving) or "unknown")
+        if serving == "nvidia_nim":
+            model = str((status.get("nvidia_nim") or {}).get("primary_model") or model)
+        return {"model": model, "serving_provider": serving, "fast_model": model}
+    except Exception:
+        return {"model": "unknown", "serving_provider": "unknown", "fast_model": "unknown"}
+
+
 @router.get("/health")
 async def health(request: Request) -> dict:
     settings = request.app.state.settings
     return {
         "ok": True,
         "name": "Eva",
-        "model": settings.models.ollama_model,
-        "fast_model": settings.models.fast_model,
-        "deep_model": settings.models.deep_model,
+        # Phase 102: report the model that would actually SERVE a request, not a
+        # static config field. `model` used to be `settings.models.ollama_model`,
+        # so Settings displayed "qwen2.5:1.5b / mistral:7b" -- the local Ollama
+        # fallbacks, LAST in the provider order, which had not served a single
+        # request all session -- while every answer came from nvidia_nim/nemotron.
+        # The same defect Phase 90 fixed two keys away in this very payload: a
+        # health field reporting configuration with no relation to what runs.
+        # `configured_*` keeps the old values under an honest name, since the
+        # local fallbacks really are configured and really would serve if the
+        # cloud providers were all unavailable.
+        **_serving_model_fields(),
+        "configured_local_model": settings.models.ollama_model,
+        "configured_deep_model": settings.models.deep_model,
         "smart_enabled": settings.models.smart_enabled,
         "smart_provider": settings.models.smart_provider,
         "smart_model": settings.models.smart_model,
@@ -922,7 +961,12 @@ async def health(request: Request) -> dict:
         "voice": {
             "enabled": _voice_output_enabled(),
             "provider": os.environ.get("EVA_TTS_PROVIDER", "browser"),
-            "gender": os.environ.get("EVA_VOICE_GENDER", "female"),
+            # Phase 102: male, matching the persona and the voice actually
+            # installed. This defaulted to "female" while EVA_TTS_PROVIDER=piper
+            # points at `en_US-ryan-high.onnx` -- a MALE model -- so the config
+            # contradicted itself and the UI honoured the wrong half, selecting
+            # Microsoft Zira.
+            "gender": os.environ.get("EVA_VOICE_GENDER", "male"),
             "rate": float(os.environ.get("EVA_VOICE_RATE", "2.35")),
             "pitch": float(os.environ.get("EVA_VOICE_PITCH", "1.04")),
             "volume": float(os.environ.get("EVA_VOICE_VOLUME", "1.0")),
@@ -930,7 +974,9 @@ async def health(request: Request) -> dict:
                 item.strip()
                 for item in os.environ.get(
                     "EVA_PREFERRED_VOICES",
-                    "Microsoft Aria Online,Microsoft Jenny Online,Microsoft Sonia Online,Microsoft Ava Online,Google US English Female,Google UK English Female,Samantha,Jenny,Aria",
+                    # Male browser voices, for the fallback case where Piper is
+                    # unavailable. The old list was entirely female.
+                    "Microsoft Guy Online,Microsoft Ryan Online,Microsoft Andrew Online,Microsoft Brian Online,Google US English Male,Microsoft David,Microsoft Mark,Daniel,Alex",
                 ).split(",")
                 if item.strip()
             ],

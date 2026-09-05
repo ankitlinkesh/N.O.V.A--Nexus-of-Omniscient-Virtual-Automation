@@ -39,7 +39,11 @@ const researchDbStatus = document.querySelector("#researchDbStatus");
 
 let sessionId = localStorage.getItem("eva-session-id") || null;
 const HIDE_AGENT_TRACE_BY_DEFAULT = true;
-const VOICE_PROFILE_VERSION = "soft-stable-v2-browser-default";
+// Phase 102: bumped so the stale female voice and the stale "browser" TTS
+// provider are cleared from browsers that already stored them. Fixing the
+// defaults only fixes a profile that has never run NOVA; every existing one
+// reads localStorage first and would keep the old choice forever.
+const VOICE_PROFILE_VERSION = "male-persona-v3-piper-default";
 const DEFAULT_VOICE_RATE = 1.08;
 const DEFAULT_VOICE_PITCH = 1.02;
 const DEFAULT_VOICE_VOLUME = 0.82;
@@ -70,12 +74,21 @@ let voiceSettings = {
   rate: DEFAULT_VOICE_RATE,
   pitch: DEFAULT_VOICE_PITCH,
   volume: DEFAULT_VOICE_VOLUME,
+  // Phase 102: male, matching the persona and the installed Piper model. This
+  // was a female list and it is used BEFORE /api/health resolves -- the browser
+  // fires `voiceschanged` and a voice is locked in before the backend's
+  // preferences ever arrive, so the client default is what actually decided the
+  // voice. Third place the same preference was written down, and the three
+  // disagreed.
   preferredVoices: [
-    "Microsoft Aria Online",
-    "Microsoft Jenny Online",
-    "Microsoft Zira",
-    "Google US English",
-    "Samantha",
+    "Microsoft Guy Online",
+    "Microsoft Ryan Online",
+    "Microsoft Andrew Online",
+    "Microsoft David",
+    "Microsoft Mark",
+    "Google US English Male",
+    "Daniel",
+    "Alex",
   ],
 };
 let availableVoices = [];
@@ -267,9 +280,15 @@ function voiceLooksPreferred(voice) {
   return voiceSettings.preferredVoices.some((name) => haystack.includes(name.toLowerCase()));
 }
 
-function voiceLooksFemaleEnglish(voice) {
+// Phase 102: NOVA's persona is male and the installed Piper model is
+// `en_US-ryan-high`, a male voice. This ranked FEMALE English voices above
+// everything but the preferred list, which is why Zira kept winning even after
+// the preferred names were changed to male ones -- the preference was expressed
+// in two places and they disagreed. Only used to pick a browser fallback voice;
+// Piper is unaffected.
+function voiceLooksMaleEnglish(voice) {
   const name = `${voice.name} ${voice.voiceURI}`.toLowerCase();
-  return /^en/i.test(voice.lang || "") && /(jenny|aria|zira|samantha|female|natural|neural|susan|hazel)/i.test(name);
+  return /^en/i.test(voice.lang || "") && /(david|mark|guy|ryan|andrew|brian|male|daniel|alex|george)/i.test(name);
 }
 
 function selectDefaultVoice() {
@@ -279,8 +298,8 @@ function selectDefaultVoice() {
   return [...availableVoices].sort((a, b) => {
     const preferredDelta = Number(voiceLooksPreferred(b)) - Number(voiceLooksPreferred(a));
     if (preferredDelta) return preferredDelta;
-    const femaleDelta = Number(voiceLooksFemaleEnglish(b)) - Number(voiceLooksFemaleEnglish(a));
-    if (femaleDelta) return femaleDelta;
+    const genderDelta = Number(voiceLooksMaleEnglish(b)) - Number(voiceLooksMaleEnglish(a));
+    if (genderDelta) return genderDelta;
     return voiceQualityScore(b) - voiceQualityScore(a);
   })[0];
 }
@@ -329,10 +348,15 @@ function populateVoices() {
   }
 }
 
-function setTtsProvider(provider, piperConfig = null) {
+// `persist` is false when APPLYING a default and true when the user actually
+// picks an engine. Without that distinction this wrote to localStorage on every
+// call, so the very first page load stored the default and that stored value
+// then shadowed the backend's configured provider forever -- an accidental
+// first-load write is indistinguishable from a real preference once saved.
+function setTtsProvider(provider, piperConfig = null, persist = false) {
   const clean = provider === "piper" ? "piper" : "browser";
   ttsProvider = clean;
-  localStorage.setItem("eva-tts-provider", clean);
+  if (persist) localStorage.setItem("eva-tts-provider", clean);
   if (ttsProviderSelect) {
     ttsProviderSelect.value = clean;
     const piperOption = ttsProviderSelect.querySelector('option[value="piper"]');
@@ -341,6 +365,8 @@ function setTtsProvider(provider, piperConfig = null) {
       piperOption.disabled = !available;
       piperOption.textContent = available ? "Piper offline" : "Piper offline (missing files)";
       if (!available && clean === "piper") {
+        // A real downgrade, so it is recorded whether or not this call persists:
+        // Piper's files are genuinely missing on this machine.
         ttsProvider = "browser";
         ttsProviderSelect.value = "browser";
         localStorage.setItem("eva-tts-provider", "browser");
@@ -368,8 +394,14 @@ function applyVoiceSettings(config = {}) {
   if (voicePitch) voicePitch.value = voiceSettings.pitch;
   if (voiceVolume) voiceVolume.value = voiceSettings.volume;
   if (voiceStatus) voiceStatus.textContent = voiceSettings.enabled ? "On" : "Off";
-  // Browser speech starts fastest and uses the locked soft female voice; Piper stays opt-in.
-  setTtsProvider(localStorage.getItem("eva-tts-provider") || "browser", config.piper || null);
+  // Phase 102: follow the backend's configured provider. This was hardcoded to
+  // "browser" -- see the old comment, "the locked soft female voice" -- while
+  // EVA_TTS_PROVIDER said "piper" and piper.runtime_ready was true, so NOVA
+  // shipped speaking as Microsoft Zira through the OS instead of as itself,
+  // locally. A stored user choice still wins; setTtsProvider already downgrades
+  // to browser on its own when Piper's files are missing, so honouring the
+  // backend cannot leave this pointing at a dead engine.
+  setTtsProvider(localStorage.getItem("eva-tts-provider") || config.provider || "browser", config.piper || null);
   populateVoices();
 }
 
@@ -971,7 +1003,7 @@ voiceToggle?.addEventListener("change", () => {
 });
 
 ttsProviderSelect?.addEventListener("change", () => {
-  setTtsProvider(ttsProviderSelect.value);
+  setTtsProvider(ttsProviderSelect.value, null, true);
 });
 
 voiceSelect?.addEventListener("change", () => {
