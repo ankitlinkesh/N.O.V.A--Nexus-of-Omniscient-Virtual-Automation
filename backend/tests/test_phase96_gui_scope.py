@@ -219,6 +219,11 @@ def test_focus_reports_the_verified_outcome_not_the_attempt():
     """
     from backend.eva.desktop.windows import focus_window
 
-    result = focus_window("a window that certainly does not exist anywhere")
+    # A query with no real word in it. The first version used "a window that
+    # certainly does not exist anywhere" and passed until the day `find_window`
+    # matched the word "window" against WindowsTerminal.exe and focused the
+    # terminal -- a test whose own input could match a real window was never
+    # testing the not-found path, it was testing whatever happened to be open.
+    result = focus_window("zzqx-no-such-window-7f3a9c14")
     assert result.get("ok") is False, "focus must never claim success for a window it did not find"
     assert result.get("error"), "a failure must say why"

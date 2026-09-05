@@ -74,3 +74,32 @@ class NvidiaNIMProvider(OpenAICompatibleProvider):
         super().__init__(settings)
         if model:
             self.model = model
+
+    def extra_payload(self, tools: list[dict[str, object]] | None) -> dict[str, object]:
+        """Turn nemotron's visible thinking off -- but ONLY when it has no tools.
+
+        nemotron-3.5-lightning is a reasoning model. Asked to write one sentence
+        from tool results it spends its budget thinking, and a user saw the
+        result: NOVA answered "Here's a thinking process: 1. **Analyze User
+        Input:** ..." instead of the time. The same call shape sometimes returns
+        EMPTY content instead, which reads as a provider failure and falls
+        through to gemini -- two faces of one cause.
+
+        `chat_template_kwargs={"thinking": False}` removes it cleanly: measured,
+        reasoning drops from 612 characters to 0 while content stays
+        "It's 9:14 AM on Friday."
+
+        **Gated on `tools`, because turning thinking off BREAKS TOOL CALLING --
+        and breaks it in the worst possible way.** Measured on the identical
+        request: with thinking on the model calls `system_time`; with it off it
+        emits no tool call and answers "The current time is 12:34 PM", a time it
+        invented. A planner that fabricates rather than reading the clock is far
+        worse than a chatty one, so the planner keeps its reasoning and only the
+        tool-free synthesis calls lose it.
+
+        Harmless where unsupported: llama-3.2-vision and the content-safety model
+        both answer normally with the field present.
+        """
+        if tools:
+            return {}
+        return {"chat_template_kwargs": {"thinking": False}}

@@ -29,6 +29,16 @@ class OpenAICompatibleProvider:
     def available(self) -> bool:
         return bool(self.api_key)
 
+    def extra_payload(self, tools: list[dict[str, Any]] | None) -> dict[str, Any]:
+        """Provider-specific request fields. Empty for a generic backend.
+
+        Takes `tools` because whether a request carries them can change what the
+        model should be asked to do -- see NvidiaNIMProvider, where a reasoning
+        model must keep thinking to plan a tool call but must not think when it
+        is only writing a sentence.
+        """
+        return {}
+
     async def complete(
         self,
         messages: list[Message],
@@ -47,6 +57,7 @@ class OpenAICompatibleProvider:
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
+        payload.update(self.extra_payload(tools))
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0)) as client:
                 response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
