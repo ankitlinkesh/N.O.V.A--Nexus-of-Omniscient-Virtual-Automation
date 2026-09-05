@@ -363,6 +363,20 @@ def classify_capability_intent(message: str, context: dict | None = None) -> dic
     for prefix, site in site_search_patterns:
         if text.startswith(prefix):
             query = _strip_browser_query(message, (prefix,))
+            # The query is "everything after the prefix", so a SECOND request
+            # rides along inside it: `search github for fastapi and open the
+            # first result` searched GitHub for the literal string "fastapi and
+            # open the first result" -- a wrong search -- and then answered
+            # "Done, searched github for fastapi and open the first result",
+            # claiming both halves. A one-shot route cannot honour a second
+            # request, so decline the match and let the agent loop take the whole
+            # message in as many steps as it needs. Declining is the honest
+            # answer: trimming the query alone would fix the search and still
+            # drop the second half in silence.
+            from ..agent.policies import split_trailing_request
+
+            if split_trailing_request(query)[1]:
+                break
             update_task_context(context, user_request=message, active_intent="search", target_app="chrome", target_platform=site, target_query=query, target_domain=_site_domain(site), expected_result=f"{site} search results for {query}", needs_activation=False, provenance="chrome_web_app")
             return _base_result(
                 True,

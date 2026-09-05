@@ -165,6 +165,41 @@ def _is_request_clause(part: str) -> bool:
     return bool(words) and words[0].strip(",.!?") in _REQUEST_OPENERS
 
 
+def split_trailing_request(text: str) -> tuple[str, str]:
+    """Split `text` before a trailing second request. Returns (head, tail).
+
+    `"fastapi and open the first result"` becomes `("fastapi", "open the first
+    result")`. `"cats and dogs"` stays `("cats and dogs", "")`, because "dogs" is
+    not a request.
+
+    This exists because the capability classifier extracts a search query as
+    "everything after the prefix", so `search github for fastapi and open the
+    first result` searched GitHub for the literal string "fastapi and open the
+    first result" -- a wrong search, and then a reply claiming the result had been
+    opened too. A one-shot route cannot honour a second request, so the caller
+    uses the tail to decide whether to hand the whole message to the agent loop
+    instead of quietly doing half of it.
+    """
+    clean = " ".join(str(text or "").split())
+    if not clean:
+        return "", ""
+    lowered = clean.lower()
+    best: tuple[int, int] | None = None
+    for splitter in _CLAUSE_SPLITTERS:
+        index = lowered.find(splitter)
+        while index != -1:
+            tail = clean[index + len(splitter) :].strip()
+            if tail and _is_request_clause(tail.lower()) and clean[:index].strip():
+                if best is None or index < best[0]:
+                    best = (index, len(splitter))
+                break
+            index = lowered.find(splitter, index + 1)
+    if best is None:
+        return clean, ""
+    start, width = best
+    return clean[:start].strip(), clean[start + width :].strip()
+
+
 def asks_for_more_than_one_thing(message: str) -> bool:
     """True when one message contains two or more separate requests.
 

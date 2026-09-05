@@ -93,6 +93,24 @@ def _memory_block(notes: list[str]) -> str:
     )
 
 
+def _looks_like_broken_serialization(text: str) -> bool:
+    """Is this the debris of a half-emitted JSON object rather than a reply?
+
+    Deliberately narrow. Prose is a valid answer from a native planner and must
+    keep working, so this only fires on evidence a human sentence would not
+    produce: more closing braces than opening ones, or JSON key syntax (`":`)
+    together with an ending that no sentence has. A complete, well-formed JSON
+    object is NOT matched -- that is the JSON-prompt path's normal output and is
+    parsed elsewhere.
+    """
+    clean = str(text or "").strip()
+    if not clean:
+        return False
+    if clean.count("}") > clean.count("{") or clean.count("]") > clean.count("["):
+        return True
+    return '":' in clean and clean.endswith(("}", "],", ",", '"'))
+
+
 def _spec_schema(spec: Any) -> dict[str, Any]:
     """The args schema of a ToolSpec (or of a plain dict spec), or {}."""
     if isinstance(spec, dict):
@@ -305,6 +323,15 @@ class ToolCallPlanner:
                 return None
 
             if routed.response.text:
+                # Plain prose here is a legitimate answer (Phase 93). A broken
+                # SERIALISATION is not: one live run answered
+                # `We need to be filled in",   "query": "fastapi github" }` --
+                # the tail of a half-emitted JSON object, handed to the user as
+                # though it were a reply. Treating that as an answer ends the
+                # task on a fragment, so it is reported as no decision and the
+                # JSON-prompt path and local fallback get their turn.
+                if _looks_like_broken_serialization(routed.response.text):
+                    return None
                 return PlannerDecision(
                     type="answer",
                     reason="native function-calling",
