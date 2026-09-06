@@ -85,7 +85,11 @@ def capture_screen(reason: str) -> ScreenFrame:
         from PIL import ImageGrab  # type: ignore
     except Exception as exc:
         raise RuntimeError(f"Screen capture dependency unavailable: {exc}") from exc
-    image = ImageGrab.grab()
+    # Phase 108: every display, not just whichever one Pillow defaults to. The
+    # coordinates in a ScreenObservation come from the a11y tree rather than from
+    # this image, so no origin is recorded here -- but a screenshot that silently
+    # omits a monitor is a false picture of the desktop whoever reads it.
+    image = ImageGrab.grab(all_screens=True)
     root = Path(__file__).resolve().parents[3] / "data" / "screen_frames"
     root.mkdir(parents=True, exist_ok=True)
     frame_id = uuid4().hex

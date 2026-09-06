@@ -26,21 +26,33 @@ from __future__ import annotations
 
 import eva.tools.registry as registry_mod
 from eva.permissions.ledger import confirm_pending_action
+from eva.screen.capture import CaptureRegion
 from eva.tools.registry import ToolRegistry, _capture_screen
 
 # A tiny fake JPEG. The capture is stubbed so these tests are DETERMINISTIC:
-# `_capture_screen` calls the real `capture_primary_screen_jpeg`, which raises
-# when the display cannot be grabbed (screen locked, under load) -- and Fix B
-# then correctly turns that raise into ok:False, which is exactly the "did not
+# `_capture_screen` calls the real `capture_screen_jpeg`, which raises when the
+# display cannot be grabbed (screen locked, under load) -- and Fix B then
+# correctly turns that raise into ok:False, which is exactly the "did not
 # complete" the flaky first version of this test tripped over during a long full
 # suite run. The behaviour under test is "a SUCCESSFUL capture reports success",
 # so we make the capture deterministically succeed rather than depend on live
 # hardware. (Capture actually failing -> honest failure is a separate, correct path.)
+#
+# Phase 108 renamed the function and made it return (bytes, region) rather than
+# aliasing the old name. `monkeypatch.setattr` with `raising=True` is what keeps
+# that honest: a stub patching a name that no longer exists would silently
+# exercise the real capture instead, which is the failure this whole file is about.
 _FAKE_JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF fake"
+_FAKE_REGION = CaptureRegion(left=0, top=0, width=1920, height=1080)
 
 
 def _stub_capture(monkeypatch) -> None:
-    monkeypatch.setattr(registry_mod, "capture_primary_screen_jpeg", lambda: _FAKE_JPEG)
+    monkeypatch.setattr(
+        registry_mod,
+        "capture_screen_jpeg",
+        lambda quality=74, region=None: (_FAKE_JPEG, region or _FAKE_REGION),
+        raising=True,
+    )
 
 
 class TestCaptureScreenApprovalReportsSuccess:

@@ -33,7 +33,7 @@ from ..models.ollama import OllamaClient
 from ..models.router import ModelRoute
 from ..permissions.ledger import create_pending_action
 from ..permissions.pending_actions import EvaPendingAction
-from ..screen.capture import capture_primary_screen_jpeg
+from ..screen.capture import capture_screen_jpeg
 from ..security.action_types import ActionType
 from ..security.permission_gate import PermissionContext, evaluate_action
 from ..tools.registry import ToolRegistry
@@ -1451,7 +1451,7 @@ async def screen_snapshot(request: Request) -> Response:
     if not settings.features.screen_capture:
         raise HTTPException(status_code=403, detail="Screen capture is disabled.")
     try:
-        image = capture_primary_screen_jpeg()
+        image, _region = capture_screen_jpeg()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Screen capture failed: {exc}") from exc
     return Response(content=image, media_type="image/jpeg")

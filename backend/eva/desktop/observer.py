@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..screen.capture import capture_primary_screen_jpeg
+from ..screen.capture import capture_screen_jpeg
 from .windows import get_active_window, list_open_windows, windows_as_dicts
 
 
@@ -43,7 +43,7 @@ def get_desktop_snapshot(
             notes.append("Screen capture skipped because the request did not explicitly ask to inspect the screen.")
         else:
             try:
-                image = capture_primary_screen_jpeg()
+                image, _region = capture_screen_jpeg()
                 output_dir = Path(__file__).resolve().parents[3] / "data"
                 output_dir.mkdir(parents=True, exist_ok=True)
                 output_path = output_dir / "desktop_observation_screen.jpg"

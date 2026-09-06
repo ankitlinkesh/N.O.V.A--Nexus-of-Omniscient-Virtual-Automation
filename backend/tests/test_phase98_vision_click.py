@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import pytest
 
+from backend.eva.screen.capture import CaptureRegion
 from backend.eva.screen.vision_click import (
     DEFAULT_VISION_CONFIDENCE,
     build_prompt,
@@ -31,6 +32,12 @@ from backend.eva.screen.vision_click import (
     to_target,
     vision_click_enabled,
 )
+
+
+# Phase 108: to_target now takes the region an image came FROM, not just its
+# size, because a position in an image only becomes a screen position with an
+# origin. Origin (0,0) keeps these cases reading as they did.
+_REGION = CaptureRegion(0, 0, 1920, 1080)
 
 
 # --------------------------------------------------------------- the switches
@@ -80,7 +87,7 @@ def test_a_model_that_cannot_see_it_yields_no_target():
     resolution = parse_vision_reply('{"found": false, "description": "no such button"}')
     assert resolution.found is False
     assert resolution.reason == "model_did_not_find_it"
-    assert to_target(resolution, query="q", screen_width=1920, screen_height=1080) is None
+    assert to_target(resolution, query="q", region=_REGION) is None
 
 
 @pytest.mark.parametrize(
@@ -89,7 +96,7 @@ def test_a_model_that_cannot_see_it_yields_no_target():
 def test_a_malformed_reply_is_a_refusal(reply):
     resolution = parse_vision_reply(reply)
     assert resolution.found is False
-    assert to_target(resolution, query="q", screen_width=1920, screen_height=1080) is None
+    assert to_target(resolution, query="q", region=_REGION) is None
 
 
 def test_off_grid_coordinates_are_rejected_not_clamped():
@@ -102,7 +109,7 @@ def test_off_grid_coordinates_are_rejected_not_clamped():
 def test_low_confidence_declines():
     resolution = parse_vision_reply('{"found": true, "x": 10, "y": 10, "confidence": 0.4}')
     assert resolution.found is True, "the model answered; it is the FLOOR that refuses"
-    assert to_target(resolution, query="q", screen_width=1920, screen_height=1080) is None
+    assert to_target(resolution, query="q", region=_REGION) is None
 
 
 def test_the_vision_floor_is_higher_than_the_tree_floor():
@@ -119,20 +126,20 @@ def test_the_vision_floor_is_higher_than_the_tree_floor():
 
 def test_normalised_coordinates_scale_to_the_screen():
     resolution = parse_vision_reply('{"found": true, "x": 500, "y": 250, "confidence": 0.9}')
-    target = to_target(resolution, query="play", screen_width=1920, screen_height=1080)
+    target = to_target(resolution, query="play", region=_REGION)
     assert target is not None
     assert (target.x, target.y) == (960, 270)
 
 
 def test_a_degenerate_screen_size_yields_no_target():
     resolution = parse_vision_reply('{"found": true, "x": 500, "y": 500, "confidence": 0.9}')
-    assert to_target(resolution, query="q", screen_width=0, screen_height=0) is None
+    assert to_target(resolution, query="q", region=CaptureRegion(0, 0, 0, 0)) is None
 
 
 def test_a_vision_target_is_labelled_as_seen_not_measured():
     """Nothing downstream may mistake a model's guess for a measured control."""
     resolution = parse_vision_reply('{"found": true, "x": 1, "y": 1, "confidence": 0.99, "description": "blue Play"}')
-    target = to_target(resolution, query="play", screen_width=100, screen_height=100)
+    target = to_target(resolution, query="play", region=CaptureRegion(0, 0, 100, 100))
     assert target is not None
     assert target.method == "vision"
     assert target.role == "vision"
@@ -164,7 +171,7 @@ def test_locate_by_vision_returns_a_target_without_touching_a_screen():
         return {"ok": True, "summary": '{"found": true, "x": 250, "y": 500, "confidence": 0.95, "description": "Play"}'}
 
     target, report = locate_by_vision(
-        "the Play button", analyzer=analyzer, screen_size=lambda: (800, 600)
+        "the Play button", analyzer=analyzer, region=CaptureRegion(0, 0, 800, 600)
     )
     assert report.found is True
     assert target is not None and (target.x, target.y) == (200, 300)
@@ -174,7 +181,7 @@ def test_a_failing_analyzer_declines_rather_than_raising():
     def analyzer(prompt, _):
         raise RuntimeError("network down")
 
-    target, report = locate_by_vision("x", analyzer=analyzer, screen_size=lambda: (800, 600))
+    target, report = locate_by_vision("x", analyzer=analyzer, region=CaptureRegion(0, 0, 800, 600))
     assert target is None
     assert report.found is False
     assert "vision_error" in report.reason
@@ -183,7 +190,7 @@ def test_a_failing_analyzer_declines_rather_than_raising():
 def test_an_analyzer_reporting_failure_declines():
     target, report = locate_by_vision(
         "x", analyzer=lambda p, _: {"ok": False, "error": "gemini_vision_http_429"},
-        screen_size=lambda: (800, 600),
+        region=CaptureRegion(0, 0, 800, 600),
     )
     assert target is None and report.reason == "gemini_vision_http_429"
 

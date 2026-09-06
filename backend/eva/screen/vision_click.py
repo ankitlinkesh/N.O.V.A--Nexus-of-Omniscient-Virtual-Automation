@@ -11,8 +11,12 @@ worth being explicit about what it gives up, because two of the properties the
 GUI arc was built on do not survive it:
 
   * **A screenshot leaves the machine.** The tree path sends nothing anywhere;
-    this sends a JPEG of the whole primary screen to Google's Gemini API. Every
-    window that is open is in that image.
+    this sends a JPEG to Google's Gemini API. Since Phase 108 that JPEG is the
+    FOREGROUND WINDOW only, not the desktop: everything else on every display
+    stays home. Phase 108 tried the desktop first and measured the cost -- a
+    single validation grab swept up an unrelated live video call -- so the scope
+    is now the smallest rect that can contain the target, and if the foreground
+    window cannot be established the call is refused rather than widened.
   * **Coordinates are asserted by a model, not measured.** A tree target's
     bounds are facts read from the OS; these are a guess, and a confident-sounding
     wrong guess looks exactly like a right one.
@@ -43,6 +47,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from .capture import CaptureRegion, foreground_window_region
 from .ui_locator import UiTarget
 
 # Normalised coordinate space asked of the model. Models are markedly better at
@@ -195,19 +200,29 @@ def to_target(
     resolution: VisionResolution,
     *,
     query: str,
-    screen_width: int,
-    screen_height: int,
+    region: CaptureRegion,
     min_confidence: float = DEFAULT_VISION_CONFIDENCE,
 ) -> UiTarget | None:
-    """Turn a trusted-enough reply into a clickable target, or None."""
+    """Turn a trusted-enough reply into a clickable target, or None.
+
+    `region` must be the region the model was actually SHOWN. Phase 107 passed
+    the size of a different screenshot and clicked 1800px away.
+    """
     if not resolution.found or resolution.confidence < float(min_confidence):
         return None
-    if screen_width <= 0 or screen_height <= 0:
+    if region is None or not region.valid:
         return None
-    x = int(resolution.x * screen_width / _GRID)
-    y = int(resolution.y * screen_height / _GRID)
-    if not (0 <= x < screen_width and 0 <= y < screen_height):
+
+    # Two steps, deliberately not collapsed into one expression. The model
+    # answers in IMAGE space; the click happens in SCREEN space; the offset
+    # between them is the entire reason the region is carried around. Phase 60's
+    # double-centering bug read exactly like a collapsed coordinate line.
+    x_in_image = resolution.x * region.width / _GRID
+    y_in_image = resolution.y * region.height / _GRID
+    if not (0 <= x_in_image < region.width and 0 <= y_in_image < region.height):
         return None
+    x, y = region.to_screen(x_in_image, y_in_image)
+
     return UiTarget(
         target_id=f"vision:{abs(hash((query, x, y))) & 0xFFFFFFFF:08x}",
         # The label records that this was SEEN, not read from the OS, so nothing
@@ -228,23 +243,29 @@ def locate_by_vision(
     *,
     min_confidence: float = DEFAULT_VISION_CONFIDENCE,
     analyzer: Callable[[str, str], dict[str, Any]] | None = None,
-    screen_size: Callable[[], tuple[int, int]] | None = None,
+    region: CaptureRegion | None = None,
 ) -> tuple[UiTarget | None, VisionResolution]:
     """Find `query` on screen by looking at it. Returns (target or None, report).
 
-    `analyzer` and `screen_size` are injectable so every branch is testable with
-    no screenshot, no network and no display.
-    """
-    try:
-        if screen_size is not None:
-            width, height = screen_size()
-        else:
-            from PIL import ImageGrab
+    `analyzer` and `region` are injectable so every branch is testable with no
+    screenshot, no network and no display.
 
-            image = ImageGrab.grab()
-            width, height = image.size
-    except Exception:
-        return None, VisionResolution(found=False, reason="no_screen_size")
+    Phase 108: the region comes from the SAME capture as the image, reported back
+    by the analyzer. It used to come from a second, independent `ImageGrab.grab()`
+    taken just to measure the screen -- so the model was answering about one
+    region while its answer was converted using another's geometry.
+
+    Phase 108 also narrows WHAT is photographed: only the foreground window, not
+    every display. Sending the whole desk to find one button puts unrelated
+    windows into a cloud request -- during this phase's own validation a
+    desktop-wide grab captured a live video call. If the foreground window cannot
+    be established, this REFUSES; widening the shot is never the safe fallback.
+    """
+    scope = region
+    if scope is None and analyzer is None:
+        scope = foreground_window_region()
+        if scope is None:
+            return None, VisionResolution(found=False, reason="no_window_region")
 
     try:
         if analyzer is not None:
@@ -252,12 +273,18 @@ def locate_by_vision(
         else:
             from ..tools.registry import _analyze_screen
 
-            result = _analyze_screen(question=build_prompt(query))
+            result = _analyze_screen(question=build_prompt(query), region=scope)
     except Exception as exc:
         return None, VisionResolution(found=False, reason=f"vision_error:{type(exc).__name__}")
 
     if not isinstance(result, dict) or not result.get("ok", True):
         return None, VisionResolution(found=False, reason=str((result or {}).get("error") or "vision_failed"))
+
+    capture_region = region or CaptureRegion.from_dict((result.get("capture") or {}).get("region"))
+    if capture_region is None:
+        # Refusing beats guessing a geometry: a wrong region does not fail, it
+        # clicks somewhere else, which is the failure this phase exists to end.
+        return None, VisionResolution(found=False, reason="no_capture_region")
 
     # The analyzer normalises Gemini's reply into named fields; the JSON we asked
     # for can land in any of them depending on how it answered.
@@ -269,8 +296,7 @@ def locate_by_vision(
     target = to_target(
         resolution,
         query=query,
-        screen_width=width,
-        screen_height=height,
+        region=capture_region,
         min_confidence=min_confidence,
     )
     return target, resolution

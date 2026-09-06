@@ -70,7 +70,20 @@ def main() -> int:
     # Stub the capture so a successful capture is deterministic (see the module
     # docstring): the behaviour under test is "success reports success", not
     # whether the display can be grabbed at this instant.
-    registry_mod.capture_primary_screen_jpeg = lambda: b"\xff\xd8\xff\xe0\x00\x10JFIF fake"
+    #
+    # Phase 108 renamed this function and changed it to return (bytes, region).
+    # A bare attribute assignment does NOT raise on a name that no longer exists
+    # -- it creates a dead one and lets the REAL capture run, so the stub quietly
+    # stops stubbing and the verifier keeps passing. Assert the target is there
+    # before replacing it.
+    from eva.screen.capture import CaptureRegion
+
+    if not hasattr(registry_mod, "capture_screen_jpeg"):
+        raise SystemExit("verify_eva_phase86: capture_screen_jpeg is gone; this stub would patch nothing")
+    registry_mod.capture_screen_jpeg = lambda quality=74, region=None: (
+        b"\xff\xd8\xff\xe0\x00\x10JFIF fake",
+        region or CaptureRegion(0, 0, 1920, 1080),
+    )
 
     # ------------------------------------------------------------------ 2 (ok key present)
     capture = _capture_screen()

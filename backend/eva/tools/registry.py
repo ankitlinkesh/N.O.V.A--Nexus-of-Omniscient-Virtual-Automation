@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-from ..screen.capture import capture_primary_screen_jpeg
+from ..screen.capture import CaptureRegion, capture_screen_jpeg
 from ..screen.screen_tools import screen_click, screen_hotkey, screen_observe, screen_press, screen_scroll, screen_submit_form, screen_type_text, screen_wait
 from ..vision import analyze_screen_image_sync
 from ..workspace import safe_list_files, safe_read_file, search_workspace, summarize_file, summarize_workspace, workspace_status
@@ -289,8 +289,8 @@ def _guarded_power_action(action: str, confirmed: bool = False) -> str:
     return system_power(normalized, confirmed=confirmed)
 
 
-def _capture_screen() -> dict[str, Any]:
-    image = capture_primary_screen_jpeg()
+def _capture_screen(region: CaptureRegion | None = None) -> dict[str, Any]:
+    image, region = capture_screen_jpeg(region=region)
     data_dir = Path(__file__).resolve().parents[3] / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     output_path = data_dir / "latest_screen.jpg"
@@ -299,18 +299,29 @@ def _capture_screen() -> dict[str, Any]:
         "ok": True,
         "image_path": str(output_path),
         "bytes": len(image),
+        # Phase 108. Anything turning a position inside this image back into a
+        # position on screen needs the region it came from. Taking a SECOND
+        # screenshot to ask "how big is the screen" is how Phase 107 clicked the
+        # wrong display: two grabs, two regions, one's coordinates used on the
+        # other.
+        "region": region.as_dict(),
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "note": "One-time screenshot captured. No continuous screen watching is active.",
     }
 
 
-def _analyze_screen(question: str | None = None) -> dict[str, Any]:
-    capture = _capture_screen()
+def _analyze_screen(question: str | None = None, region: CaptureRegion | None = None) -> dict[str, Any]:
+    # `region` is deliberately NOT in this tool's args_schema. It narrows what
+    # leaves the machine, so it is set by trusted in-process callers (the vision
+    # click passes the foreground window) and can never be widened by a planner
+    # argument.
+    capture = _capture_screen(region=region)
     result = analyze_screen_image_sync(str(capture["image_path"]), user_question=question)
     if isinstance(result, dict):
         result["capture"] = {
             "image_path": capture.get("image_path"),
             "bytes": capture.get("bytes"),
+            "region": capture.get("region"),
             "captured_at": capture.get("captured_at"),
             "note": capture.get("note"),
         }

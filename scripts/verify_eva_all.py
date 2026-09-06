@@ -136,6 +136,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase104_timeout_truth.py",
     "verify_eva_phase106_deep_caller.py",
     "verify_eva_phase107_vision_click_arrival.py",
+    "verify_eva_phase108_capture_region.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -247,6 +248,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase104_timeout_truth.py",
     "verify_eva_phase106_deep_caller.py",
     "verify_eva_phase107_vision_click_arrival.py",
+    "verify_eva_phase108_capture_region.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -322,6 +324,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase104_timeout_truth.py": ("phase104", "llm", "provider", "timeout", "diagnostics"),
     "verify_eva_phase106_deep_caller.py": ("phase106", "llm", "deep", "console", "reachability"),
     "verify_eva_phase107_vision_click_arrival.py": ("phase107", "gui", "vision", "screen", "honesty"),
+    "verify_eva_phase108_capture_region.py": ("phase108", "gui", "vision", "screen", "capture"),
 }
 
 
