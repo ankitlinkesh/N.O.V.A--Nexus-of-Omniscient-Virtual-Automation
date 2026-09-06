@@ -7,6 +7,7 @@ import time
 from typing import Any, Iterable
 
 from ..core.config import ModelSettings
+from .providers._openai_compatible import timeout_for_purpose
 from .providers.clod import ClodProvider
 from .providers.gemini import GeminiProvider
 from .providers.groq import GroqEmergencyProvider, GroqProvider
@@ -250,6 +251,14 @@ async def _call_provider(
     tools: list[dict[str, Any]] | None = None,
 ) -> tuple[LLMResponse, bool]:
     estimate = _estimated_tokens(messages, max_tokens)
+    # Phase 104: the purpose decides how long the call may take, and this is the
+    # only place that knows both it and the provider. Every call used a flat 12s
+    # read timeout, so `deepseek-v4-pro` -- the configured deep_reasoning model,
+    # which answers correctly in a measured 164 seconds -- could never once have
+    # been used. Set here rather than inside the provider so the deep budget is
+    # tied to the purposes that SELECT the deep model, instead of to a model name
+    # that would have to be kept in step by hand.
+    provider.request_timeout = timeout_for_purpose(purpose)
     response = await provider.complete(messages, temperature=temperature, max_tokens=max_tokens, tools=tools)
     # The planner-JSON guard only applies to the JSON-prompt path -- which is
     # exactly the path that passes no `tools`. That is what the condition now

@@ -214,8 +214,15 @@ async def live_probe(provider_names: list[str] | None = None, *, settings: Any =
                 continue
             try:
                 provider = PROVIDER_CLASSES["nvidia_nim"](settings, model=model)
+                # Probe each model under ITS OWN role, not a generic "chat".
+                # Purpose decides the request timeout (Phase 104), so probing the
+                # deep_reasoning model as chat gave it 12 seconds to do a job that
+                # takes 164 -- and the probe then reported the model as dead. This
+                # file already carries that lesson one line up, about max_tokens:
+                # "the probe's own parameters must not manufacture the failure it
+                # is looking for". It was true of the timeout too.
                 response, _ = await _call_provider(
-                    provider, limiter, messages, purpose="chat", temperature=0.0, max_tokens=probe_max_tokens
+                    provider, limiter, messages, purpose=role, temperature=0.0, max_tokens=probe_max_tokens
                 )
                 entry = {
                     "ok": bool(getattr(response, "ok", False)),

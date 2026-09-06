@@ -10,6 +10,50 @@ from ...core.config import ModelSettings
 from ..types import LLMResponse, Message, headers_to_dict, retry_after_from_headers
 
 
+# Phase 104. Every provider call used a hardcoded 12-second read timeout, for
+# every model and every purpose. `deepseek-v4-pro`, configured as the
+# deep_reasoning model, answers correctly in **164 seconds** -- measured, HTTP
+# 200, content "ok" -- so it could never once have been used. Not flaky, not
+# rate-limited: impossible by a factor of fourteen. A reasoning model spends
+# minutes thinking by design, which is what it is FOR, so a chat-shaped timeout
+# is not a safety margin for it, it is a guarantee of failure.
+#
+# The default stays 12s: an interactive request must not hang for three minutes
+# because a provider is slow. Only the purposes that exist to think get the long
+# one, and the caller says which.
+DEFAULT_REQUEST_TIMEOUT = float(os.environ.get("EVA_LLM_TIMEOUT_SECONDS", "12") or 12)
+DEEP_REQUEST_TIMEOUT = float(os.environ.get("EVA_LLM_DEEP_TIMEOUT_SECONDS", "240") or 240)
+CONNECT_TIMEOUT = 4.0
+
+# The purposes whose whole point is to take a long time. Matches the role map in
+# providers/nvidia_nim.py::nvidia_nim_models_for_purpose so a purpose that
+# selects the deep model also gets the deep timeout -- the two must not drift,
+# or a request would be routed to a model it is not allowed to wait for.
+DEEP_PURPOSES = frozenset({"deep_reasoning", "debug"})
+
+
+def timeout_for_purpose(purpose: str | None) -> float:
+    return DEEP_REQUEST_TIMEOUT if str(purpose or "").strip().lower() in DEEP_PURPOSES else DEFAULT_REQUEST_TIMEOUT
+
+
+def describe_transport_error(exc: Exception, timeout: float) -> str:
+    """A failure with no reason is not a diagnosis.
+
+    `str(httpx.ReadTimeout(...))` is the EMPTY STRING, and the handler passed it
+    straight through -- so a timeout surfaced as `ok=False, status_code=None,
+    error=""`, indistinguishable from a retired model, a network blip, a missing
+    key or anything else. `llm probe` reported `nemotron-3.5-content-safety` as
+    dead on exactly that evidence while the same code path answered in 0.6s, so
+    the tool built to make provider rot visible was itself producing false
+    negatives it could not explain.
+    """
+    detail = str(exc).strip()
+    label = type(exc).__name__
+    if isinstance(exc, httpx.TimeoutException):
+        return f"{label}: no response within {timeout:g}s" + (f" ({detail})" if detail else "")
+    return f"{label}: {detail}" if detail else label
+
+
 class OpenAICompatibleProvider:
     name = "openai-compatible"
     api_key_env = ""
@@ -19,6 +63,10 @@ class OpenAICompatibleProvider:
     default_base_url = ""
     auth_scheme = "Bearer"
     extra_headers: dict[str, str] = {}
+    # Set per call by the router, which is the only place that knows the purpose.
+    # An instance attribute rather than a `complete()` argument so every provider
+    # inherits it without changing a signature five subclasses implement.
+    request_timeout: float = DEFAULT_REQUEST_TIMEOUT
 
     def __init__(self, settings: ModelSettings) -> None:
         self.settings = settings
@@ -58,11 +106,17 @@ class OpenAICompatibleProvider:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
         payload.update(self.extra_payload(tools))
+        timeout = float(getattr(self, "request_timeout", DEFAULT_REQUEST_TIMEOUT) or DEFAULT_REQUEST_TIMEOUT)
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=CONNECT_TIMEOUT)) as client:
                 response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
         except httpx.HTTPError as exc:
-            return LLMResponse(provider=self.name, model=self.model, ok=False, error=str(exc))
+            return LLMResponse(
+                provider=self.name,
+                model=self.model,
+                ok=False,
+                error=describe_transport_error(exc, timeout),
+            )
         raw_headers = headers_to_dict(response.headers)
         if response.status_code >= 400:
             return LLMResponse(

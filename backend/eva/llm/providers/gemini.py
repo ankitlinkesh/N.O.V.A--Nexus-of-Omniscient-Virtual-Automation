@@ -10,6 +10,7 @@ import httpx
 
 from ...core.config import ModelSettings
 from ..rate_limiter import LLMRateLimiter
+from ._openai_compatible import CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, describe_transport_error
 from ..types import LLMResponse, Message, headers_to_dict, retry_after_from_headers
 
 
@@ -51,7 +52,13 @@ class GeminiProvider:
         estimated_tokens = self._estimated_tokens(messages, max_tokens)
         last_response: LLMResponse | None = None
 
-        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0)) as client:
+        # Phase 104: the same flat 12s the OpenAI-compatible providers had.
+        # Gemini is the FALLBACK for nvidia_nim, so a deep_reasoning request
+        # that failed over to it would have been cut off here regardless of the
+        # budget the purpose was granted -- the fix has to reach every provider
+        # a purpose can land on, not just the one it starts at.
+        timeout = float(getattr(self, "request_timeout", DEFAULT_REQUEST_TIMEOUT) or DEFAULT_REQUEST_TIMEOUT)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=CONNECT_TIMEOUT)) as client:
             for index, api_key in enumerate(self.api_keys, start=1):
                 slot_model = self._slot_model(index)
                 allowed, reason = limiter.can_call(self.name, slot_model, estimated_tokens=estimated_tokens)
@@ -63,8 +70,12 @@ class GeminiProvider:
                 try:
                     response = await client.post(url, headers=headers, json=payload)
                 except httpx.HTTPError as exc:
-                    last_response = LLMResponse(provider=self.name, model=slot_model, ok=False, error=str(exc))
-                    limiter.record_failure(self.name, str(exc), model=slot_model, estimated_tokens=estimated_tokens)
+                    # `str(httpx.ReadTimeout(...))` is the EMPTY STRING, so this
+                    # reported a failure with no reason AND wrote that blank into
+                    # the rate limiter's persisted failure record.
+                    reason = describe_transport_error(exc, timeout)
+                    last_response = LLMResponse(provider=self.name, model=slot_model, ok=False, error=reason)
+                    limiter.record_failure(self.name, reason, model=slot_model, estimated_tokens=estimated_tokens)
                     continue
 
                 raw_headers = headers_to_dict(response.headers)

@@ -133,6 +133,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase95_tool_wire_names.py",
     "verify_eva_phase102_ui_truth.py",
     "verify_eva_phase103_gui_arrival.py",
+    "verify_eva_phase104_timeout_truth.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -241,6 +242,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase95_tool_wire_names.py",
     "verify_eva_phase102_ui_truth.py",
     "verify_eva_phase103_gui_arrival.py",
+    "verify_eva_phase104_timeout_truth.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -313,6 +315,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase95_tool_wire_names.py": ("phase95", "llm", "tool-schema", "providers", "planner"),
     "verify_eva_phase102_ui_truth.py": ("phase102", "frontend", "health", "voice", "cache", "ui"),
     "verify_eva_phase103_gui_arrival.py": ("phase103", "gui", "screen", "scope", "typing", "focus", "cache"),
+    "verify_eva_phase104_timeout_truth.py": ("phase104", "llm", "provider", "timeout", "diagnostics"),
 }
 
 

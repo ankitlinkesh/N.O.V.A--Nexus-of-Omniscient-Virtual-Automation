@@ -5,6 +5,7 @@ from typing import Any
 
 from ...core.config import ModelSettings
 from ...models.ollama import OllamaClient
+from ._openai_compatible import describe_transport_error
 from ..types import LLMResponse, Message
 
 
@@ -37,5 +38,9 @@ class OllamaProvider:
         try:
             text = await OllamaClient(self.settings).chat(user, history=history, model=self.model)
         except RuntimeError as exc:
-            return LLMResponse(provider=self.name, model=self.model, ok=False, error=str(exc))
+            # `str(RuntimeError())` is empty too, and a failure with no reason is
+            # not a diagnosis -- the class name is worth more than nothing.
+            return LLMResponse(
+                provider=self.name, model=self.model, ok=False, error=describe_transport_error(exc, 0.0)
+            )
         return LLMResponse(provider=self.name, model=self.model, text=text, ok=bool(text), error=None if text else "empty_response")
