@@ -134,6 +134,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase102_ui_truth.py",
     "verify_eva_phase103_gui_arrival.py",
     "verify_eva_phase104_timeout_truth.py",
+    "verify_eva_phase106_deep_caller.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -243,6 +244,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase102_ui_truth.py",
     "verify_eva_phase103_gui_arrival.py",
     "verify_eva_phase104_timeout_truth.py",
+    "verify_eva_phase106_deep_caller.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -316,6 +318,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase102_ui_truth.py": ("phase102", "frontend", "health", "voice", "cache", "ui"),
     "verify_eva_phase103_gui_arrival.py": ("phase103", "gui", "screen", "scope", "typing", "focus", "cache"),
     "verify_eva_phase104_timeout_truth.py": ("phase104", "llm", "provider", "timeout", "diagnostics"),
+    "verify_eva_phase106_deep_caller.py": ("phase106", "llm", "deep", "console", "reachability"),
 }
 
 

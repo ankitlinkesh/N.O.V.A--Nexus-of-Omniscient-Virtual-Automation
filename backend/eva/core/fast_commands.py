@@ -8,6 +8,7 @@ from ..diagnostics.providers import format_llm_status
 from .fast_command_ask import _authority_decision_from_natural_route, _handle_eva_ask_command
 from .fast_command_delegation import _handle_delegation_command
 from .fast_command_gui import maybe_handle_gui_command
+from .fast_command_think import maybe_handle_think_command
 from .fast_command_explain import _handle_explain_command
 from .fast_command_shell import _handle_shell_command
 from .fast_command_formatters import (
@@ -785,6 +786,15 @@ def maybe_handle_fast_command(
     gui = maybe_handle_gui_command(normalized, original, tools, session_context, memory, session_id)
     if gui:
         return gui
+
+    # Phase 106 deep reasoning. Console-only for LATENCY, not authority: it
+    # blocks for minutes and carries no tool power at all, so what is being kept
+    # away from the planner is the ability to spend an entire errand's wall clock
+    # -- and to be steered into doing so by untrusted content -- not a permission.
+    # `think:` with a colon, because "think about it" is ordinary prose.
+    think = maybe_handle_think_command(normalized, original, tools, session_context, memory, session_id)
+    if think:
+        return think
 
     # Phase 74 bounded command runner. `$ ` cannot occur in ordinary prose, so
     # this cannot start swallowing requests meant for the LLM.
