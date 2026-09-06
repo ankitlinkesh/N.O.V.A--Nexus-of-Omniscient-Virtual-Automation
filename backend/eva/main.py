@@ -186,7 +186,20 @@ def create_app() -> FastAPI:
             # Fail toward MORE cache-busting, never less: an unreadable mtime
             # must not quietly restore the stale-forever behaviour.
             stamp = uuid4().hex[:12]
-        return HTMLResponse(html.replace("v=orb-v2", f"v={stamp}"))
+        # Phase 103: the document that CARRIES the stamps must never itself be
+        # served from cache. It went out with no Cache-Control, no ETag and no
+        # Last-Modified, so browsers applied heuristic caching and kept the old
+        # index.html indefinitely -- and with it the old `?v=orb-v2` asset URLs.
+        # Measured on a real browser: it was still running the pre-Phase-102
+        # app.js while the server served the new stamp, which is to say the
+        # cache-buster could not reach the one browser it exists for. Busting
+        # the leaf and leaving the root cached is not a smaller version of the
+        # fix; it is none of it. The stamped assets stay freely cacheable --
+        # that is the entire point of stamping them.
+        return HTMLResponse(
+            html.replace("v=orb-v2", f"v={stamp}"),
+            headers={"Cache-Control": "no-cache, must-revalidate"},
+        )
 
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
     return app

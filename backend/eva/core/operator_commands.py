@@ -97,6 +97,26 @@ def _after_prefix(text: str, prefixes: tuple[str, ...]) -> str | None:
     return None
 
 
+def _window_name_after(text: str, prefixes: tuple[str, ...]) -> str | None:
+    """`_after_prefix`, but only when what follows is a NAME rather than an errand.
+
+    Phase 103. This dispatcher runs ahead of the fast-command layer and holds a
+    second copy of the same window prefixes, so guarding only the other copy
+    changed nothing measurable: "focus the notepad window and type NOVA-... into
+    it" still arrived here, was taken whole as a window name, matched the
+    Calculator through the `WindowsApps` in its executable path, and came back
+    "Done, focused the notepad window and type nova-... into it." -- wrong
+    window, typing clause dropped, reported as success. One rule written in two
+    places, and the copy nobody guarded was the one that decided the behaviour.
+    """
+    from .fast_command_helpers import _looks_like_an_instruction
+
+    value = _after_prefix(text, prefixes)
+    if value is None or _looks_like_an_instruction(value):
+        return None
+    return value
+
+
 def _safe_tool_names(registry: ToolRegistry) -> list[str]:
     try:
         specs = registry.list_tools()
@@ -337,17 +357,17 @@ def handle_operator_command(message: str, context: dict[str, Any] | None = None)
         result = executor.execute(PlannedToolCall(tool="window_list", args={"limit": 40}))
         return _handled(tool="window_list", args={"limit": 40}, response=_format_window_list(result.result), result=result)
 
-    focused = _after_prefix(text, ("switch to ", "focus ", "go to window ", "bring up "))
+    focused = _window_name_after(text, ("switch to ", "focus ", "go to window ", "bring up "))
     if focused:
         result = executor.execute(PlannedToolCall(tool="window_focus", args={"query": focused}))
         return _handled(tool="window_focus", args={"query": focused}, response=_format_window_action(result, "focus", focused), result=result)
 
-    minimized = _after_prefix(text, ("minimize ", "minimise "))
+    minimized = _window_name_after(text, ("minimize ", "minimise "))
     if minimized:
         result = executor.execute(PlannedToolCall(tool="window_minimize", args={"query": minimized}))
         return _handled(tool="window_minimize", args={"query": minimized}, response=_format_window_action(result, "minimiz", minimized), result=result)
 
-    maximized = _after_prefix(text, ("maximize ", "maximise "))
+    maximized = _window_name_after(text, ("maximize ", "maximise "))
     if maximized:
         result = executor.execute(PlannedToolCall(tool="window_maximize", args={"query": maximized}))
         return _handled(tool="window_maximize", args={"query": maximized}, response=_format_window_action(result, "maximiz", maximized), result=result)

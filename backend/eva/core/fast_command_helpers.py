@@ -37,6 +37,29 @@ def _after_prefix(text: str, prefixes: tuple[str, ...]) -> str | None:
     return None
 
 
+# A window name is a name: "chrome", "untitled - notepad", "vs code". These are
+# the marks of a sentence carrying a SECOND thing to do, which a fast command
+# whose argument is supposed to be a name must not swallow.
+_INSTRUCTION_MARKERS = (" and ", " then ", ", ", "; ")
+_MAX_NAME_WORDS = 6
+
+
+def _looks_like_an_instruction(value: str) -> bool:
+    """True when a fast command's argument is really a multi-clause errand.
+
+    A fast command binds a whole phrase to ONE tool call, so a compound
+    instruction reaching one is not partly carried out -- the remaining clauses
+    are silently dropped and the reply reports the first as the whole job.
+    Declining the shortcut hands it to the planner, which can take several steps.
+    """
+    text = " ".join(str(value or "").lower().split())
+    if not text:
+        return False
+    if any(marker in text for marker in _INSTRUCTION_MARKERS):
+        return True
+    return len(text.split()) > _MAX_NAME_WORDS
+
+
 def _parse_between(text: str, prefix: str, separator: str) -> tuple[str, str] | None:
     if not text.startswith(prefix):
         return None

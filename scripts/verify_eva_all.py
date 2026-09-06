@@ -132,6 +132,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase94_detector_precision.py",
     "verify_eva_phase95_tool_wire_names.py",
     "verify_eva_phase102_ui_truth.py",
+    "verify_eva_phase103_gui_arrival.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -239,6 +240,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase94_detector_precision.py",
     "verify_eva_phase95_tool_wire_names.py",
     "verify_eva_phase102_ui_truth.py",
+    "verify_eva_phase103_gui_arrival.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -310,6 +312,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase94_detector_precision.py": ("phase94", "threat-defense", "detector", "false-positives", "reflection"),
     "verify_eva_phase95_tool_wire_names.py": ("phase95", "llm", "tool-schema", "providers", "planner"),
     "verify_eva_phase102_ui_truth.py": ("phase102", "frontend", "health", "voice", "cache", "ui"),
+    "verify_eva_phase103_gui_arrival.py": ("phase103", "gui", "screen", "scope", "typing", "focus", "cache"),
 }
 
 

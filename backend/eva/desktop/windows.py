@@ -164,21 +164,77 @@ def get_active_window() -> WindowInfo | None:
     return _window_info(int(hwnd))
 
 
+# Words that must never, on their own, be enough to pick a window. Two kinds,
+# and the second is what actually bit. Ordinary filler ("the", "and") lets a
+# sentence match anything. The desktop-generic words are worse: EVERY packaged
+# Windows app lives under `C:\Program Files\WindowsApps\...`, so the single word
+# "window" matched Calculator through its executable path -- which is how
+# `focus the notepad window and type ...` focused the Calculator and reported
+# "Done". A word this generic carries no evidence about which window was meant.
+_GENERIC_WORDS = frozenset(
+    {
+        "the", "and", "into", "with", "that", "this", "for", "from", "please",
+        "then", "now", "its", "it's", "your", "you", "there", "here", "over",
+        "open", "app", "application", "window", "windows", "program", "screen",
+        "desktop", "type", "text", "click", "press", "focus", "switch", "show",
+    }
+)
+
+
 def _matches(info: WindowInfo, query: str) -> bool:
+    return _match_score(info, query) > 0
+
+
+def _match_score(info: WindowInfo, query: str) -> int:
+    """How well a window answers the query. 0 means "not a match".
+
+    Ranked rather than boolean because `find_window` takes the FIRST hit in
+    enumeration order, so with a flat yes/no the winner was whichever window the
+    OS happened to list first -- a coin toss between everything that matched.
+    """
     clean = " ".join(query.lower().strip().split())
     if not clean:
-        return False
-    haystack = f"{info.title} {info.process_name} {info.executable}".lower()
-    if clean in haystack:
-        return True
+        return 0
+    title = (info.title or "").lower()
+    process = (info.process_name or "").lower()
+    executable = (info.executable or "").lower()
+    # The full path is searched only for a whole-phrase query, where the user may
+    # legitimately have pasted one. Single words are matched against the
+    # executable's BASENAME instead: `WindowsApps`, `Program Files` and the rest
+    # of the path are shared by half the machine and identify nothing.
+    basename = executable.rsplit("\\", 1)[-1].rsplit("/", 1)[-1]
+
+    if clean == title:
+        return 100
+    if clean == basename or clean == process:
+        return 90
+    if clean in title:
+        return 80
+    if clean in f"{process} {executable}":
+        return 70
+
+    best = 0
     for part in clean.split():
-        if len(part) >= 3 and part in haystack:
-            return True
-    return False
+        if len(part) < 3 or part in _GENERIC_WORDS:
+            continue
+        if part in title:
+            best = max(best, 40)
+        elif part in f"{process} {basename}":
+            best = max(best, 30)
+    return best
 
 
 def find_window(query: str, limit: int = 10) -> list[WindowInfo]:
-    return [window for window in list_open_windows() if _matches(window, query)][:limit]
+    scored = [
+        (score, index, window)
+        for index, window in enumerate(list_open_windows())
+        for score in (_match_score(window, query),)
+        if score > 0
+    ]
+    # Enumeration order breaks ties, so equally good matches keep the behaviour
+    # they have always had; only the ordering BETWEEN different strengths is new.
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [window for _, _, window in scored][:limit]
 
 
 def _window_reached_state(hwnd: int, command: int) -> bool:

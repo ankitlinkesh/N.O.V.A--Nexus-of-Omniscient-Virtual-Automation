@@ -40,6 +40,7 @@ from .fast_command_formatters import (
 from .fast_command_helpers import (
     _PROACTIVITY_DISABLED_MSG,
     _after_prefix,
+    _looks_like_an_instruction,
     _parse_between,
     _parse_replace_draft,
     _parse_replace_with_prefix,
@@ -3342,8 +3343,18 @@ def maybe_handle_fast_command(
     # behavior-preserving redirect, not a new capability. "focus window "
     # must be checked before the bare "focus " prefix so "focus window
     # chrome" extracts "chrome", not "window chrome".
+    #
+    # Phase 103: a window NAME only. Everything after the prefix used to be
+    # taken as the query, so "focus the notepad window and type NOVA-... into
+    # it" asked to focus a 60-character sentence -- which matched Calculator
+    # through the `WindowsApps` in its executable path, focused it, discarded
+    # the typing half of the errand, and answered "Done, focused Calculator."
+    # A compound instruction was truncated to its first verb, aimed at the wrong
+    # window, and reported as success. This hands anything that reads like an
+    # instruction rather than a name to the planner instead, which can carry out
+    # both clauses.
     focus_target = _after_prefix(normalized, ("switch to ", "focus window ", "focus ", "go to window ", "bring up "))
-    if focus_target:
+    if focus_target and not _looks_like_an_instruction(focus_target):
         return _run_tool(tools, "app.focus", session_context, query=focus_target)
 
     minimize_target = _after_prefix(normalized, ("minimize ", "minimise "))

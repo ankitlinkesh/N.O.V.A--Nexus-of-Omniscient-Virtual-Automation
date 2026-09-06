@@ -66,14 +66,97 @@ def double_click(x: int, y: int, reason: str, action_id: str = "screen.double_cl
     return _obs(action_id, True, f"Double-clicked visible screen coordinate for reason: {reason}.", {"x": int(x), "y": int(y)})
 
 
+def _focused_value() -> str | None:
+    """The text currently in the focused control, or None if it cannot be read.
+
+    None means "unknown", never "empty" -- the two must not be conflated, or an
+    unreadable field would look like a field that lost everything typed into it.
+    """
+    try:
+        from .dpi import ensure_dpi_aware
+
+        ensure_dpi_aware()
+        import uiautomation as auto  # type: ignore
+
+        element = auto.GetFocusedControl()
+        if element is None:
+            return None
+        pattern = element.GetValuePattern()
+        value = pattern.Value
+        return "" if value is None else str(value)
+    except Exception:
+        # Not every control exposes a value pattern, and the tree read can fail
+        # outright. Both are "cannot tell", which this reports honestly rather
+        # than guessing.
+        return None
+
+
+# Phase 103: 0.01 dropped and REORDERED characters. Measured over six rounds of
+# a 22-character string typed into Notepad and read back off the control: three
+# were wrong -- one dropped a character and two TRANSPOSED a pair, which means
+# the keystrokes were racing, not merely being lost. A slower interval reduces
+# the rate; six rounds cannot show that it eliminates it, and nothing here
+# claims it does. That is what the readback below is for.
+_TYPE_INTERVAL = 0.03
+
+
 def type_text(text: str, reason: str, action_id: str = "screen.type_text") -> AgentObservation:
     if not str(reason or "").strip():
         return _obs(action_id, False, "Typing refused because no active task reason was provided.", error="reason_required")
     gui, error = _pyautogui()
     if gui is None:
         return _obs(action_id, False, "Typing unavailable because real input is disabled.", error=error)
-    gui.write(str(text), interval=0.01)
-    return _obs(action_id, True, f"Typed text for reason: {reason}.", {"chars": len(str(text))})
+    payload = str(text)
+
+    # Read the field BEFORE, so the check is "it gained exactly this text" rather
+    # than "it contains something like it" -- a field with existing contents is
+    # the normal case, and a substring test would pass on a corrupted retype.
+    before = _focused_value()
+    gui.write(payload, interval=_TYPE_INTERVAL)
+    after = _focused_value()
+
+    # Deliberately reports LENGTHS and a boolean, never the strings. `text` is a
+    # declared sensitive argument and is masked everywhere else; a verification
+    # failure must not become the one place the value gets echoed into a summary,
+    # a log or an error (the Phase 68 lesson).
+    raw: dict[str, Any] = {"chars": len(payload)}
+    if before is None or after is None:
+        # An unverifiable type is not a failed type. Saying otherwise would make
+        # form_filler stop at the first field of any app without a value pattern,
+        # which is most of them.
+        raw["verified"] = False
+        return _obs(action_id, True, f"Typed text for reason: {reason}. Could not read the field back to confirm it.", raw)
+
+    raw["verified"] = True
+    # Typing does not always APPEND. If the field had a selection -- which is the
+    # normal state after a select-all, and after clicking into a field that
+    # selects on focus -- the keystrokes REPLACE it. `after == before + payload`
+    # is true only for the append case, and measuring it that way reported a
+    # failure on eight consecutive rounds that had in fact typed perfectly.
+    #
+    # So: the payload must land intact at the caret, and whatever precedes it
+    # must be something the field already held (all of `before` for an append,
+    # a prefix of it when a selected tail was replaced). `after != before` keeps
+    # "nothing arrived at all" from passing when the field already ended with
+    # the same characters. The residual gap is named rather than papered over:
+    # without knowing the selection, a short payload that duplicates the tail of
+    # a short existing value can still pass with a character missing.
+    head = after[: len(after) - len(payload)] if len(after) >= len(payload) else None
+    if after.endswith(payload) and head is not None and before.startswith(head) and after != before:
+        return _obs(action_id, True, f"Typed text for reason: {reason}. Verified against the field.", raw)
+
+    raw["arrived_chars"] = max(len(after) - len(before), 0)
+    return _obs(
+        action_id,
+        False,
+        # No retype. Typing again into a field whose contents were only partly
+        # readable is how one corrupted string becomes two, and a confident wrong
+        # retry is worse than an honest failure.
+        f"Typing did not arrive intact for reason: {reason}. "
+        f"{raw['arrived_chars']} of {len(payload)} characters reached the field; it was NOT retyped.",
+        raw,
+        error="typed_text_mismatch",
+    )
 
 
 def hotkey(keys: list[str], reason: str, action_id: str = "screen.hotkey") -> AgentObservation:

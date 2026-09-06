@@ -126,7 +126,13 @@ def _focus_named_window(goal: str, tools: Any) -> str | None:
             if word in haystack:
                 wanted = str(window.get("title") or word)
                 try:
-                    tools.run("window_focus", query=word)
+                    # Focus the window that MATCHED, not the word that matched
+                    # it. Passing the bare word sent the query back through
+                    # find_window a second time, where it could easily land on a
+                    # different window than the one just chosen here -- the
+                    # decision was made twice, from different evidence, and only
+                    # the second one moved the foreground.
+                    tools.run("window_focus", query=wanted)
                 except Exception:
                     return None
                 # VERIFY, do not assume. `focus_window_safe` reports success from
@@ -139,7 +145,19 @@ def _focus_named_window(goal: str, tools: Any) -> str | None:
                 time.sleep(0.4)
                 try:
                     active = tools.run("window_active")
-                    actual = str((active or {}).get("title") or "")
+                    # `window_active` returns {"ok":..., "window": {"title":...}}.
+                    # Reading `active["title"]` -- a key it has never had -- meant
+                    # `actual` was ALWAYS empty, so this reported "could not
+                    # confirm which window is in front" on every single errand,
+                    # including ones where the right window was demonstrably in
+                    # front. The fail-safe below was therefore the only branch
+                    # that ever ran, and the verification was decorative. The
+                    # top-level key is still read as a fallback rather than
+                    # replaced: the point is to read every name the source
+                    # actually emits, which is how this class of bug was missed
+                    # twice before.
+                    window_payload = (active or {}).get("window") or {}
+                    actual = str(window_payload.get("title") or (active or {}).get("title") or "")
                 except Exception:
                     actual = ""
                 # UNKNOWN IS NOT SUCCESS. The first version only reported a
@@ -158,9 +176,59 @@ def _focus_named_window(goal: str, tools: Any) -> str | None:
     return None
 
 
-def _run_gui_task(goal: str, tools: Any, session_context: Any, memory: Any, session_id: str | None) -> str:
+async def _run_task_in_scope(
+    goal: str,
+    grounded_goal: str,
+    session_context: Any,
+    memory: Any,
+    session_id: str | None,
+) -> tuple[dict, int, int]:
+    """Open the GUI scope on the thread that actually runs the task.
+
+    The scope wraps the ENTIRE task, so every planner iteration inside it sees
+    the GUI tools and every iteration outside it does not. Opening it around the
+    run (rather than around a single call) is what lets the agent observe,
+    decide and act as one errand.
+
+    Phase 103, and this placement IS the fix. The scope lives in a ContextVar.
+    `run_async` hands the coroutine to a ThreadPoolExecutor whenever a loop is
+    already running -- always true inside a FastAPI handler -- and a worker
+    thread does not inherit the caller's context. Opening the scope around
+    `run_async` therefore set it in the request thread and ran the whole task in
+    another one with the scope SHUT: `screen.*` was never offered to the
+    planner, the budget never decremented (every errand reported `0/12 actions
+    used`), and the model answered, truthfully, that it had no way to type or
+    click. In one measured run it reached for `web.click` -- the BROWSER
+    automation tool, gate-classified EXTERNAL_POST -- to press a Calculator
+    button. Phases 56-60 and 96 were unreachable through the chat UI and the
+    API for as long as they had existed, while every test and every live
+    validation drove `registry.run` in-process, where the ContextVar IS in
+    scope. A green suite proved the mechanism and never its arrival.
+
+    `role_scope` had the shape right all along: it is opened inside
+    `run_delegated`, on the thread that does the work. This mirrors it rather
+    than teaching `run_async` to copy contexts, which would change the rules for
+    five other callers to fix one.
+
+    The spend and the budget are read INSIDE the scope and returned out. Read
+    outside, `actions_used()` reports the request thread's empty scope -- which
+    is why the broken build printed a tidy `0/12` instead of failing loudly.
+    """
     from ..agent.runner import run_agentic_task
 
+    with open_gui_scope(goal) as scope:
+        result = await run_agentic_task(
+            grounded_goal,
+            {
+                "session_id": session_id,
+                "session_context": session_context,
+                "memory": memory,
+            },
+        )
+        return result, actions_used(), scope.max_actions
+
+
+def _run_gui_task(goal: str, tools: Any, session_context: Any, memory: Any, session_id: str | None) -> str:
     notes = _readiness()
     if notes:
         return (
@@ -228,28 +296,13 @@ def _run_gui_task(goal: str, tools: Any, session_context: Any, memory: Any, sess
             "no accessibility tree, so clicking by label will not work here -- say so rather than guessing.)"
         )
 
-    # The scope wraps the ENTIRE task, so every planner iteration inside it sees
-    # the GUI tools and every iteration outside it does not. Opening it around
-    # the run (rather than around a single call) is what lets the agent observe,
-    # decide and act as one errand.
-    with open_gui_scope(goal) as scope:
-        result = run_async(
-            run_agentic_task(
-                grounded_goal,
-                {
-                    "session_id": session_id,
-                    "session_context": session_context,
-                    "memory": memory,
-                },
-            )
-        )
-        spent = actions_used()
+    result, spent, budget = run_async(_run_task_in_scope(goal, grounded_goal, session_context, memory, session_id))
 
     reply = str(result.get("final_response") or "").strip() or "I finished without producing an answer."
     tools = result.get("tools_executed") or []
     gui_tools = [t for t in tools if str(t).startswith("screen.")]
 
-    trailer = [f"(GUI scope closed — {spent}/{scope.max_actions} actions used"]
+    trailer = [f"(GUI scope closed — {spent}/{budget} actions used"]
     if focused:
         trailer.append(
             f", focus NOT changed (still {focused[1:]})" if focused.startswith("!") else f", focused: {focused}"
