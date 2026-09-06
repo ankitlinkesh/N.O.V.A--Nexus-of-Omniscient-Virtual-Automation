@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 
+from ..llm.providers.gemini import gemini_api_keys
 from ..llm.types import retry_after_from_headers
 
 
@@ -171,7 +172,8 @@ def vision_status() -> dict[str, Any]:
     blocked_until = int(state.get("blocked_until") or 0)
     return {
         "vision_enabled": _env_bool("VISION_ENABLED", True),
-        "gemini_vision_key_configured": bool(os.environ.get("GEMINI_API_KEY")),
+        "gemini_vision_key_configured": bool(gemini_api_keys() or os.environ.get("GEMINI_API_KEY")),
+        "gemini_vision_keys": len(gemini_api_keys()),
         "provider": PROVIDER,
         "model": model,
         "soft_limits": {"rpm": limits["rpm"], "rpd": limits["rpd"]},
@@ -205,7 +207,7 @@ def _validate_image(path: str) -> tuple[Path | None, dict[str, Any] | None]:
     size_mb = image_path.stat().st_size / (1024 * 1024)
     if size_mb > max_mb:
         return None, {"ok": False, "provider": PROVIDER, "error": f"image_too_large:{size_mb:.2f}MB>{max_mb:.2f}MB"}
-    if not os.environ.get("GEMINI_API_KEY"):
+    if not gemini_api_keys() and not os.environ.get("GEMINI_API_KEY"):
         return None, {"ok": False, "provider": PROVIDER, "error": "missing_api_key"}
     return image_path, None
 
@@ -274,7 +276,19 @@ def _clean_nested_json_field(value: Any, field: str) -> str:
     if text.startswith("{") and text.endswith("}"):
         nested = _parse_json_text(text)
         if isinstance(nested, dict) and nested is not value:
-            return str(nested.get(field) or nested.get("summary") or "").strip()
+            extracted = str(nested.get(field) or nested.get("summary") or "").strip()
+            # Phase 107: `return extracted` DESTROYED any reply that was not
+            # shaped like this module's own schema. The vision-click path asks
+            # the model for {"found", "x", "y", "confidence", "description"};
+            # that JSON has no "summary" key, so this returned the empty string
+            # and a correct, complete answer became `unparseable_reply` at the
+            # caller. Measured: the model replied
+            # {"found": true, "x": 785, ...} and `summary` arrived as "".
+            #
+            # A normaliser that cannot recognise a payload must pass it through,
+            # never delete it. Flattening an unexpected shape to nothing is
+            # indistinguishable, downstream, from the model having said nothing.
+            return extracted or text
     return text
 
 
@@ -308,7 +322,23 @@ def _request_payload(image_path: Path, user_question: str | None) -> dict[str, A
                 ],
             }
         ],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 900},
+        # Phase 107: 900 was never a cap on the ANSWER -- it caps thinking PLUS
+        # answer, and gemini-2.5-flash is a reasoning model. Measured on a real
+        # localisation call: finishReason=MAX_TOKENS, thoughtsTokenCount=861,
+        # candidatesTokenCount=35. Reasoning took 96% of the budget and the JSON
+        # was cut mid-string at `"description":`, which the caller reported as
+        # `unparseable_reply` -- a healthy model and a correct answer discarded
+        # by our own cap, and INTERMITTENTLY, because whether the reply fit
+        # depended on how long the model happened to think. Three runs of the
+        # identical request gave a good target, a good target, and a parse
+        # failure.
+        #
+        # Third time this project has been bitten by a reasoning model spending
+        # a budget meant for the reply: Phase 92 raised `probe_max_tokens` from
+        # 16 to 256 for the same reason, and Phase 101 fixed nemotron emitting
+        # its chain of thought as the answer. A cap sized for an answer is not
+        # sized for a model that thinks first.
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2400},
     }
 
 
@@ -321,13 +351,27 @@ def analyze_screen_image_sync(image_path: str, user_question: str | None = None)
     limited = _check_rate_limit(model)
     if limited is not None:
         return limited
-    api_key = os.environ["GEMINI_API_KEY"]
+    # Phase 107: EVERY configured key, not just the first. This read
+    # `os.environ["GEMINI_API_KEY"]` while the chat path rotated across four --
+    # so vision exhausted one key and reported itself rate-limited with three
+    # unused keys in the same file. That is what actually blocked vision
+    # clicking in practice, and it is one rule about "which keys exist" written
+    # down twice with the unwatched copy deciding.
+    keys = gemini_api_keys() or [os.environ.get("GEMINI_API_KEY", "")]
     url = GEMINI_GENERATE_URL.format(model=model)
     try:
+        response = None
+        retry_after = 60
         with httpx.Client(timeout=45) as client:
-            response = client.post(url, params={"key": api_key}, json=_request_payload(path, user_question))
-        if response.status_code == 429:
-            retry_after = retry_after_from_headers(dict(response.headers)) or 60
+            for api_key in keys:
+                response = client.post(url, params={"key": api_key}, json=_request_payload(path, user_question))
+                if response.status_code != 429:
+                    break
+                # Only a 429 moves to the next key. Any other failure is about
+                # the REQUEST, not the key, and retrying it on three more keys
+                # would spend three more screenshots to fail the same way.
+                retry_after = retry_after_from_headers(dict(response.headers)) or 60
+        if response is None or response.status_code == 429:
             _record_failure(model, "gemini_vision_http_429", rate_limited=True, retry_after_seconds=retry_after)
             state = _prepare_state(model)
             return _blocked_response(model, int(state.get("blocked_until") or (_now() + retry_after)), "gemini_vision_http_429")
@@ -360,13 +404,21 @@ async def analyze_screen_image(image_path: str, user_question: str | None = None
     limited = _check_rate_limit(model)
     if limited is not None:
         return limited
-    api_key = os.environ["GEMINI_API_KEY"]
+    # Phase 107: rotate, exactly as the sync path above. Two copies of this
+    # request existed and only fixing one would leave the async caller stuck on
+    # a single key -- the failure mode this change is about.
+    keys = gemini_api_keys() or [os.environ.get("GEMINI_API_KEY", "")]
     url = GEMINI_GENERATE_URL.format(model=model)
     try:
+        response = None
+        retry_after = 60
         async with httpx.AsyncClient(timeout=45) as client:
-            response = await client.post(url, params={"key": api_key}, json=_request_payload(path, user_question))
-        if response.status_code == 429:
-            retry_after = retry_after_from_headers(dict(response.headers)) or 60
+            for api_key in keys:
+                response = await client.post(url, params={"key": api_key}, json=_request_payload(path, user_question))
+                if response.status_code != 429:
+                    break
+                retry_after = retry_after_from_headers(dict(response.headers)) or 60
+        if response is None or response.status_code == 429:
             _record_failure(model, "gemini_vision_http_429", rate_limited=True, retry_after_seconds=retry_after)
             state = _prepare_state(model)
             return _blocked_response(model, int(state.get("blocked_until") or (_now() + retry_after)), "gemini_vision_http_429")

@@ -14,6 +14,34 @@ from ._openai_compatible import CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, descri
 from ..types import LLMResponse, Message, headers_to_dict, retry_after_from_headers
 
 
+def gemini_api_keys() -> list[str]:
+    """Every Gemini key configured, in rotation order.
+
+    Module-level and shared (Phase 107). This used to be a private method on
+    GeminiProvider, so the CHAT path rotated across four keys while the VISION
+    path read `os.environ["GEMINI_API_KEY"]` -- one key, no rotation, no
+    failover. Vision therefore exhausted a single key's quota and reported
+    itself rate-limited with three unused keys sitting in the same file, which
+    is what actually blocked vision clicking in practice. One rule about "which
+    keys exist", written down twice, and the copy nobody watched decided the
+    behaviour -- the same shape as Phases 102, 103 and 104.
+    """
+    raw_values = [os.environ.get("GEMINI_API_KEY", "")]
+    numbered_keys: list[tuple[int, str]] = []
+    for name, value in os.environ.items():
+        match = re.fullmatch(r"GEMINI_API_KEY_(\d+)", name)
+        if match:
+            numbered_keys.append((int(match.group(1)), value))
+    raw_values.extend(value for _, value in sorted(numbered_keys))
+    raw_values.append(os.environ.get("GEMINI_API_KEYS", ""))
+    keys: list[str] = []
+    for raw in raw_values:
+        for token in re.findall(r"AIza[0-9A-Za-z_-]{35}", raw or ""):
+            if token not in keys:
+                keys.append(token)
+    return keys
+
+
 class GeminiProvider:
     name = "gemini"
     uses_internal_rate_limits = True
@@ -131,20 +159,7 @@ class GeminiProvider:
         return last_response or LLMResponse(provider=self.name, model=self.model, ok=False, error="no_gemini_key_available")
 
     def _load_api_keys(self) -> list[str]:
-        raw_values = [os.environ.get("GEMINI_API_KEY", "")]
-        numbered_keys: list[tuple[int, str]] = []
-        for name, value in os.environ.items():
-            match = re.fullmatch(r"GEMINI_API_KEY_(\d+)", name)
-            if match:
-                numbered_keys.append((int(match.group(1)), value))
-        raw_values.extend(value for _, value in sorted(numbered_keys))
-        raw_values.append(os.environ.get("GEMINI_API_KEYS", ""))
-        keys: list[str] = []
-        for raw in raw_values:
-            for token in re.findall(r"AIza[0-9A-Za-z_-]{35}", raw or ""):
-                if token not in keys:
-                    keys.append(token)
-        return keys
+        return gemini_api_keys()
 
     def _slot_model(self, index: int) -> str:
         return f"{self.model}[key{index}]"

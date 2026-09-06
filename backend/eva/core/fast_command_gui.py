@@ -277,17 +277,55 @@ def _run_gui_task(goal: str, tools: Any, session_context: Any, memory: Any, sess
         for label in (str(t.get("label") or "").strip() for t in (seen.get("ui_targets") or []))
         if label and len(label) <= _MAX_LABEL_CHARS
     ]
+    # Phase 107. The control list is presented as EXHAUSTIVE, and for the tree
+    # path it is. With the vision fallback switched on it is not, and saying
+    # otherwise made the fallback unreachable for the exact apps it was built
+    # for. Measured against a canvas page whose buttons exist only as pixels:
+    # `gui: click the Kestrel button` came back "I don't see a Kestrel button
+    # among the available click targets", with `0/12 actions used` -- the
+    # planner declined BEFORE calling `screen.click`, so the fallback inside it
+    # never ran. The mechanism was reachable by grep and unreachable in fact,
+    # the same shape as Phase 103, one layer up: there the tools were missing,
+    # here the tools are present and the prompt talks the model out of using
+    # them. A tree-less app is precisely the case where the list cannot be
+    # complete, and the old wording -- "clicking by label will not work here,
+    # say so rather than guessing" -- was actively false once vision was on.
+    try:
+        from ..screen.vision_click import vision_click_enabled
+
+        vision_available = vision_click_enabled()
+    except Exception:
+        vision_available = False
+
+    # Still no "screen"/"screenshot" wording: the planner's `_forced_decision`
+    # matches screen-request language in the GOAL TEXT before any tool list is
+    # consulted, so scaffolding that merely mentions the screen made every GUI
+    # task force a cloud vision call -- text describing itself was enough.
+    unlisted_note = (
+        "\n\nThis list comes from the window's own control names and is not always complete. "
+        "An app that draws its own interface -- a canvas, a game, some Electron windows -- "
+        "publishes no names, so a control you can plainly see may be missing here. If the thing "
+        "you need is not listed, still call screen.click with its label: that path has a second "
+        "way to find it, and it refuses rather than guessing, so an attempt costs one action and "
+        "cannot click the wrong thing."
+        if vision_available
+        else ""
+    )
+
     if controls:
         grounded_goal = (
             f"{goal}\n\n"
-            # Deliberately avoids the words "screen"/"screenshot". The planner's
-            # `_forced_decision` matches screen-request language in the GOAL TEXT
-            # before any tool list is consulted, so scaffolding that merely
-            # mentions the screen made every GUI task force a cloud vision call --
-            # this text describing itself was enough to trigger it.
             f"Controls you can click right now, by exact label:\n"
             + "\n".join(f"- {label}" for label in controls[:_MAX_LABELS])
             + "\n\nUse these only to choose a click target, and never copy them into another tool's arguments."
+            + unlisted_note
+        )
+    elif vision_available:
+        grounded_goal = (
+            f"{goal}\n\n"
+            "(This window publishes no control names -- it draws its own interface. Call "
+            "screen.click with the label you can see; that path has a second way to find it, and "
+            "it refuses rather than guessing.)"
         )
     else:
         grounded_goal = (

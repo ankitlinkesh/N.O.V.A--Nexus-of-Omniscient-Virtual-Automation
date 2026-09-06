@@ -213,11 +213,33 @@ def click_target(target: UiTarget, reason: str, action_id: str = "screen.click")
     click_y = int(target.y)
     obs = click(click_x, click_y, reason, action_id=action_id)
     if obs.success:
+        # Phase 107: "verified" was said of EVERY target, including one a model
+        # guessed at from a screenshot. Measured against a canvas whose buttons
+        # exist only as pixels: `screen.click` returned ok=True and "Clicked
+        # verified UI target Kestrel" while the page recorded no click at all.
+        # Nothing was verified and nothing happened, and the reply asserted both.
+        #
+        # A tree target's bounds are read from the OS, so "verified" is true of
+        # it. A vision target's are asserted by a model, cannot be checked
+        # afterwards -- a canvas has nothing to read back -- and vary between
+        # runs on the identical screen. So the two are reported differently and
+        # the guess says it is one, rather than the caller having to know.
+        by_vision = str(getattr(target, "method", "") or "") == "vision"
+        raw = {"target": target.as_dict(), "x": click_x, "y": click_y, "verified_target": not by_vision}
+        if by_vision:
+            return _obs(
+                action_id,
+                True,
+                f"Clicked where {target.label} appeared to be, for reason: {reason}. "
+                "That location came from looking at the screen, not from the window's own "
+                "controls, so I cannot confirm the click landed on it.",
+                raw,
+            )
         return _obs(
             action_id,
             True,
             f"Clicked verified UI target {target.label} for reason: {reason}.",
-            {"target": target.as_dict(), "x": click_x, "y": click_y},
+            raw,
         )
     return obs
 

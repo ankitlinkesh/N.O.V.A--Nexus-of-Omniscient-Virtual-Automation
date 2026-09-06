@@ -107,18 +107,64 @@ def build_prompt(query: str) -> str:
     )
 
 
+def _first_json_object(text: str) -> dict | None:
+    """The first BALANCED `{...}` in the text, or None.
+
+    Phase 107. The old extraction was `re.search(r"\\{.*\\}", DOTALL)`, which is
+    greedy: it spans from the first `{` to the LAST `}` anywhere in the string.
+    The caller joins FIVE analyzer fields into one blob, so a stray brace in any
+    later field made the match run past the JSON's real end and `json.loads`
+    fail -- reported as `unparseable_reply`, which looks exactly like a model
+    that answered badly. Measured live: the identical request parsed on one run
+    and failed on the next, because the surrounding fields differed.
+
+    Scanning for the matching brace instead makes the result depend only on the
+    JSON itself. String-aware, so a `}` inside a description does not end it.
+    """
+    depth = 0
+    start = -1
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}":
+            if depth:
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    try:
+                        parsed = json.loads(text[start : index + 1])
+                    except (json.JSONDecodeError, TypeError):
+                        # Keep looking: a later object may be the real reply.
+                        start = -1
+                        continue
+                    if isinstance(parsed, dict):
+                        return parsed
+                    start = -1
+    return None
+
+
 def parse_vision_reply(text: str) -> VisionResolution:
     """Read the model's JSON. Anything malformed is a refusal, never a guess."""
     raw = str(text or "").strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        raw = re.sub(r"^json\s*", "", raw, flags=re.IGNORECASE).strip()
-    match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
-    if not match:
-        return VisionResolution(found=False, reason="unparseable_reply")
-    try:
-        data = json.loads(match.group(0))
-    except (json.JSONDecodeError, TypeError):
+    # The fence can be anywhere, not only at the start: the caller joins five
+    # analyzer fields, so a reply that arrived as ```json ...``` inside `summary`
+    # ends up in the middle of the blob and the old startswith() never saw it.
+    raw = re.sub(r"```[a-zA-Z]*", " ", raw).replace("```", " ")
+    data = _first_json_object(raw)
+    if data is None:
         return VisionResolution(found=False, reason="unparseable_reply")
     if not isinstance(data, dict) or not data.get("found"):
         return VisionResolution(
