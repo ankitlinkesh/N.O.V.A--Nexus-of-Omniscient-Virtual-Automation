@@ -306,3 +306,26 @@ def test_a_window_that_appears_after_two_seconds_still_verifies(monkeypatch):
 
     outcome = verify_tool_effect("open_app", "app_window_open", {"app": "paint"}, {"ok": True})
     assert outcome.verified is True
+
+
+# --- delegation does not inherit the grant --------------------------------------
+
+
+def test_a_delegated_sub_task_does_not_inherit_goal_from_user():
+    """run_delegated copies the parent's context wholesale (minus history). The
+    `desktop` role has both screen tools GREEN, so a copied flag would hand every
+    delegated desktop sub-task an un-phrased screenshot."""
+    from backend.eva.agents.delegation_runner import run_delegated
+
+    registry = FakeCaptureRegistry()
+    tool_gate.reset_pending_calls()
+    parent_context = {
+        "planner": ScriptedPlanner([_call("capture_screen"), _done("done")]),
+        "registry": registry,
+        "executor": ToolExecutor(registry),
+        "execute_tools": True,
+        "goal_from_user": True,
+        "history": [{"role": "user", "content": "delegate desktop: take a screenshot"}],
+    }
+    asyncio.run(run_delegated("desktop", "take a screenshot of my screen", parent_context))
+    assert registry.captures == [], "a sub-task's goal is not the user's typed message"

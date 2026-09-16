@@ -123,8 +123,13 @@ async def run_delegated(role: str, goal: str, context: dict[str, Any] | None = N
     # NOT the parent's conversation history. Starting from the parent's thread
     # would defeat the main reason to delegate, and would also hand the
     # sub-task context it has no need to see.
+    #
+    # Nor `goal_from_user` (Phase 109). That flag lets a screenshot the goal asks
+    # for skip its override phrase, and it means "the user typed THIS goal". A
+    # sub-task's goal is a different string, and copying the parent's context
+    # wholesale would silently extend the grant to it.
     parent = dict(context or {})
-    child_context = {key: value for key, value in parent.items() if key != "history"}
+    child_context = {key: value for key, value in parent.items() if key not in {"history", "goal_from_user"}}
     child_context["history"] = []
 
     from ..agent.runner import run_agentic_task
