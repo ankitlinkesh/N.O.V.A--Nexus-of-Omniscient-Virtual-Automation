@@ -268,7 +268,13 @@ def verify_postcondition(post: PostCondition, result: Any) -> PostConditionResul
                 )
             from ..desktop.verifier import verify_app_opened
 
-            outcome = verify_app_opened(query)
+            # Phase 109: settle for up to ~6s, not the verifier's default ~0.8s.
+            # Measured on this machine: Calculator's window appears 0.72s after
+            # launch and Paint's 2.72s. Live, a Windows 11 Notepad that DID open
+            # was reported as "no window found", and the agent task gave up on
+            # an app that was on screen. The poll returns as soon as the window
+            # exists, so the extra wait is paid only by a launch that failed.
+            outcome = verify_app_opened(query, retries=24, delay_seconds=0.25)
             ok = bool(outcome.get("verified"))
             return PostConditionResult(
                 method, ok, True, PROVENANCE_INDEPENDENT,

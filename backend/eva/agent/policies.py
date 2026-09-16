@@ -154,6 +154,12 @@ _REQUEST_OPENERS = (
     "summarize", "summarise", "explain", "make", "set", "turn", "mute", "unmute", "skip",
     "next", "focus", "minimize", "maximize", "what", "which", "where", "when", "who", "how",
     "is", "are", "do", "does", "can",
+    # Screen and GUI verbs. Without these, "open notepad and take a screenshot"
+    # had one request clause instead of two, never reached the agent loop, and
+    # the one-shot planner did half of it. Words that commonly end a noun phrase
+    # ("copy and paste", "come and go") are deliberately left out.
+    "take", "capture", "screenshot", "describe", "switch", "press", "scroll", "select",
+    "copy", "save", "fill", "verify", "bring",
 )
 
 # The ways a person joins two requests in one sentence.
@@ -162,7 +168,12 @@ _CLAUSE_SPLITTERS = (" and then ", ", then ", " then ", " and ", "; ", " & ")
 
 def _is_request_clause(part: str) -> bool:
     words = part.strip().split()
-    return bool(words) and words[0].strip(",.!?") in _REQUEST_OPENERS
+    if not words:
+        return False
+    # "what's" is "what is": strip the contraction, or the most common way to
+    # ask a question is not recognised as a request.
+    opener = re.sub(r"['’](s|re|ll|d)$", "", words[0].strip(",.!?"))
+    return opener in _REQUEST_OPENERS
 
 
 def split_trailing_request(text: str) -> tuple[str, str]:
@@ -252,7 +263,31 @@ def explicitly_requests_screen(message: str) -> bool:
     text = " ".join(message.lower().strip().split())
     verbs = ("look at", "check", "inspect", "analyze", "analyse", "capture", "see", "view", "show")
     nouns = ("screen", "display", "what is open", "what's open", "error")
+    if user_asked_for_screenshot(text):
+        return True
     return any(verb in text for verb in verbs) and any(noun in text for noun in nouns)
+
+
+# Phrases that unambiguously ask for the screen itself to be captured or looked
+# at. Word-bounded on purpose: this predicate AUTHORIZES a capture (see
+# screen/capture_grant.py), so it must not fire on "check the error log" or on
+# "see" inside "seem" the way the looser explicitly_requests_screen does.
+_SCREENSHOT_REQUEST = re.compile(
+    r"\bscreen\s?shots?\b"
+    r"|\bscreen\s?(?:capture|grab)\b"
+    r"|\b(?:capture|grab|snap)\s+(?:of\s+)?(?:my|the|this)\s+(?:screen|display|desktop)\b"
+    r"|\b(?:look\s+at|check|see|view|analy[sz]e|inspect|read|describe)\s+(?:my|the|this)\s+(?:screen|display)\b"
+    # ...but not "look at the screen settings file": a noun after "screen" names
+    # something ABOUT the screen, not the screen itself.
+    r"(?!\s+(?:settings?|resolution|brightness|timeout|saver|reader|size|recorder|recording|scaling|config\w*|files?)\b)"
+    r"|\bwhat(?:'s|’s|\s+is)\s+(?:on|showing\s+on)\s+(?:my|the)\s+(?:screen|display)\b",
+    re.IGNORECASE,
+)
+
+
+def user_asked_for_screenshot(message: str) -> bool:
+    """True when the message itself explicitly asks for a look at the screen."""
+    return bool(_SCREENSHOT_REQUEST.search(" ".join(str(message or "").split())))
 
 
 def tool_signature(call: PlannedToolCall) -> str:

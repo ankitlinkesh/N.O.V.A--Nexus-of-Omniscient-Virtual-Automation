@@ -23,7 +23,9 @@ from .policies import (
     max_tools_per_task,
     max_web_searches_per_task,
     tool_signature,
+    user_asked_for_screenshot,
 )
+from ..screen.capture_grant import GRANTABLE_SCREEN_TOOLS, open_capture_grant
 from .state import AgentRunState
 from .task import AgentStep, AgentTask, readable_observation as _readable_observation
 from ..threat_defense.authorization import authorize_action
@@ -568,7 +570,24 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
                 _safe_log(memory, session_id, "agent_low_confidence_escalation", {"task_id": task.id, "step": index, "tool": call.tool, "confidence": state.last_confidence})
                 return _return_task(task, session_context, ok=False, requires_confirmation=True, action=call.tool, events=events, safety_stops=safety_stops)
 
-            result = executor.execute(call)
+            # Phase 109: a screenshot the user asked for in their own words runs
+            # without an override phrase. Every condition is checked HERE, on the
+            # thread that executes the call (a grant opened around a thread hop
+            # is a silent no-op -- Phase 103): the goal was typed by the user
+            # (only the chat routes set goal_from_user), it explicitly asks for
+            # the screen, no injected content has tainted the task, and the
+            # capture cap was already enforced above. Anything else keeps the
+            # ordinary override prompt.
+            if (
+                call.tool in GRANTABLE_SCREEN_TOOLS
+                and context.get("goal_from_user") is True
+                and user_asked_for_screenshot(goal)
+                and not state.injection_flagged
+            ):
+                with open_capture_grant(goal):
+                    result = executor.execute(call)
+            else:
+                result = executor.execute(call)
             if call.tool in {"web_search", "browser_search"} and result.ok:
                 remember_web_results(session_context, result.result)
             observation = _observation_text(call, result)

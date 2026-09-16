@@ -1144,6 +1144,10 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
                 "session_context": session_context,
                 "history": history,
                 "execute_tools": True,
+                # Phase 109: this goal is the user's own message, so a screenshot
+                # it explicitly asks for may run without an override phrase.
+                # Only these chat routes set it; see screen/capture_grant.py.
+                "goal_from_user": True,
             },
         )
         reply = result.get("final_response") or "I stopped the task without a final response."
@@ -1312,6 +1316,8 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
                     "session_context": session_context,
                     "history": history,
                     "execute_tools": True,
+                    # Phase 109: see the matching comment in chat().
+                    "goal_from_user": True,
                 },
             )
             for event in result.get("events", []):
@@ -1357,8 +1363,16 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
                     async for token in _stream_with_route(payload.message, history, fallback, settings):
                         reply_parts.append(token)
                         yield _json_line({"type": "token", "text": token})
-                except RuntimeError:
-                    message = f"Planner failed, then model fallback failed too. First error: {model_exc}"
+                except RuntimeError as local_exc:
+                    # Report all three failures in the order they happened. This
+                    # used to say "First error: <model_exc>", which is the SECOND
+                    # failure: live, a planner outage surfaced as "Ollama stream
+                    # failed" and the real cause had to be dug out of sqlite.
+                    message = (
+                        f"I couldn't answer that. Planner: {exc or type(exc).__name__}. "
+                        f"Fallback model: {model_exc or type(model_exc).__name__}. "
+                        f"Local model: {local_exc or type(local_exc).__name__}."
+                    )
                     memory.add_message(session_id, "assistant", message)
                     _timing_log(session_id, "response_ready", started_at, source="model-error", total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
                     yield _json_line({"type": "error", "message": message})

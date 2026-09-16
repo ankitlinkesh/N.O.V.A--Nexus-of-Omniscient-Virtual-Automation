@@ -346,6 +346,20 @@ def handle_operator_command(message: str, context: dict[str, Any] | None = None)
                 return _power_confirmation(action)
             return None
 
+    # Every route below performs exactly ONE tool call. A message the agent loop
+    # claims -- an explicit `agent mode:` prefix, or two requests in one sentence
+    # -- cannot be honoured by one call, so decline rather than do part of it.
+    # Live: "open notepad, type hello into it, then take a screenshot to check it
+    # worked" matched the screen branch ("screen" is inside "screenshot", "check"
+    # is in the verb list) and became a lone analyze_screen with the whole
+    # sentence as its question; Notepad never opened. "search for X and open the
+    # first result" searched for the literal "X and open the first result" --
+    # Phase 100's bug, still live one layer earlier than where 100 fixed it.
+    from ..agent.policies import is_agentic_intent
+
+    if is_agentic_intent(original):
+        return None
+
     if text in {"lock", "lock laptop", "lock pc", "lock screen"}:
         return _execute(executor, "lock_laptop", {}, session_context)
 

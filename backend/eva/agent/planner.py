@@ -163,7 +163,7 @@ class ToolCallPlanner:
         mode: PlannerMode = "single_turn",
         task_context: dict[str, Any] | None = None,
     ) -> PlannerDecision:
-        forced = self._forced_decision(message)
+        forced = self._forced_decision(message, mode=mode)
         if forced is not None:
             return forced
         if _native_function_calling_enabled():
@@ -343,7 +343,7 @@ class ToolCallPlanner:
         except Exception:
             return None
 
-    def _forced_decision(self, message: str) -> PlannerDecision | None:
+    def _forced_decision(self, message: str, *, mode: PlannerMode = "single_turn") -> PlannerDecision | None:
         text = " ".join(message.lower().strip().split())
         power_actions = {
             "shutdown": ("shutdown", "shut down", "turn off"),
@@ -373,9 +373,17 @@ class ToolCallPlanner:
         # around it. Inside a GUI scope the user asked for GUI actions and the
         # local control list is already in hand, so a forced screenshot is both
         # unwanted and, by the scope's own rules, unavailable.
+        #
+        # Phase 109: and never in agent_step mode. `message` there is the task's
+        # GOAL, which is identical on every step, so a forced screenshot is
+        # returned on step 1, step 2, step 3... regardless of what has happened.
+        # Live: "open notepad, type hello into it, then take a screenshot to check
+        # it worked" took the screenshot FIRST, never opened Notepad, and forced
+        # the identical call again on step 2. In a task the model sees the
+        # progress so far and chooses when the screenshot belongs.
         from ..screen.gui_scope import gui_scope_open
 
-        if self._explicit_screen_request(text) and not gui_scope_open():
+        if mode == "single_turn" and self._explicit_screen_request(text) and not gui_scope_open():
             raw_capture_only = any(word in text for word in ("screenshot", "capture screen", "take a screenshot")) and not any(
                 word in text for word in ("what", "tell", "analyze", "analyse", "check", "inspect", "error", "open")
             )

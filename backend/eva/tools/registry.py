@@ -1789,6 +1789,20 @@ class ToolRegistry:
                     decision = "allow"
                     trace_gate_decision(name, "trusted_auto_allow", spec)
 
+        # Phase 109: a screenshot the user asked for in their own typed goal.
+        # The agent runner opens a single-use grant around ONE capture call, and
+        # only for an untainted, user-typed goal that explicitly asks for the
+        # screen (screen/capture_grant.py documents every condition). Lowers
+        # nothing but override->allow for the two screen tools, never a
+        # risk-escalated call, and runs before the role ORANGE block below so a
+        # role's added friction still wins.
+        if decision == "override" and not friction.escalated:
+            from ..screen.capture_grant import GRANTABLE_SCREEN_TOOLS, consume
+
+            if name in GRANTABLE_SCREEN_TOOLS and consume(name):
+                decision = "allow"
+                trace_gate_decision(name, "user_request_capture_grant", spec)
+
         # Phase 72 ORANGE: raise friction one step for a tool this role may use
         # but should never use unattended. Applied LAST, after the Phase 42
         # de-escalation, so it strictly dominates: a role-escalated action can
