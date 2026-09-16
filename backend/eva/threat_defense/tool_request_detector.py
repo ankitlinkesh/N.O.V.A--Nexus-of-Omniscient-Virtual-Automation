@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from .models import ThreatFinding
 
@@ -120,12 +121,33 @@ def detect_tool_or_capability_requests(text: str, source_type: str) -> tuple[Thr
         findings.append(_finding("unsafe_repair", "high", source_type, "Unsafe repair into executable action was requested."))
     for claim in _capability_claims(raw):
         normalized = claim.lower()
-        if normalized in _KNOWN_CAPABILITIES:
+        if normalized in _KNOWN_CAPABILITIES or normalized in _registered_tool_names():
             continue
         category = "hallucinated_capability" if "superpower" in normalized or "unlocked" in normalized else "unknown_capability"
         severity = "high" if category == "hallucinated_capability" else "medium"
         findings.append(_finding(category, severity, source_type, "Unknown or hallucinated capability claim was flagged."))
     return tuple(findings)
+
+
+@lru_cache(maxsize=1)
+def _registered_tool_names() -> frozenset[str]:
+    """Names of tools that actually exist. A real tool is not an UNKNOWN capability.
+
+    Phase 110. `screen.type_text` returns `action_id: "screen.type_text"`, and that
+    echo of its own name was flagged `unknown_capability` -- NOVA's own tool
+    output tainted the task, and the next step (a screenshot the user asked for)
+    was escalated as a suspected injection. A claim of a capability that does not
+    exist (`browser.execute`, `threat.unlock_shell`, `llm.fake_status`) still
+    fires; asking to CALL a real tool is judged by the direct/indirect tool-request
+    markers above, not here. Imported lazily (the registry imports the agent
+    stack, which imports this package) and fails safe to "nothing is registered".
+    """
+    try:
+        from ..tools.registry import ToolRegistry
+
+        return frozenset(name.lower() for name in ToolRegistry()._tools)
+    except Exception:
+        return frozenset()
 
 
 def _finding(category: str, severity: str, source_type: str, summary: str) -> ThreatFinding:

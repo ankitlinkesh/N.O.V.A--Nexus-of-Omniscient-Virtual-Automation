@@ -120,6 +120,25 @@ def _session_context(request: Request, session_id: str) -> dict:
     return sessions.setdefault(session_id, {})
 
 
+def _one_shot_screen_grant(message: str):
+    """Phase 110: let a one-shot screenshot the user's own message asks for run.
+
+    Opened ONLY around the single-call routes (fast command, operator,
+    capability route, one-shot planner execution), each of which runs the tool
+    synchronously on this thread, so the grant arrives. Never around
+    `run_agentic_task`: the runner opens its own grants per step and checks the
+    task for injected content first, and an outer grant would skip that check.
+    Single-use, and lowers only capture_screen / analyze_screen
+    (screen/capture_grant.py).
+    """
+    from contextlib import nullcontext
+
+    from ..agent.policies import user_asked_for_screenshot
+    from ..screen.capture_grant import open_capture_grant
+
+    return open_capture_grant(message) if user_asked_for_screenshot(message) else nullcontext()
+
+
 def _operator_context(session_context: dict) -> dict:
     return {"registry": tools, "executor": executor, "session_context": session_context}
 
@@ -1080,7 +1099,8 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     session_context = _session_context(request, session_id)
     _timing_log(session_id, "route_received", started_at, chars=len(payload.message))
 
-    fast = maybe_handle_fast_command(payload.message, tools, session_context, memory, session_id)
+    with _one_shot_screen_grant(payload.message):
+        fast = maybe_handle_fast_command(payload.message, tools, session_context, memory, session_id)
     if fast is not None:
         reply, source = fast
         _persist_and_log(
@@ -1100,7 +1120,8 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         )
         return ChatResponse(session_id=session_id, reply=reply, source=source)
 
-    operator = handle_operator_command(payload.message, _operator_context(session_context))
+    with _one_shot_screen_grant(payload.message):
+        operator = handle_operator_command(payload.message, _operator_context(session_context))
     if operator is not None:
         reply = str(operator.get("response") or "Done.")
         memory.add_message(session_id, "user", payload.message)
@@ -1118,7 +1139,8 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         )
 
     capability = classify_capability_intent(payload.message, session_context)
-    capability_reply = _handle_capability_route(payload.message, capability, session_context, memory, session_id, settings)
+    with _one_shot_screen_grant(payload.message):
+        capability_reply = _handle_capability_route(payload.message, capability, session_context, memory, session_id, settings)
     if capability_reply is not None:
         reply, source = capability_reply
         _persist_and_log(
@@ -1198,7 +1220,8 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
 
     for call in decision.tool_calls:
         _timing_log(session_id, "tool_started", started_at, tool=call.tool)
-    results = executor.execute_all(decision.tool_calls)
+    with _one_shot_screen_grant(payload.message):
+        results = executor.execute_all(decision.tool_calls)
     _remember_web_results_from_tools(session_context, results)
     _safe_log(memory, session_id, "tool_results", {"results": _results_payload(results)})
     if any(result.requires_confirmation for result in results):
@@ -1240,7 +1263,8 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         session_context = _session_context(request, session_id)
         _timing_log(session_id, "route_received", started_at, chars=len(payload.message), stream=True)
 
-        fast = maybe_handle_fast_command(payload.message, tools, session_context, memory, session_id)
+        with _one_shot_screen_grant(payload.message):
+            fast = maybe_handle_fast_command(payload.message, tools, session_context, memory, session_id)
         if fast is not None:
             reply, source = fast
             _persist_and_log(
@@ -1264,7 +1288,8 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
                 yield line
             return
 
-        operator = handle_operator_command(payload.message, _operator_context(session_context))
+        with _one_shot_screen_grant(payload.message):
+            operator = handle_operator_command(payload.message, _operator_context(session_context))
         if operator is not None:
             reply = str(operator.get("response") or "Done.")
             memory.add_message(session_id, "user", payload.message)
@@ -1286,7 +1311,8 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
             return
 
         capability = classify_capability_intent(payload.message, session_context)
-        capability_reply = _handle_capability_route(payload.message, capability, session_context, memory, session_id, settings)
+        with _one_shot_screen_grant(payload.message):
+            capability_reply = _handle_capability_route(payload.message, capability, session_context, memory, session_id, settings)
         if capability_reply is not None:
             reply, source = capability_reply
             _persist_and_log(
@@ -1409,7 +1435,8 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         for call in decision.tool_calls:
             _timing_log(session_id, "tool_started", started_at, tool=call.tool)
             yield _json_line({"type": "tool", "tool": call.tool, "args": call.args})
-            result = executor.execute(call)
+            with _one_shot_screen_grant(payload.message):
+                result = executor.execute(call)
             results.append(result)
             if result.tool in {"web_search", "browser_search"} and result.ok:
                 remember_web_results(session_context, result.result)

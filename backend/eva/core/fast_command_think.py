@@ -38,10 +38,16 @@ from typing import Any
 
 from ..mcp.runner import run_async
 
-# Measured 2026-09-06 against the live endpoint: deepseek-v4-pro answered a
-# one-line prompt in 164.3 seconds. A real question is longer, so this is a
-# floor rather than an estimate, and it is stated as one.
-_MEASURED_FLOOR_SECONDS = 164
+# Measured against the live endpoint, per model -- a duration belongs to the model
+# it was measured on. deepseek-v4-pro answered a one-line prompt in 164.3s
+# (2026-09-06) and was retired (HTTP 410) by 2026-09-16. Phase 110 moved the role
+# to nemotron-3-super, which answered in 4.4s; the status used to print "164s,
+# expect minutes" for whatever model was configured, which became false the day
+# the model changed. A real question is longer, so each is a floor.
+_MEASURED_FLOOR_SECONDS = {
+    "deepseek-ai/deepseek-v4-pro-0813": 164,
+    "nvidia/nemotron-3-super-120b-a12b": 4,
+}
 
 # The deep model is for hard questions, not long ones. A generous cap costs real
 # minutes per extra token on a model this slow.
@@ -53,6 +59,13 @@ def _status_report() -> str:
     from ..llm.providers.nvidia_nim import nvidia_nim_role_models
 
     model = nvidia_nim_role_models().get("deep_reasoning") or "(unset)"
+    measured = _MEASURED_FLOOR_SECONDS.get(model)
+    if measured is None:
+        measured_line = "Measured: not measured for this model yet, so the first call may be slow or fast."
+    elif measured >= 60:
+        measured_line = f"Measured: {measured}s for a one-line prompt, so expect minutes, not seconds."
+    else:
+        measured_line = f"Measured: {measured}s for a one-line prompt; longer questions take longer."
     return "\n".join(
         [
             "Deep reasoning status",
@@ -60,7 +73,7 @@ def _status_report() -> str:
             f"Model   : {model}",
             f"Budget  : {timeout_for_purpose('deep_reasoning'):g}s per request "
             f"(deep purposes get {DEEP_REQUEST_TIMEOUT:g}s; everything else keeps the short default)",
-            f"Measured: {_MEASURED_FLOOR_SECONDS}s for a one-line prompt, so expect minutes, not seconds.",
+            measured_line,
             "",
             "Usage: think: <a question worth waiting for>",
             "It answers; it cannot act. Console-only, because a planner should not be able to",

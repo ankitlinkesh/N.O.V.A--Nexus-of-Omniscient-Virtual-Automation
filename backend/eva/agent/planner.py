@@ -383,7 +383,14 @@ class ToolCallPlanner:
         # progress so far and chooses when the screenshot belongs.
         from ..screen.gui_scope import gui_scope_open
 
-        if mode == "single_turn" and self._explicit_screen_request(text) and not gui_scope_open():
+        # Phase 110: also the word-bounded `user_asked_for_screenshot`. Live,
+        # "what's on my screen?" matched neither verb list, the model picked
+        # capture_screen -- which saves a file and describes nothing -- and the
+        # reply promised "I'll analyze it now" in a turn with no next step.
+        from .policies import user_asked_for_screenshot
+
+        asks_for_screen = self._explicit_screen_request(text) or user_asked_for_screenshot(text)
+        if mode == "single_turn" and asks_for_screen and not gui_scope_open():
             raw_capture_only = any(word in text for word in ("screenshot", "capture screen", "take a screenshot")) and not any(
                 word in text for word in ("what", "tell", "analyze", "analyse", "check", "inspect", "error", "open")
             )

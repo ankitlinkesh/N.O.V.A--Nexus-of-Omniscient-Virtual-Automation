@@ -138,6 +138,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase107_vision_click_arrival.py",
     "verify_eva_phase108_capture_region.py",
     "verify_eva_phase109_agentic_screenshots.py",
+    "verify_eva_phase110_typing_and_one_shot.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -251,6 +252,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase107_vision_click_arrival.py",
     "verify_eva_phase108_capture_region.py",
     "verify_eva_phase109_agentic_screenshots.py",
+    "verify_eva_phase110_typing_and_one_shot.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -328,6 +330,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase107_vision_click_arrival.py": ("phase107", "gui", "vision", "screen", "honesty"),
     "verify_eva_phase108_capture_region.py": ("phase108", "gui", "vision", "screen", "capture"),
     "verify_eva_phase109_agentic_screenshots.py": ("phase109", "agent", "routing", "screen", "capture", "gate"),
+    "verify_eva_phase110_typing_and_one_shot.py": ("phase110", "agent", "typing", "screen", "taint", "voice", "gate"),
 }
 
 

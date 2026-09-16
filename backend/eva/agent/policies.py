@@ -159,7 +159,7 @@ _REQUEST_OPENERS = (
     # the one-shot planner did half of it. Words that commonly end a noun phrase
     # ("copy and paste", "come and go") are deliberately left out.
     "take", "capture", "screenshot", "describe", "switch", "press", "scroll", "select",
-    "copy", "save", "fill", "verify", "bring",
+    "copy", "save", "fill", "verify", "bring", "analyze", "analyse",
 )
 
 # The ways a person joins two requests in one sentence.
@@ -329,11 +329,22 @@ def describe_tool_observation(tool: str, result: Any) -> str:
         if tool == "browser_observe":
             return f"browser_observe title={result.get('current_title') or 'unknown'} links={len(result.get('extracted_links') or [])}."
         if tool == "capture_screen":
-            return "capture_screen stored one screenshot for inspection."
+            # Phase 110: the image is saved, not described. "for inspection" read
+            # as though the model could inspect it; live, a text-only planner took
+            # the shot, learned nothing, and spent further steps. Say so plainly.
+            return (
+                "capture_screen saved one screenshot to a local file. Its contents are not "
+                "visible to you; call analyze_screen to find out what is on the screen."
+            )
         if tool == "analyze_screen":
             if result.get("ok"):
                 summary = str(result.get("summary") or "screen analyzed").strip()
-                return f"analyze_screen observed: {summary[:240]}"
+                # Phase 110: was [:240]. Live, the vision summary said the calculator
+                # was "currently displaying the number 19" at character ~330 -- the
+                # answer to the user's question was cut off before it reached the
+                # planner, which kept acting until the step cap. 520 still fits the
+                # planner's 600-character progress window with the prefix.
+                return f"analyze_screen observed: {summary[:520]}"
             summary = str(result.get("summary") or "").strip()
             if result.get("rate_limited") and summary:
                 return summary

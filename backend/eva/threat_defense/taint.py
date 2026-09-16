@@ -48,7 +48,31 @@ UNTRUSTED_SOURCE_TYPES = frozenset(
 
 # Tool-name prefixes / names whose *results* are untrusted external content.
 _UNTRUSTED_TOOL_PREFIXES = ("web.", "web_", "browser_", "chrome_", "mcp.", "research_web")
-_UNTRUSTED_TOOL_NAMES = frozenset({"web_search", "browser_search", "research_web", "analyze_screen"})
+_UNTRUSTED_TOOL_NAMES = frozenset({"web_search", "browser_search", "research_web"})
+
+# Phase 110. A description of the user's own screen is untrusted (a web page on
+# screen can carry an injection), but it is not a web page: it routinely and
+# legitimately DESCRIBES terminals, code, token counters and password fields.
+# Scored as a web result it was tainted by topic words -- live, a screenshot of a
+# coding session raised three CRITICAL findings from "41.6k tokens" (secret
+# exfiltration), "Ran 2 shell commands" (execution surface) and the vision model
+# suggesting "further instructions" beside a bracket (nested payload) -- and the
+# taint then blocked the task's next privileged step. For screen content these
+# categories, which fire on what text is ABOUT, are dropped; every detector for
+# text that INSTRUCTS the agent (injection, impersonation, direct/indirect tool
+# requests, context poisoning, data smuggling, capability claims) still applies.
+_SCREEN_TOPIC_CATEGORIES = frozenset(
+    {
+        "secret_exfiltration",
+        "browser_session_exfiltration",
+        "private_path_exfiltration",
+        "execution_surface_request",
+        "command_injection",
+        "nested_suspicious_payload",
+        "oversized_suspicious_payload",
+    }
+)
+_SCREEN_TOOL_NAMES = frozenset({"analyze_screen"})
 
 _SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 
@@ -87,6 +111,8 @@ def source_type_for_tool(tool_name: str) -> str:
     treated as trusted tool output for taint purposes.
     """
     name = str(tool_name or "").lower()
+    if name in _SCREEN_TOOL_NAMES:
+        return "screen_ocr"
     if name in _UNTRUSTED_TOOL_NAMES:
         return "web_result"
     for prefix in _UNTRUSTED_TOOL_PREFIXES:
@@ -99,12 +125,15 @@ def source_type_for_tool(tool_name: str) -> str:
 
 def _findings(text: str, source_type: str) -> tuple[ThreatFinding, ...]:
     try:
-        return tuple(
+        findings = tuple(
             detect_prompt_injection(text, source_type)
             + detect_tool_or_capability_requests(text, source_type)
             + detect_exfiltration(text, source_type)
             + detect_context_poisoning(text, source_type)
         )
+        if str(source_type or "").strip().lower() == "screen_ocr":
+            findings = tuple(f for f in findings if f.category not in _SCREEN_TOPIC_CATEGORIES)
+        return findings
     except Exception:
         # Fail closed: if scanning breaks, assume the worst about untrusted input.
         return (ThreatFinding("scan_error", "high", source_type, "Content could not be scanned; treated as untrusted.", "treat_as_untrusted_data"),)

@@ -136,14 +136,23 @@ def test_the_deep_model_is_not_a_planner_tool() -> None:
         assert forbidden not in names
 
 
-def test_status_states_the_measured_duration() -> None:
+def test_status_states_the_measured_duration(monkeypatch) -> None:
     """The first use of a three-minute call is indistinguishable from a hang
-    unless something said so first."""
+    unless something said so first. Phase 110: and the duration must belong to
+    the CONFIGURED model -- it printed deepseek's 164s after the model changed."""
     from eva.core.fast_command_think import maybe_handle_think_command
 
+    monkeypatch.setenv("NVIDIA_NIM_DEEP_REASONING_MODEL", "deepseek-ai/deepseek-v4-pro-0813")
     report = maybe_handle_think_command("think status", "think status")[0]
-    assert "164" in report
-    assert "deepseek" in report.lower()
+    assert "164" in report and "minutes" in report
+
+    monkeypatch.setenv("NVIDIA_NIM_DEEP_REASONING_MODEL", "nvidia/nemotron-3-super-120b-a12b")
+    report = maybe_handle_think_command("think status", "think status")[0]
+    assert "164" not in report and "minutes" not in report
+
+    monkeypatch.setenv("NVIDIA_NIM_DEEP_REASONING_MODEL", "some/unmeasured-model")
+    report = maybe_handle_think_command("think status", "think status")[0]
+    assert "not measured" in report
 
 
 def test_a_failure_names_its_reason(monkeypatch) -> None:

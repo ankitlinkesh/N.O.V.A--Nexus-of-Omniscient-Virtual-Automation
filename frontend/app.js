@@ -96,6 +96,7 @@ let selectedVoiceName = localStorage.getItem("eva.selectedVoiceName") || localSt
 let selectedVoiceLang = localStorage.getItem("eva.selectedVoiceLang") || "";
 let ttsProvider = localStorage.getItem("eva-tts-provider") || "browser";
 let speechQueue = [];
+let piperLoading = false;
 let activeUtterance = null;
 let activePiperAudio = null;
 let activePiperUrl = null;
@@ -210,6 +211,13 @@ function cleanSpeechText(text) {
   if (!trimmed) return "";
   if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
     return "";
+  }
+  // Phase 110: an approval prompt is a ~700-character explanation plus an action
+  // id nobody wants read aloud. Piper synthesises ~0.06s per character, so it
+  // timed out (30s) and fell back to the browser voice. Say that approval is
+  // needed; the exact phrase to type is in chat.
+  if (/What you are being asked to approve/i.test(trimmed)) {
+    return "I need your approval before I do that. The details are in chat.";
   }
   let speech = trimmed
     .replace(/```[\s\S]*?```/g, "")
@@ -413,18 +421,32 @@ function speakEva(text, {force = false} = {}) {
   }
   const speech = cleanSpeechText(text);
   if (!speech) return;
-  speechQueue = [{text: speech, force, id: ++speechSequence}];
+  const id = ++speechSequence;
+  if (ttsProvider === "piper") {
+    // Phase 110: one Piper call per sentence-sized chunk, synthesised in order
+    // ahead of playback. A single 450-character call took ~29s against a 30s
+    // limit; chunks keep each call short and start the audio after the first.
+    let previous = Promise.resolve();
+    speechQueue = splitSpeechChunks(speech).map((chunk) => {
+      const audio = previous.then(() => fetchPiperAudio(chunk));
+      previous = audio.catch(() => null);
+      return {text: chunk, force, id, audio};
+    });
+  } else {
+    speechQueue = [{text: speech, force, id}];
+  }
   cancelActiveSpeech("new_final_response", false);
   window.clearTimeout(speechDebounceTimer);
   speechDebounceTimer = window.setTimeout(processSpeechQueue, 70);
 }
 
 function processSpeechQueue() {
-  if (!speechQueue.length || activeUtterance || activePiperAudio) return;
+  if (!speechQueue.length || activeUtterance || activePiperAudio || piperLoading) return;
   const item = speechQueue.shift();
   if (!item || !item.text) return;
   if (ttsProvider === "piper") {
-    speakWithPiper(item.text, item.id).catch((error) => {
+    speakWithPiper(item.text, item.id, item.audio).catch((error) => {
+      if (item.id !== speechSequence) return;
       console.warn("[EvaVoice] Piper failed, falling back to browser voice.", error);
       speakWithBrowser(item.text, item.id, 0);
     });
@@ -509,7 +531,40 @@ function speakWithBrowser(speech, speechId = speechSequence, retryCount = 0) {
   window.speechSynthesis.speak(utterance);
 }
 
-async function speakWithPiper(speech, speechId = speechSequence) {
+// Split speech at sentence ends into chunks of at most `limit` characters; a
+// sentence longer than that is split at word boundaries.
+function splitSpeechChunks(speech, limit = 180) {
+  const chunks = [];
+  let current = "";
+  const pieces = String(speech || "").split(/(?<=[.!?])\s+/).flatMap((sentence) => {
+    if (sentence.length <= limit) return [sentence];
+    const words = sentence.split(" ");
+    const parts = [];
+    let part = "";
+    for (const word of words) {
+      if (part && (part + " " + word).length > limit) {
+        parts.push(part);
+        part = word;
+      } else {
+        part = part ? `${part} ${word}` : word;
+      }
+    }
+    if (part) parts.push(part);
+    return parts;
+  });
+  for (const piece of pieces) {
+    if (current && (current + " " + piece).length > limit) {
+      chunks.push(current);
+      current = piece;
+    } else {
+      current = current ? `${current} ${piece}` : piece;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.filter((chunk) => chunk.trim());
+}
+
+async function fetchPiperAudio(speech) {
   const response = await fetch("/api/tts/piper", {
     method: "POST",
     headers: {"Content-Type": "application/json", "X-Eva-Client": "1"},
@@ -519,7 +574,23 @@ async function speakWithPiper(speech, speechId = speechSequence) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.detail || "Piper TTS failed.");
   }
-  const blob = await response.blob();
+  return response.blob();
+}
+
+async function speakWithPiper(speech, speechId = speechSequence, pendingAudio = null) {
+  piperLoading = true;
+  let blob;
+  try {
+    blob = await (pendingAudio || fetchPiperAudio(speech));
+  } finally {
+    piperLoading = false;
+  }
+  if (!blob) throw new Error("Piper TTS failed.");
+  // A newer reply replaced this one while its audio was still being made.
+  if (speechId !== speechSequence) {
+    processSpeechQueue();
+    return;
+  }
   activePiperUrl = URL.createObjectURL(blob);
   activePiperAudio = new Audio(activePiperUrl);
   activePiperAudio.volume = clampNumber(voiceSettings.volume, DEFAULT_VOICE_VOLUME, MIN_VOICE_VOLUME, MAX_VOICE_VOLUME);

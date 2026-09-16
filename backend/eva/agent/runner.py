@@ -26,6 +26,14 @@ from .policies import (
     user_asked_for_screenshot,
 )
 from ..screen.capture_grant import GRANTABLE_SCREEN_TOOLS, open_capture_grant
+from ..screen.type_grant import (
+    DEFAULT_MAX_TYPES_PER_TASK,
+    TYPE_TOOL,
+    open_type_grant,
+    open_typing_offer,
+    text_is_from_user,
+    user_asked_to_type,
+)
 from .state import AgentRunState
 from .task import AgentStep, AgentTask, readable_observation as _readable_observation
 from ..threat_defense.authorization import authorize_action
@@ -269,6 +277,25 @@ def _store_task_state(session_context: Any, result: dict[str, Any]) -> None:
     session_context["active_task_status"] = result.get("status")
 
 
+def _target_in_front(target: str) -> bool:
+    """Is the app this task opened the foreground window? Focus it once if not.
+
+    Checked immediately before a granted keystroke, so a window that lost focus
+    between steps (a notification, the user clicking elsewhere) gets typing only
+    after it is verifiably back in front. Fails closed: any error means no grant.
+    """
+    try:
+        from ..desktop.verifier import verify_window_focused
+        from ..desktop.windows import focus_window
+
+        if verify_window_focused(target, retries=2).get("verified"):
+            return True
+        focus_window(target)
+        return bool(verify_window_focused(target, retries=4).get("verified"))
+    except Exception:
+        return False
+
+
 def _return_task(task: AgentTask, session_context: Any, **kwargs: Any) -> dict[str, Any]:
     result = _final_result(task, **kwargs)
     _store_task_state(session_context, result)
@@ -277,6 +304,19 @@ def _return_task(task: AgentTask, session_context: Any, **kwargs: Any) -> dict[s
 
 async def run_agentic_task(user_message: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
     context = context or {}
+    # Phase 110: a task whose user-typed goal asks to type may SEE
+    # screen.type_text for its whole run. Visibility only; each call still needs
+    # a type grant (opened per call below) or it stays confirm-class. Opened here,
+    # around the whole run, on the coroutine that plans -- the planner reads the
+    # offer when it builds its tool list.
+    goal = agentic_goal(user_message)
+    if context.get("goal_from_user") is True and user_asked_to_type(goal):
+        with open_typing_offer(goal):
+            return await _run_agentic_task(user_message, context)
+    return await _run_agentic_task(user_message, context)
+
+
+async def _run_agentic_task(user_message: str, context: dict[str, Any]) -> dict[str, Any]:
     raw_settings = context.get("settings")
     settings = getattr(raw_settings, "models", raw_settings) or ModelSettings()
     registry: ToolRegistry = context.get("registry") or ToolRegistry()
@@ -319,6 +359,10 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
         # context["situation"] (a Situation or a ready string) to drive it
         # deterministically.
         grounding = _resolve_grounding(context.get("situation"))
+        # Phase 110: the app this task opened or focused and VERIFIED -- the only
+        # window a type grant may type into -- and how many grants were spent.
+        typing_target: str | None = None
+        types_used = 0
         events: list[dict[str, Any]] = [
             {"type": "agent_task", "task_id": task.id, "message": "Agent task started"},
             {"type": "agent_plan", "task_id": task.id, "plan": list(task.plan), "message": "Plan ready"},
@@ -586,8 +630,29 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
             ):
                 with open_capture_grant(goal):
                     result = executor.execute(call)
+            elif (
+                call.tool == TYPE_TOOL
+                and context.get("goal_from_user") is True
+                and user_asked_to_type(goal)
+                and text_is_from_user(str(call.args.get("text") or ""), goal)
+                and not state.injection_flagged
+                and types_used < DEFAULT_MAX_TYPES_PER_TASK
+                and typing_target is not None
+                and _target_in_front(typing_target)
+            ):
+                # Phase 110: the user's own words, into the app this task opened,
+                # with that app verified in front immediately before typing.
+                types_used += 1
+                with open_type_grant(str(call.args.get("text") or "")):
+                    result = executor.execute(call)
             else:
                 result = executor.execute(call)
+            if result.ok and call.tool in {"open_app", "window_focus"}:
+                target = str(call.args.get("app") or call.args.get("query") or "").strip()
+                verification = result.verification or {}
+                payload = result.result if isinstance(result.result, dict) else {}
+                if target and (verification.get("verified") or payload.get("verified")):
+                    typing_target = target
             if call.tool in {"web_search", "browser_search"} and result.ok:
                 remember_web_results(session_context, result.result)
             observation = _observation_text(call, result)

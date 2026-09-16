@@ -1624,6 +1624,15 @@ class ToolRegistry:
             # strictly narrower than no scope on this axis.
             specs = [spec for spec in specs if spec["name"] not in GUI_SCOPE_HIDDEN]
 
+        # Phase 110: inside an agent task whose user-typed goal asks to type, the
+        # planner may SEE screen.type_text. Visibility only -- a call is still
+        # confirm-class unless the runner opens a type grant for that exact text
+        # (screen/type_grant.py). Only the agent runner opens an offer.
+        from ..screen.type_grant import TYPE_TOOL, typing_offered
+
+        if typing_offered() and TYPE_TOOL in self._tools and all(spec["name"] != TYPE_TOOL for spec in specs):
+            specs.append(self._public_spec(self._tools[TYPE_TOOL]))
+
         return specs
 
     def get(self, name: str) -> ToolSpec | None:
@@ -1802,6 +1811,17 @@ class ToolRegistry:
             if name in GRANTABLE_SCREEN_TOOLS and consume(name):
                 decision = "allow"
                 trace_gate_decision(name, "user_request_capture_grant", spec)
+
+        # Phase 110: typing the user's own words into the app the task opened.
+        # The runner opens a single-use grant bound to the exact text; this
+        # spends it only on screen.type_text with that text. Same placement and
+        # dominance as the capture grant above.
+        if decision == "confirm" and not friction.escalated:
+            from ..screen import type_grant
+
+            if type_grant.consume(name, call_args):
+                decision = "allow"
+                trace_gate_decision(name, "user_words_type_grant", spec)
 
         # Phase 72 ORANGE: raise friction one step for a tool this role may use
         # but should never use unattended. Applied LAST, after the Phase 42

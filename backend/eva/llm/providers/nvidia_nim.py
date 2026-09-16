@@ -24,7 +24,8 @@ def _csv(value: str) -> list[str]:
 def nvidia_nim_role_models() -> dict[str, str]:
     return {
         "planner": os.environ.get("NVIDIA_NIM_PLANNER_MODEL", DEFAULT_NIM_MODEL).strip() or DEFAULT_NIM_MODEL,
-        "deep_reasoning": os.environ.get("NVIDIA_NIM_DEEP_REASONING_MODEL", "deepseek-ai/deepseek-v4-pro-0813").strip(),
+        # Phase 110: deepseek-v4-pro-0813 was retired (HTTP 410); a fresh checkout pointed at a dead model.
+        "deep_reasoning": os.environ.get("NVIDIA_NIM_DEEP_REASONING_MODEL", "nvidia/nemotron-3-super-120b-a12b").strip(),
         "code": os.environ.get("NVIDIA_NIM_CODE_MODEL", DEFAULT_NIM_MODEL).strip(),
         "vision": os.environ.get("NVIDIA_NIM_VISION_MODEL", "meta/llama-3.2-11b-vision-instruct").strip(),
         "screen_reason": os.environ.get("NVIDIA_NIM_SCREEN_REASON_MODEL", "meta/llama-3.2-11b-vision-instruct").strip(),
