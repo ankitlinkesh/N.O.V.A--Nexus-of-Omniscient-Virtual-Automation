@@ -281,12 +281,27 @@ def test_a_screen_goal_is_not_forced_on_every_agent_step():
 
 
 def test_power_confirmation_is_still_forced_inside_a_task():
+    """Phase 112 changed HOW: a goal that merely contains "restart" is no longer
+    forced (that made "restart spotify" a laptop restart). A bare power goal is
+    still forced, and a power tool proposed mid-task still stops for confirmation
+    in the runner before anything runs."""
     from backend.eva.agent.planner import ToolCallPlanner
     from backend.eva.core.config import ModelSettings
 
     planner = ToolCallPlanner(ModelSettings(), ToolRegistry())
-    forced = planner._forced_decision("save my work and then restart the laptop", mode="agent_step")
-    assert forced is not None and forced.type == "confirmation_required"
+    forced = planner._forced_decision("restart the laptop", mode="agent_step")
+    assert forced is not None and forced.type == "confirmation_required" and forced.action == "restart"
+    assert planner._forced_decision("restart spotify", mode="agent_step") is None
+
+    registry = FakeCaptureRegistry()
+    result = _run(
+        "save my work and then restart the laptop",
+        [_call("guarded_power_action", action="restart"), _done("restarted")],
+        registry,
+        goal_from_user=True,
+    )
+    assert result.get("requires_confirmation") is True
+    assert result.get("status") == "waiting_for_confirmation"
 
 
 # --- a slow app is not a failed launch -----------------------------------------

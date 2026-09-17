@@ -141,6 +141,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase110_typing_and_one_shot.py",
     "verify_eva_phase111_voice_defaults_and_write.py",
     "verify_voice_ui.py",
+    "verify_eva_phase112_power_words_and_queries.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -257,6 +258,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase110_typing_and_one_shot.py",
     "verify_eva_phase111_voice_defaults_and_write.py",
     "verify_voice_ui.py",
+    "verify_eva_phase112_power_words_and_queries.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -337,6 +339,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase110_typing_and_one_shot.py": ("phase110", "agent", "typing", "screen", "taint", "voice", "gate"),
     "verify_eva_phase111_voice_defaults_and_write.py": ("phase111", "voice", "typing", "frontend"),
     "verify_voice_ui.py": ("phase111", "voice", "frontend", "ui"),
+    "verify_eva_phase112_power_words_and_queries.py": ("phase112", "routing", "power", "search", "spotify"),
 }
 
 

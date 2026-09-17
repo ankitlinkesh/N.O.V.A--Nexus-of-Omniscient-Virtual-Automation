@@ -64,13 +64,6 @@ MEDIA_ALIASES = {
     "previous track": "previous",
 }
 
-POWER_ACTIONS = {
-    "shutdown": ("shutdown", "shut down", "turn off"),
-    "restart": ("restart", "reboot"),
-    "sleep": ("sleep",),
-    "sign_out": ("sign out", "log out", "logout"),
-}
-
 
 def _normalize(message: str) -> str:
     return " ".join(message.lower().strip().split())
@@ -340,11 +333,15 @@ def handle_operator_command(message: str, context: dict[str, Any] | None = None)
     if not _enabled():
         return None
 
-    for action, phrases in POWER_ACTIONS.items():
-        if any(phrase in text for phrase in phrases):
-            if _power_requires_confirmation():
-                return _power_confirmation(action)
-            return None
+    # Phase 112: whole-request matching (core/power_intent.py). The substring
+    # table above made "turn off wifi" ask to shut the laptop down.
+    from .power_intent import power_action_requested
+
+    action = power_action_requested(text)
+    if action is not None:
+        if _power_requires_confirmation():
+            return _power_confirmation(action)
+        return None
 
     # Every route below performs exactly ONE tool call. A message the agent loop
     # claims -- an explicit `agent mode:` prefix, or two requests in one sentence
@@ -355,7 +352,7 @@ def handle_operator_command(message: str, context: dict[str, Any] | None = None)
     # sentence as its question; Notepad never opened. "search for X and open the
     # first result" searched for the literal "X and open the first result" --
     # Phase 100's bug, still live one layer earlier than where 100 fixed it.
-    from ..agent.policies import is_agentic_intent
+    from ..agent.policies import is_agentic_intent, split_trailing_request
 
     if is_agentic_intent(original):
         return None
@@ -453,6 +450,11 @@ def handle_operator_command(message: str, context: dict[str, Any] | None = None)
         )
 
     search = _after_prefix(original, ("search web for ", "web search ", "search for ", "google ", "look up "))
+    # Phase 112: "google best laptops 2026 and open the first result" searched for
+    # that whole string -- `google` is not a request opener, so the message was not
+    # agentic and the decline above let it through. Decline here too.
+    if search and split_trailing_request(search)[1]:
+        return None
     if search:
         return _execute(executor, "web_search", {"query": search}, session_context)
 

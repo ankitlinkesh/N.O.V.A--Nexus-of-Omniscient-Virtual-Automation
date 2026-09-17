@@ -192,6 +192,19 @@ def _remember_correction(text: str, context: dict | None) -> bool:
     return correction
 
 
+def _has_trailing_request(query: str) -> bool:
+    """Phase 112: a Spotify query that carries a second request is not a query.
+
+    "play lofi on spotify and turn the volume up" searched Spotify for "lofi on
+    spotify and turn the volume up" and dropped the volume request -- Phase 100's
+    polluted-query bug, on the Spotify routes it never covered. Declining sends
+    the whole message to the agent loop, same as the Chrome site-search route.
+    """
+    from ..agent.policies import split_trailing_request
+
+    return bool(split_trailing_request(query)[1])
+
+
 def classify_capability_intent(message: str, context: dict | None = None) -> dict:
     """Classify broad Eva capabilities without calling a cloud model.
 
@@ -441,7 +454,7 @@ def classify_capability_intent(message: str, context: dict | None = None) -> dic
         return _base_result(True, capability="media_music_control", confidence=0.9, reason="Spotify next-track intent.", suggested_route="spotify_next")
 
     if "spotify" in text:
-        if text.startswith("search spotify for "):
+        if text.startswith("search spotify for ") and not _has_trailing_request(_strip_spotify_query(message)):
             query = _strip_spotify_query(message)
             update_task_context(context, user_request=message, active_intent="search", target_app="spotify", target_platform="spotify", target_query=query, expected_result=f"Spotify search results for {query}", provenance="tool_result")
             return _base_result(
@@ -452,7 +465,7 @@ def classify_capability_intent(message: str, context: dict | None = None) -> dic
                 suggested_route="spotify_search_desktop",
                 query=query,
             )
-        if text.startswith(("play ", "open spotify and play ")):
+        if text.startswith(("play ", "open spotify and play ")) and not _has_trailing_request(_strip_spotify_query(message)):
             query = _strip_spotify_query(message)
             update_task_context(context, user_request=message, active_intent="play", target_app="spotify", target_platform="spotify", target_query=query, expected_result=f"Spotify playing {query}", needs_activation=True, provenance="tool_result")
             return _base_result(
@@ -470,7 +483,12 @@ def classify_capability_intent(message: str, context: dict | None = None) -> dic
         if text in {"previous spotify", "spotify previous", "previous song on spotify", "previous track on spotify"}:
             return _base_result(True, capability="media_music_control", confidence=0.9, reason="Spotify previous-track intent.", suggested_route="spotify_previous")
 
-    if text.startswith("play ") and len(text.split()) > 1 and not text.startswith(("play pause", "play/pause")):
+    if (
+        text.startswith("play ")
+        and len(text.split()) > 1
+        and not text.startswith(("play pause", "play/pause"))
+        and not _has_trailing_request(_strip_spotify_query(message))
+    ):
         query = _strip_spotify_query(message)
         update_task_context(context, user_request=message, active_intent="play", target_app="spotify", target_platform="spotify", target_query=query, expected_result=f"Spotify playing {query}", needs_activation=True, provenance="tool_result")
         return _base_result(

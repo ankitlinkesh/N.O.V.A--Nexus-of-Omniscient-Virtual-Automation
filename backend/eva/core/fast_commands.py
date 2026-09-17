@@ -123,6 +123,12 @@ ABOUT_ME_COMMANDS = {
     "tell me what u remember about me",
     "what do you know about myself",
     "remind me what you know about me",
+    # Phase 112: the shorthand Phase 91's exact list dropped; it fell through to
+    # the LLM instead of the local profile and saved notes.
+    "what do u know abt me",
+    "what do you know abt me",
+    "what do u remember abt me",
+    "tell me what u know abt me",
 }
 ABOUT_EVA_COMMANDS = {
     "tell me about yourself",

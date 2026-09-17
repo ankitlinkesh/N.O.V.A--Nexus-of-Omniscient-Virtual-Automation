@@ -345,23 +345,22 @@ class ToolCallPlanner:
 
     def _forced_decision(self, message: str, *, mode: PlannerMode = "single_turn") -> PlannerDecision | None:
         text = " ".join(message.lower().strip().split())
-        power_actions = {
-            "shutdown": ("shutdown", "shut down", "turn off"),
-            "restart": ("restart", "reboot"),
-            "sleep": ("sleep",),
-            "sign_out": ("sign out", "log out", "logout"),
-        }
-        for action, phrases in power_actions.items():
-            if any(phrase in text for phrase in phrases):
-                return PlannerDecision(
-                    type="confirmation_required",
-                    reason=f"{action} requires explicit confirmation.",
-                    tool_calls=[],
-                    final_response=f"This will {action.replace('_', ' ')} your laptop. Confirm?",
-                    requires_confirmation=True,
-                    action=action,
-                    continue_after_tools=False,
-                )
+        # Phase 112: one whole-request matcher shared with the operator layer
+        # (core/power_intent.py). This was a substring table: "restart spotify"
+        # asked to restart the laptop, "turn off wifi" to shut it down.
+        from ..core.power_intent import power_action_requested
+
+        action = power_action_requested(text)
+        if action is not None:
+            return PlannerDecision(
+                type="confirmation_required",
+                reason=f"{action} requires explicit confirmation.",
+                tool_calls=[],
+                final_response=f"This will {action.replace('_', ' ')} your laptop. Confirm?",
+                requires_confirmation=True,
+                action=action,
+                continue_after_tools=False,
+            )
 
         # A forced decision runs BEFORE the planner is shown any tool list, so it
         # can return a tool that `planner_specs()` deliberately excluded -- which
