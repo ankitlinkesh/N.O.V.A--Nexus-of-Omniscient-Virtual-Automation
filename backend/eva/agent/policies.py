@@ -159,7 +159,7 @@ _REQUEST_OPENERS = (
     # the one-shot planner did half of it. Words that commonly end a noun phrase
     # ("copy and paste", "come and go") are deliberately left out.
     "take", "capture", "screenshot", "describe", "switch", "press", "scroll", "select",
-    "copy", "save", "fill", "verify", "bring", "analyze", "analyse",
+    "copy", "save", "fill", "verify", "bring", "analyze", "analyse", "enter",
 )
 
 # The ways a person joins two requests in one sentence.

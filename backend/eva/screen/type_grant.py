@@ -41,6 +41,13 @@ TYPE_TOOL = "screen.type_text"
 DEFAULT_MAX_TYPES_PER_TASK = 3
 
 _TYPE_REQUEST = re.compile(r"\btyp(?:e|ing)\b", re.IGNORECASE)
+# Phase 111: "write" and "enter" also ask for typing -- but only with a quoted
+# string or "into". A bare "write me an email and save it" is not a request to
+# press keys in an app, and opening the offer there would only invite the model
+# to propose keystrokes that end in a confirmation prompt. The exact-words rule
+# below, not this trigger, is what authorizes anything.
+_WRITE_REQUEST = re.compile(r"\b(?:writ(?:e|ing)|enter(?:ing)?)\b", re.IGNORECASE)
+_TEXT_TARGET = re.compile(r"[\"'“”‘’]|\binto\b", re.IGNORECASE)
 
 
 def _normalize(text: str) -> str:
@@ -48,7 +55,10 @@ def _normalize(text: str) -> str:
 
 
 def user_asked_to_type(goal: str) -> bool:
-    return bool(_TYPE_REQUEST.search(_normalize(goal)))
+    text = _normalize(goal)
+    if _TYPE_REQUEST.search(text):
+        return True
+    return bool(_WRITE_REQUEST.search(text) and _TEXT_TARGET.search(text))
 
 
 def text_is_from_user(text: str, goal: str) -> bool:

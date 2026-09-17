@@ -39,7 +39,8 @@ def main() -> int:
     )
     failures += emit(
         "push_to_talk_controls_present",
-        all(token in html for token in ("micButton", "micLabel", "voiceTranscript", "Push to talk with Eva")),
+        # The label was renamed with the product (Eva -> NOVA); the control is what matters.
+        all(token in html for token in ("micButton", "micLabel", "voiceTranscript", 'aria-label="Push to talk"')),
     )
     failures += emit(
         "speech_synthesis_used",
@@ -162,11 +163,12 @@ def main() -> int:
     )
     failures += emit(
         "natural_voice_priority",
-        "Microsoft Aria Online" in js
-        and "Microsoft Jenny Online" in js
-        and "Microsoft Zira" in js
-        and "Google US English" in js
-        and "Samantha" in js,
+        # Phase 102 made the fallback voices male to match the persona and the
+        # installed Piper model; this check used to pin the old female list.
+        "Microsoft Guy Online" in js
+        and "Microsoft David" in js
+        and "Google US English Male" in js
+        and "Microsoft Zira" not in js.split("preferredVoices: [", 1)[1].split("]", 1)[0],
     )
     failures += emit(
         "final_only_speaking",
@@ -176,17 +178,19 @@ def main() -> int:
         "speaking_visual_state",
         "body[data-eva-state=\"speaking\"]" in css,
     )
+    # The defaults are not in .env.example (they never were at HEAD); what must
+    # hold is that the backend and the UI agree and that a missing browser
+    # setting falls back to them instead of clamping to the minimum.
+    routes_src = (ROOT / "backend" / "eva" / "api" / "routes.py").read_text(encoding="utf-8")
     failures += emit(
-        "env_placeholders_soft_defaults",
-        all(
-            token in env
-            for token in (
-                "EVA_VOICE_RATE=1.08",
-                "EVA_VOICE_PITCH=1.02",
-                "EVA_VOICE_VOLUME=0.82",
-                "EVA_PREFERRED_VOICES=Microsoft Aria Online,Microsoft Jenny Online,Microsoft Zira,Google US English,Samantha",
-            )
-        ),
+        "voice_defaults_agree_and_apply",
+        "DEFAULT_VOICE_RATE = 1.08" in js
+        and "DEFAULT_VOICE_PITCH = 1.02" in js
+        and "DEFAULT_VOICE_VOLUME = 0.82" in js
+        and '"EVA_VOICE_RATE", "1.08"' in routes_src
+        and '"EVA_VOICE_PITCH", "1.02"' in routes_src
+        and '"EVA_VOICE_VOLUME", "0.82"' in routes_src
+        and 'value === null || value === undefined || value === "" ? NaN' in js,
     )
     secret_patterns = [
         r"AIza[0-9A-Za-z_\-]{20,}",

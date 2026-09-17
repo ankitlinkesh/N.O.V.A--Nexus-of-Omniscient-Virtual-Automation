@@ -188,7 +188,11 @@ function boolFromStorage(name, fallback) {
 }
 
 function clampNumber(value, fallback, min = 0, max = 10) {
-  const parsed = Number(value);
+  // A missing setting is not zero. `Number(null)` and `Number("")` are 0, so a
+  // browser that had never saved a voice setting got every value clamped to its
+  // MINIMUM -- measured live: rate 0.85, pitch 0.9, volume 0.4 -- and NOVA spoke
+  // at 40% volume with the defaults never applied.
+  const parsed = value === null || value === undefined || value === "" ? NaN : Number(value);
   if (!Number.isFinite(parsed)) {
     const fallbackNumber = Number(fallback);
     if (!Number.isFinite(fallbackNumber)) return min;

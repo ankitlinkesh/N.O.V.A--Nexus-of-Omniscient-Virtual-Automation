@@ -986,9 +986,11 @@ async def health(request: Request) -> dict:
             # contradicted itself and the UI honoured the wrong half, selecting
             # Microsoft Zira.
             "gender": os.environ.get("EVA_VOICE_GENDER", "male"),
-            "rate": float(os.environ.get("EVA_VOICE_RATE", "2.35")),
-            "pitch": float(os.environ.get("EVA_VOICE_PITCH", "1.04")),
-            "volume": float(os.environ.get("EVA_VOICE_VOLUME", "1.0")),
+            # The same defaults as frontend/app.js (DEFAULT_VOICE_*). The rate was
+            # 2.35, above the UI's 1.25 maximum, so it could only ever clamp.
+            "rate": float(os.environ.get("EVA_VOICE_RATE", "1.08")),
+            "pitch": float(os.environ.get("EVA_VOICE_PITCH", "1.02")),
+            "volume": float(os.environ.get("EVA_VOICE_VOLUME", "0.82")),
             "preferred_voices": [
                 item.strip()
                 for item in os.environ.get(
