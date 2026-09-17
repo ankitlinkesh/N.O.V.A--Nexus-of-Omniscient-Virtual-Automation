@@ -142,6 +142,8 @@ FULL_VERIFIERS = [
     "verify_eva_phase111_voice_defaults_and_write.py",
     "verify_voice_ui.py",
     "verify_eva_phase112_power_words_and_queries.py",
+    "verify_eva_phase113_url_refused_before_gate.py",
+    "verify_chrome_execution_skills.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -259,6 +261,8 @@ QUICK_VERIFIERS = [
     "verify_eva_phase111_voice_defaults_and_write.py",
     "verify_voice_ui.py",
     "verify_eva_phase112_power_words_and_queries.py",
+    "verify_eva_phase113_url_refused_before_gate.py",
+    "verify_chrome_execution_skills.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
@@ -340,6 +344,8 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase111_voice_defaults_and_write.py": ("phase111", "voice", "typing", "frontend"),
     "verify_voice_ui.py": ("phase111", "voice", "frontend", "ui"),
     "verify_eva_phase112_power_words_and_queries.py": ("phase112", "routing", "power", "search", "spotify"),
+    "verify_eva_phase113_url_refused_before_gate.py": ("phase113", "browser", "url", "gate"),
+    "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 
 

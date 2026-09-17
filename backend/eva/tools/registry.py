@@ -131,6 +131,20 @@ class ToolSpec:
 
 
 POWER_ACTIONS = {"shutdown", "restart", "sleep", "sign_out", "log_out"}
+
+# Tools whose handler opens or reads a `url` and accepts only http(s). Phase 113
+# checks that before the gate (see ToolRegistry.run).
+_URL_TOOLS = frozenset(
+    {
+        "open_url",
+        "browser_open_url",
+        "browser_open_result_and_verify",
+        "browser_extract_links",
+        "browser_summarize_page",
+        "browser_save_page_to_research",
+        "web.open_url",
+    }
+)
 MEDIA_ACTIONS = {"mute", "volume_up", "volume_down", "play_pause", "next", "previous"}
 KNOWN_APPS = {
     "calculator",
@@ -1739,6 +1753,23 @@ class ToolRegistry:
                     ),
                 }
             _gui_record()
+
+        # Phase 113: refuse a URL no handler will open BEFORE the gate. Every tool
+        # here rejects anything but http(s) inside its handler, but the handler
+        # only runs after the gate -- and Phase 55 escalates a sensitive-looking
+        # target, so `file:///C:/Users/HP/.env` produced an OVERRIDE prompt, and
+        # the refusal came only after the user typed `confirm override`. Asking
+        # someone to approve an action that cannot happen is the Phase 74
+        # refuse-after-approval defect. This raises exactly what the handler
+        # would have raised, so the executor reports it the same way, and it
+        # changes nothing for a URL the handler accepts. An empty `url` is left
+        # alone: for the browser tools it means "the current page".
+        if name in _URL_TOOLS:
+            raw_url = str(call_args.get("url") or "").strip()
+            if raw_url:
+                from ..browser.safety import normalize_public_url
+
+                normalize_public_url(raw_url)
 
         decision = tool_gate.classify_tool_call(spec)
         # Flight recorder: record the gate's classification. Inert (no-op, no
