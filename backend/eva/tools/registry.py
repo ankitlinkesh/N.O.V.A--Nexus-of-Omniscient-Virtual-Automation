@@ -1218,7 +1218,7 @@ class ToolRegistry:
             # honestly, they are now override-class and covered by that defense.
             "capture_screen": ToolSpec(
                 name="capture_screen",
-                description="Capture one on-demand screenshot only when the user explicitly asks Eva to look at, check, analyze, or inspect the screen.",
+                description="Save one screenshot to a local file. You cannot read the image, so this tells you nothing about what is on the screen; call analyze_screen when you need to KNOW what is displayed. Only when the user explicitly asks Eva to look at, check, analyze, or inspect the screen.",
                 args_schema=_schema({}),
                 safety_level="sensitive",
                 handler=_capture_screen,

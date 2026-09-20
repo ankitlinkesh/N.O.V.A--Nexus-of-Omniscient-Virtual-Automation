@@ -66,6 +66,32 @@ def double_click(x: int, y: int, reason: str, action_id: str = "screen.double_cl
     return _obs(action_id, True, f"Double-clicked visible screen coordinate for reason: {reason}.", {"x": int(x), "y": int(y)})
 
 
+def _foreground_handle() -> int:
+    """The window handle currently in front, or 0. Never raises."""
+    try:
+        from .dpi import ensure_dpi_aware
+
+        ensure_dpi_aware()
+        import uiautomation as auto  # type: ignore
+
+        foreground = auto.GetForegroundControl()
+        return int(getattr(foreground, "NativeWindowHandle", 0) or 0)
+    except Exception:
+        return 0
+
+
+def _wait_for_focused_window_ready(handle: int) -> bool:
+    """Wait for the window in front to own the keyboard. Never raises."""
+    if not handle:
+        return False
+    try:
+        from .input_ready import wait_for_input_ready
+
+        return wait_for_input_ready(handle)
+    except Exception:
+        return False
+
+
 def _focused_value() -> str | None:
     """The text currently in the focused control, or None if it cannot be read.
 
@@ -108,6 +134,15 @@ def type_text(text: str, reason: str, action_id: str = "screen.type_text") -> Ag
         return _obs(action_id, False, "Typing unavailable because real input is disabled.", error=error)
     payload = str(text)
 
+    # Phase 114: wait for the window in front to actually own the keyboard before
+    # typing. A just-launched UWP window is the foreground window ~1.4s before
+    # its own process takes keyboard focus, and everything typed in between is
+    # swallowed with no error anywhere -- measured: Calculator opened, "9*9="
+    # typed, `success: true` reported, display still reading 0. Bounded and
+    # advisory: readiness is recorded, never used to claim the typing worked.
+    handle = _foreground_handle()
+    input_ready = _wait_for_focused_window_ready(handle)
+
     # Read the field BEFORE, so the check is "it gained exactly this text" rather
     # than "it contains something like it" -- a field with existing contents is
     # the normal case, and a substring test would pass on a corrupted retype.
@@ -119,7 +154,7 @@ def type_text(text: str, reason: str, action_id: str = "screen.type_text") -> Ag
     # declared sensitive argument and is masked everywhere else; a verification
     # failure must not become the one place the value gets echoed into a summary,
     # a log or an error (the Phase 68 lesson).
-    raw: dict[str, Any] = {"chars": len(payload)}
+    raw: dict[str, Any] = {"chars": len(payload), "input_ready": input_ready}
     if before is None or after is None:
         # An unverifiable type is not a failed type. Saying otherwise would make
         # form_filler stop at the first field of any app without a value pattern,
