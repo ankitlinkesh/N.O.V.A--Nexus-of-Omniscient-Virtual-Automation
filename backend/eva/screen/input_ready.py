@@ -35,10 +35,20 @@ _POLL_SECONDS = 0.15
 # Keyboard focus reaching the app's process is necessary but NOT sufficient:
 # measured on a cold Calculator, focus was inside the app at 3.49s and the key
 # pressed then was still swallowed, while the one at 3.95s landed. So this adds a
-# settle after the focus signal. It is a measured heuristic, not a proof --
-# named as one rather than dressed up: 0.6s covered the gap on this machine with
-# room to spare, and the readback in screen_controller is what catches the rest.
-_SETTLE_SECONDS = 0.6
+# settle after the focus signal.
+#
+# Phase 116 measured the threshold instead of guessing at it. Sweeping the delay
+# between "the window is in front" and the first keystroke, on clean cold starts:
+#
+#     0.0s -> lost      1.0s -> landed      2.0s -> landed      3.0s -> landed
+#
+# Phase 114 had picked 0.6s, just under the cliff, which is why it still lost the
+# keys; and its 1.2s attempt was measured during rapid relaunches (a kill 1.5s
+# earlier) that made every timing worse, so the number was blamed when the test
+# setup was at fault. At 1.5s: 5/5 clean cold starts, 4/4 rapid relaunches, and
+# warm typing unchanged. It is still a measured margin over an observed cliff,
+# not a guarantee -- which is why the readback in screen_controller stays.
+_SETTLE_SECONDS = 1.5
 
 
 def _content_process_id(automation, hwnd: int) -> int | None:

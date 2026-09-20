@@ -138,8 +138,8 @@ try:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     row = readme.split("| 114 |", 1)[1].split("\n", 1)[0] if "| 114 |" in readme else ""
     failures += emit(
-        "README records Phase 114 AND that the defect is only mitigated",
-        bool(row) and "not fixed" in row.lower(),
+        "README records Phase 114 and points at the phase that closed it",
+        bool(row) and "phase 116" in row.lower(),
     )
 except Exception as exc:  # pragma: no cover
     failures += emit("behavioural checks ran", False, error=f"{type(exc).__name__}: {exc}")
