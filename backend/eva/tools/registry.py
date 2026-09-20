@@ -329,16 +329,52 @@ def _analyze_screen(question: str | None = None, region: CaptureRegion | None = 
     # leaves the machine, so it is set by trusted in-process callers (the vision
     # click passes the foreground window) and can never be widened by a planner
     # argument.
+    #
+    # Phase 115, chosen by the user: with no caller-supplied region this uploads
+    # the FOREGROUND WINDOW, not every display. Phase 108 widened it to the whole
+    # desktop for a good reason -- it had been photographing one arbitrary
+    # non-primary monitor -- but the cost was that "what's on my screen?" sent
+    # every other app and display to Google. The window in front is what the
+    # question is about. It REFUSES rather than widening when no window can be
+    # established, the rule the vision-click path already follows: silently
+    # sending more than the task needs is the failure this prevents.
+    if region is None:
+        from ..screen.capture import foreground_window_region
+
+        region = foreground_window_region()
+        if region is None:
+            return {
+                "ok": False,
+                "error": "no_foreground_window",
+                "summary": (
+                    "I could not establish which window is in front, so I did not photograph the screen. "
+                    "Click the window you want me to look at and ask again."
+                ),
+            }
     capture = _capture_screen(region=region)
     result = analyze_screen_image_sync(str(capture["image_path"]), user_question=question)
     if isinstance(result, dict):
+        # Name the window that was photographed. A description of one window read
+        # as a description of "the screen" would overclaim both what was looked
+        # at and what was sent.
+        try:
+            from ..desktop.windows import get_active_window
+
+            active = get_active_window()
+            window_title = str(getattr(active, "title", "") or "")
+        except Exception:
+            window_title = ""
         result["capture"] = {
             "image_path": capture.get("image_path"),
             "bytes": capture.get("bytes"),
             "region": capture.get("region"),
             "captured_at": capture.get("captured_at"),
             "note": capture.get("note"),
+            "scope": "foreground_window",
+            "window_title": window_title,
         }
+        if window_title and result.get("ok"):
+            result["summary"] = f"(Looking at the window in front: {window_title}) " + str(result.get("summary") or "")
     return result
 
 class ToolRegistry:
