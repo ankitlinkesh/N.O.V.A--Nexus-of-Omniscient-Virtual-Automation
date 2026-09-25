@@ -18,8 +18,25 @@ SAFE_ROOT = Path(__file__).resolve().parents[3]
 _DENY_BASENAME_GLOBS = (".env*", "*.secret*", "*.sqlite3", "id_rsa*")
 
 
+_HOME_FOLDERS = ("Documents", "Desktop", "Downloads")
+
+
+def _anchor_home_folder(raw: Path) -> Path:
+    """Phase 118: live, the planner asked for "Downloads" and it resolved
+    against the server's working directory (this repo), not the user's folder.
+    A relative path that starts with one of the user's own folders means that
+    folder; anything else is left alone.
+    """
+    if raw.is_absolute() or not raw.parts:
+        return raw
+    for name in _HOME_FOLDERS:
+        if raw.parts[0].lower() == name.lower():
+            return Path.home().joinpath(name, *raw.parts[1:])
+    return raw
+
+
 def _safe_path(path: str) -> Path:
-    target = Path(path).expanduser().resolve()
+    target = _anchor_home_folder(Path(path).expanduser()).resolve()
 
     name_lower = target.name.lower()
     if any(fnmatch.fnmatch(name_lower, pattern) for pattern in _DENY_BASENAME_GLOBS):
@@ -89,4 +106,5 @@ def file_delete(path: str) -> dict[str, Any]:
 
 def file_list_dir(path: str) -> dict[str, Any]:
     target = _safe_path(path)
-    return {"ok": True, "path": str(target), "items": [item.name for item in target.iterdir()][:200]}
+    names = [item.name for item in target.iterdir()]
+    return {"ok": True, "path": str(target), "items": names[:200], "total": len(names)}

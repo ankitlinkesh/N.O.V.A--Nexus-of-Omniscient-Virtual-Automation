@@ -358,6 +358,15 @@ def describe_tool_observation(tool: str, result: Any) -> str:
                 if isinstance(item, dict):
                     lines.append(f"- {item.get('path')}:{item.get('line')} - {item.get('snippet')}")
             return "\n".join(lines)
+        if tool == "file.list_dir" and result.get("ok"):
+            # Phase 118: live, "how many files are in my Downloads" answered 7
+            # for a folder holding 45 -- the generic dump reached the planner cut
+            # off, and the model counted what it could see. State the count first.
+            items = result.get("items") if isinstance(result.get("items"), list) else []
+            shown = ", ".join(str(item) for item in items[:25])
+            total = int(result.get("total") or len(items))
+            more = f" (and {total - 25} more)" if total > 25 else ""
+            return f"file.list_dir found {total} item(s) in {result.get('path')}: {shown}{more}."
         if tool == "workspace_list_files":
             count = len(result.get("files") or []) if isinstance(result.get("files"), list) else 0
             return f"workspace_list_files listed {count} safe files."

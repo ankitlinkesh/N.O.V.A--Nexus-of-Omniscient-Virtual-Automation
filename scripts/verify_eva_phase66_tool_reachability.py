@@ -234,8 +234,17 @@ EXPECTED_TOOL_COUNT = 102
 # call it, so a time question kept being answered from nothing. These two pins
 # are the ones that would have caught it -- reachable-by-grep is not
 # reachable-by-planner.
-EXPECTED_DEFAULT_PLANNER_VISIBLE_COUNT = 73
-EXPECTED_PLAYWRIGHT_PLANNER_VISIBLE_COUNT = 80
+# Phase 118 made file.list_dir, system_status, file.write_text, file.copy,
+# and file.move planner-visible (73 -> 78 default, 80 -> 85 with Playwright).
+# file.delete stays console-only and is NOT in this count. app.focus was
+# tried and then deliberately reverted (round 2 of the same phase): it is
+# pinned OUT of planner_specs() by verify_eva_phase64_honest_effects.py
+# (console/internal-only), the planner already has window_focus for the same
+# job, and the runner only tracks a verified typing target for
+# {"open_app", "window_focus"} (agent/runner.py::_run_step) -- a
+# planner-chosen app.focus would never set typing_target.
+EXPECTED_DEFAULT_PLANNER_VISIBLE_COUNT = 78
+EXPECTED_PLAYWRIGHT_PLANNER_VISIBLE_COUNT = 85
 
 # The reviewed set of intentionally-exempt tools: name -> justification.
 # Growing this list is a deliberate act with a real reason, not a place to

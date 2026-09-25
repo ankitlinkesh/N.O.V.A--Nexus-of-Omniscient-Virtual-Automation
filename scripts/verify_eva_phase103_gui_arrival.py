@@ -359,10 +359,13 @@ def main() -> int:
 
     # ------------------------------------------------------- source checks
     assert_scope_is_opened_inside_the_coroutine(gui)
+    # Phase 117 widened this `with` (it also opens the target-app scope), so an
+    # exact-string replace silently stopped matching and the "mutant" was the
+    # original file. Match the statement by pattern, and refuse a no-op mutant.
+    hoisted = re.sub(r"with open_gui_scope\(goal\) as scope[^\n]*:", "if True:  # scope hoisted out", gui, count=1)
+    check(hoisted != gui, "the scope-hoisting mutant must actually change the source")
     check_raises(
-        lambda: assert_scope_is_opened_inside_the_coroutine(
-            gui.replace("with open_gui_scope(goal) as scope:", "if True:  # scope hoisted out")
-        ),
+        lambda: assert_scope_is_opened_inside_the_coroutine(hoisted),
         "the scope-placement check passes with the scope no longer opened inside the coroutine",
     )
     # The load-bearing mutation: the broken shape did not DELETE the scope, it

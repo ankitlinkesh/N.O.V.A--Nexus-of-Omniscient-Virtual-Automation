@@ -47,9 +47,27 @@ def test_no_destructive_tool_is_planner_reachable_and_auto_allowed():
 
 
 def test_known_dangerous_tools_are_gated_and_not_planner_reachable():
+    """file.delete and the screen-input tools stay endpoint/console-only.
+
+    Phase 118 deliberately made file.write_text/file.copy/file.move
+    planner-reachable ("yes, with confirmation") -- they moved to the
+    gated-but-reachable test below rather than this one. They must still be
+    gated exactly as before; only their reachability changed.
+    """
     data = build_capability_truth()
     by_name = {item["tool"]: item for item in data["tools"]}
-    for name in ("file.delete", "file.write_text", "file.copy", "screen.type_text", "screen.hotkey"):
+    for name in ("file.delete", "screen.type_text", "screen.hotkey"):
         assert name in by_name, f"expected {name} in registry"
         assert by_name[name]["gate_class"] in {"confirm", "override"}, f"{name} must be gated"
         assert by_name[name]["planner_reachable"] is False, f"{name} must not be planner-reachable"
+
+
+def test_phase118_file_tools_are_gated_and_now_planner_reachable():
+    """The Phase 118 flip side of the test above: these three are gated
+    exactly as before, and are now deliberately planner-reachable."""
+    data = build_capability_truth()
+    by_name = {item["tool"]: item for item in data["tools"]}
+    for name in ("file.write_text", "file.copy", "file.move"):
+        assert name in by_name, f"expected {name} in registry"
+        assert by_name[name]["gate_class"] in {"confirm", "override"}, f"{name} must be gated"
+        assert by_name[name]["planner_reachable"] is True, f"{name} should be planner-reachable since Phase 118"

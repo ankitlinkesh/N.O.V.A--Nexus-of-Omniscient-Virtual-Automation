@@ -1690,6 +1690,26 @@ class ToolRegistry:
             "research_summary",
             "research_status",
             "guarded_power_action",
+            # Phase 118: file.* made planner-visible. The reads (file.list_dir,
+            # system_status) are harmless and stay allow-class exactly as
+            # before. The mutating three (file.write_text, file.copy,
+            # file.move) stay DESTRUCTIVE_FILE_ACTION -- visibility does not
+            # touch their gate class, so the permission gate still asks
+            # (confirm/override, whatever it already asks) every single time.
+            # file.delete is deliberately NOT here -- it stays console-only.
+            # app.focus is deliberately NOT here either (round 2): the planner
+            # already has window_focus for the same job, app.focus is pinned
+            # OUT of planner_specs() by verify_eva_phase64_honest_effects.py
+            # (console/internal-only), and the runner only tracks a verified
+            # typing target for {"open_app", "window_focus"}
+            # (agent/runner.py::_run_step) -- a planner-chosen app.focus would
+            # never set typing_target. See
+            # scripts/verify_eva_phase118_planner_file_tools.py.
+            "file.list_dir",
+            "system_status",
+            "file.write_text",
+            "file.copy",
+            "file.move",
         ]
         specs = [self._public_spec(self._tools[name]) for name in visible if name in self._tools]
 
