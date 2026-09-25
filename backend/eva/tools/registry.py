@@ -296,6 +296,57 @@ def _handler_accepts_confirmed(handler: Callable[..., Any]) -> bool:
     return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
+def _restore_target_window(target_window: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Before replaying an approved screen-input call, restore the EXACT
+    window it was planned against and verify it is actually ready to receive
+    input. Returns an honest failure dict to short-circuit `run_approved`, or
+    `None` when it is safe to proceed to the handler.
+
+    Three ways this refuses, all the same shape (never a fallback to "type
+    into whatever has focus now"):
+      1. no `target_window` was recorded at all (an older pending action, or
+         the platform is unsupported) -- nothing to restore, so nothing to
+         verify;
+      2. the recorded window cannot be brought to the foreground and
+         independently confirmed there (closed, minimized and blocked,
+         Windows' foreground lock engaged, ...);
+      3. the window is foreground but not yet actually accepting keyboard
+         input (Phase 114's UWP frame-host gap -- the window can be
+         foreground for ~1.4s before the app inside it owns the keyboard).
+    """
+    if not target_window or not target_window.get("hwnd"):
+        return {
+            "ok": False,
+            "error": "no_target_window_recorded",
+            "message": "I don't have a record of which window this action was meant for, so I did not touch the visible UI.",
+        }
+
+    from ..desktop.windows import focus_window_handle
+    from ..screen.input_ready import wait_for_input_ready
+
+    hwnd = int(target_window["hwnd"])
+    title = str(target_window.get("title") or "the target window")
+
+    focus_result = focus_window_handle(hwnd)
+    if not focus_result.get("ok"):
+        return {
+            "ok": False,
+            "error": "target_window_not_restored",
+            "message": f"I couldn't bring {title} back to the front, so I did not touch the visible UI.",
+            "target_window": target_window,
+        }
+
+    if not wait_for_input_ready(hwnd):
+        return {
+            "ok": False,
+            "error": "target_window_not_ready",
+            "message": f"{title} came back to the front but was not ready to receive input, so I did not touch the visible UI.",
+            "target_window": target_window,
+        }
+
+    return None
+
+
 def _guarded_power_action(action: str, confirmed: bool = False) -> str:
     normalized = action.strip().lower().replace(" ", "_")
     if normalized not in POWER_ACTIONS:
@@ -1950,6 +2001,18 @@ class ToolRegistry:
         args = dict(stored["args"])
         if "confirmed" not in args and _handler_accepts_confirmed(spec.handler):
             args["confirmed"] = True
+
+        # Phase 117 review, live-drive finding: a screen-input tool must be
+        # replayed into the SAME window it was planned against, never into
+        # whatever window happens to hold focus at confirm time -- which in
+        # real use is always NOVA's own chat page. Refuse rather than guess
+        # when the target cannot be restored and verified; the handler below
+        # never runs in that case.
+        if stored["tool"] in tool_gate.SCREEN_INPUT_TOOLS:
+            refusal = _restore_target_window(stored.get("target_window"))
+            if refusal is not None:
+                return refusal
+
         # Phase 86: a gated call can be missing a required arg (e.g. screen.observe
         # without `reason`) yet still create a pending -- args_schema is never
         # checked before gating. Approving it used to reach spec.handler(**args)
@@ -2014,11 +2077,42 @@ class ToolRegistry:
             redacted_payload=safe_args,
         )
         create_pending_action(action)
+        # Phase 117 round 4: for a screen-input tool, record the window of the
+        # app the TASK ITSELF opened and verified -- never "whatever is
+        # foreground right now". Round 3 recorded `get_active_window()` here,
+        # which is exactly the untrusted value round 3 existed to stop
+        # trusting at approval time; live-driving found it just moved the bug
+        # to gate-creation time (Calculator was open and verified, but the
+        # user was working in Chrome when the gate paused, so the "foreground"
+        # window recorded was Chrome's). `screen.target_app.verified_target_app()`
+        # is set ONLY by the agent runner, around the one call that reaches
+        # here, to the app name its OWN independently-verified `open_app`/
+        # `window_focus` result named (see runner._run_step) -- never by a
+        # tool argument or anything a model emits. No verified app in scope,
+        # or that app's window cannot be found, leaves `target_window` None,
+        # which `run_approved` treats as "refuse rather than guess", never as
+        # "skip the check". There is deliberately no `get_active_window()`
+        # fallback anywhere in this path.
+        target_window: dict[str, Any] | None = None
+        if name in tool_gate.SCREEN_INPUT_TOOLS:
+            try:
+                from ..screen.target_app import verified_target_app
+
+                app = verified_target_app()
+                if app:
+                    from ..desktop.windows import find_window
+
+                    matches = find_window(app, limit=1)
+                    if matches:
+                        window = matches[0]
+                        target_window = {"hwnd": window.hwnd, "title": window.title, "process_name": window.process_name}
+            except Exception:
+                target_window = None
         # IMPORTANT: register_pending_call must receive the REAL `args`, not
         # `safe_args` -- run_approved() replays this exact dict to actually
         # perform the action later. Only the ledger/durable record above is
         # masked; execution must never see "[HIDDEN]" in place of a real value.
-        tool_gate.register_pending_call(action.id, name, args)
+        tool_gate.register_pending_call(action.id, name, args, target_window=target_window)
         phrase = f"confirm override {action.id}" if requires_override else f"confirm {action.id}"
         # Phase 75: the deterministic half of the explanation ships with every
         # approval prompt. It is assembled from source of truth (the spec's own

@@ -105,3 +105,32 @@ def role_scope(role: str | None) -> Iterator[tuple[str, ...]]:
     finally:
         _active_roles.reset(token)
         _denials.reset(denial_token)
+
+
+@contextmanager
+def role_stack_scope(roles: tuple[str, ...]) -> Iterator[tuple[str, ...]]:
+    """Reopen an EXACT, previously-captured role stack (Phase 117 resume).
+
+    Unlike `role_scope`, which APPENDS one role to whatever is already
+    active, this REPLACES the active stack outright with `roles`. That is
+    the right operation here specifically because a resumed task runs on a
+    fresh coroutine (via the `run_async` thread hop in the MCP runner module) where this
+    ContextVar is back at its default `()` -- `active_roles()` was captured
+    once, in full, at pause time (see `agent.runner._pause_and_return`), and
+    the job here is to put exactly that back, not to append one role to an
+    empty stack and silently lose any outer nesting a delegated-inside-
+    delegated task had.
+
+    `roles=()` is a no-op scope, so a task that was never delegated resumes
+    exactly as it already does -- this is not a new restriction on the
+    common case, only a re-application of a restriction that already existed
+    at pause time.
+    """
+    token = _active_roles.set(tuple(roles))
+    sink = _denials.get()
+    denial_token = _denials.set(sink if sink is not None else [])
+    try:
+        yield tuple(roles)
+    finally:
+        _active_roles.reset(token)
+        _denials.reset(denial_token)

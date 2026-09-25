@@ -182,6 +182,7 @@ async def _run_task_in_scope(
     session_context: Any,
     memory: Any,
     session_id: str | None,
+    verified_app: str | None = None,
 ) -> tuple[dict, int, int]:
     """Open the GUI scope on the thread that actually runs the task.
 
@@ -213,10 +214,27 @@ async def _run_task_in_scope(
     The spend and the budget are read INSIDE the scope and returned out. Read
     outside, `actions_used()` reports the request thread's empty scope -- which
     is why the broken build printed a tidy `0/12` instead of failing loudly.
+
+    Phase 117 round 5: `verified_app` mirrors `open_gui_scope` exactly for the
+    SAME reason and at the SAME placement -- `_focus_named_window` verifies a
+    named app's focus on the REQUEST thread, before `run_async` ever hands
+    this coroutine to a worker thread, so that verification cannot itself
+    reach a ContextVar read inside the loop unless it is re-opened HERE, on
+    the thread the loop actually runs on. Without this, a `gui:` task whose
+    target app the console already focused and verified would still record
+    no target window for a screen-input pending -- round 4 closed the
+    "foreground window at gate time" hole for the ordinary chat route, but a
+    `gui:` task's verified focus happens entirely OUTSIDE that route's loop,
+    through a different mechanism, and never reached `runner.loop_vars`. A
+    task step that calls `open_app`/`window_focus` ITSELF still wins over
+    this (see `runner._run_step`'s `inner_target_app` comment): this outer
+    scope is the console's one-time pre-focus, a task's own in-loop
+    verification is more specific and always takes precedence.
     """
     from ..agent.runner import run_agentic_task
+    from ..screen.target_app import open_target_app_scope
 
-    with open_gui_scope(goal) as scope:
+    with open_gui_scope(goal) as scope, open_target_app_scope(verified_app):
         result = await run_agentic_task(
             grounded_goal,
             {
@@ -334,7 +352,15 @@ def _run_gui_task(goal: str, tools: Any, session_context: Any, memory: Any, sess
             "no accessibility tree, so clicking by label will not work here -- say so rather than guessing.)"
         )
 
-    result, spent, budget = run_async(_run_task_in_scope(goal, grounded_goal, session_context, memory, session_id))
+    # Phase 117 round 5: only a VERIFIED focus counts as a target -- `focused`
+    # is `None` when the goal named nothing recognizable, and a string
+    # prefixed `!` when `_focus_named_window` could not confirm the right
+    # window ended up in front (unknown, or a mismatch). Either of those
+    # means "no target", exactly like an ordinary chat-route task that never
+    # called `open_app`/`window_focus`: no scope opens, and a screen-input
+    # approval refuses rather than guessing.
+    verified_app = focused if focused and not focused.startswith("!") else None
+    result, spent, budget = run_async(_run_task_in_scope(goal, grounded_goal, session_context, memory, session_id, verified_app))
 
     reply = str(result.get("final_response") or "").strip() or "I finished without producing an answer."
     tools = result.get("tools_executed") or []

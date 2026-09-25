@@ -90,17 +90,36 @@ class ToolExecutor:
         except Exception as exc:
             return ToolExecutionResult(ok=False, tool=call.tool, error=str(exc))
 
+        return self._finalize(call.tool, spec, args, result)
+
+    def execute_approved(self, tool: str, args: dict[str, Any], result: Any) -> ToolExecutionResult:
+        """Phase 117: wrap a result that came from ``ToolRegistry.run_approved``
+        (a pending action the ledger already confirmed) the same way a normal
+        call's result is wrapped by :meth:`execute`, so the agent runner's
+        post-processing -- taint tracking, verification, reflection -- is
+        byte-identical whether a step ran immediately or is being resumed
+        after a pause. The gate already classified and ran this call once
+        when the pending action was created; this method never re-runs or
+        re-classifies anything, it only finishes the same wrapping `execute`
+        does for a result it already has.
+        """
+        spec = self.registry.get(tool)
+        if spec is None:
+            return ToolExecutionResult(ok=False, tool=tool, error="Unknown tool.")
+        return self._finalize(tool, spec, dict(args or {}), result)
+
+    def _finalize(self, tool: str, spec: Any, args: dict[str, Any], result: Any) -> ToolExecutionResult:
         if isinstance(result, dict) and result.get("requires_confirmation"):
             return ToolExecutionResult(
                 ok=False,
-                tool=call.tool,
+                tool=tool,
                 result=result,
                 error=result.get("message") or "This action requires confirmation.",
                 requires_confirmation=True,
-                action=result.get("pending_id") or call.tool,
+                action=result.get("pending_id") or tool,
             )
         if isinstance(result, dict) and result.get("hard_blocked"):
-            return ToolExecutionResult(ok=False, tool=call.tool, result=result, error=result.get("message"))
+            return ToolExecutionResult(ok=False, tool=tool, result=result, error=result.get("message"))
 
         # Verification-first (Phase 38): the handler returned, but did the action
         # actually take effect? Independently check its declared post-condition.
@@ -112,7 +131,7 @@ class ToolExecutor:
         try:
             from ..tools.postconditions import verify_tool_effect
 
-            outcome = verify_tool_effect(call.tool, spec.verification_method, args, result)
+            outcome = verify_tool_effect(tool, spec.verification_method, args, result)
             verification = outcome.as_dict()
             if outcome.independent and not outcome.verified:
                 ok = False
@@ -120,7 +139,7 @@ class ToolExecutor:
         except Exception:
             verification = None
 
-        return ToolExecutionResult(ok=ok, tool=call.tool, result=result, error=error, verification=verification)
+        return ToolExecutionResult(ok=ok, tool=tool, result=result, error=error, verification=verification)
 
     def _validate_args(self, schema: dict[str, Any], args: dict[str, Any]) -> str | None:
         properties = schema.get("properties", {}) or {}

@@ -2632,7 +2632,7 @@ def maybe_handle_fast_command(
     if pending_status:
         return pending_status, "fast-command"
 
-    pending_confirmation = handle_confirmation_command(original)
+    pending_confirmation = handle_confirmation_command(original, session_id=session_id)
     if pending_confirmation:
         return pending_confirmation, "fast-command"
 
@@ -3178,7 +3178,19 @@ def maybe_handle_fast_command(
         return "Cancelled the current tracked task state. Any already-finished desktop action was not undone.", "fast-command"
 
     if normalized in {"resume task", "resume agent task"}:
-        return "There is no paused task runner to resume yet. Say the goal again and I’ll start a fresh bounded task.", "fast-command"
+        # Phase 117: a task that paused on a tool-gate pending action resumes
+        # automatically the moment that exact action is confirmed -- there is
+        # no separate "resume" step to type. This command exists only to
+        # explain that, not to trigger anything itself (there is nothing for
+        # it to trigger: the pause is keyed by the pending action's id, not
+        # by a name this command could take as an argument).
+        return (
+            "Tasks resume on their own: confirm the pending action that paused it "
+            "(`confirm <id>` or `confirm override <id>`) and, if it was part of a bounded "
+            "task, the rest of that task continues automatically from where it stopped. "
+            "Use `pending actions` to see the id if you don't have it.",
+            "fast-command",
+        )
 
     if _is_whole_utterance(normalized, ABOUT_EVA_COMMANDS):
         return EVA_IDENTITY_SUMMARY, "fast-command"

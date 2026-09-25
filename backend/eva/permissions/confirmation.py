@@ -35,7 +35,7 @@ def parse_cancel_action_id(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def handle_confirmation_command(text: str) -> str:
+def handle_confirmation_command(text: str, *, session_id: Any = None) -> str:
     clean = _norm(text)
     cancel_id = parse_cancel_action_id(clean)
     if cancel_id:
@@ -43,17 +43,17 @@ def handle_confirmation_command(text: str) -> str:
     override_id = parse_override_action_id(clean)
     if override_id:
         result = confirm_pending_action(override_id, override=True)
-        return _with_execution(override_id, result)
+        return _with_execution(override_id, result, session_id)
     confirm_id = parse_confirmation_action_id(clean)
     if confirm_id:
         result = confirm_pending_action(confirm_id, override=False)
-        return _with_execution(confirm_id, result)
+        return _with_execution(confirm_id, result, session_id)
     if clean in {"yes", "yes send", "send it", "do it", "confirm", "approve", "confirm send", "open and send it", "open and send the message"}:
         return "I need a specific pending action ID. Use `pending actions` to see active actions, then say `confirm <id>`. I did not send or execute anything."
     return ""
 
 
-def _with_execution(action_id: str, result: Any) -> str:
+def _with_execution(action_id: str, result: Any, session_id: Any = None) -> str:
     """After a successful ledger confirm, execute the gated call for real.
 
     Only tool-gate-created actions are registered in the in-memory call store,
@@ -72,7 +72,46 @@ def _with_execution(action_id: str, result: Any) -> str:
     from ..tools.registry import ToolRegistry
 
     executed = ToolRegistry().run_approved(action_id)
-    return _render_executed(action_id, base, executed)
+    rendered = _render_executed(action_id, base, executed)
+    return _maybe_resume_task(action_id, session_id, executed, rendered)
+
+
+def _maybe_resume_task(action_id: str, session_id: Any, executed: Any, rendered: str) -> str:
+    """Phase 117: if this exact pending id paused a bounded agent task
+    (`agent/runner.py`'s loop stopped on this SAME tool-gate pending action),
+    pick the task back up now that the approved action has actually run.
+
+    `take_paused_task` is single-use and session-scoped: a confirm for an id
+    that never paused anything -- the overwhelming majority of confirms,
+    which are plain one-off approvals with no task behind them -- costs one
+    dict lookup here and changes nothing else. Only reached AFTER `executed`
+    above is a real execution of a real tool-gate pending action (the
+    `get_pending_call` check above already guarantees that), so this can
+    never resume something that was never actually approved and run.
+    """
+    from ..agent.paused_tasks import take_paused_task
+
+    snapshot = take_paused_task(action_id, session_id)
+    if snapshot is None:
+        return rendered
+
+    from ..agent.runner import resume_agentic_task
+    from ..mcp.runner import run_async
+
+    outcome = run_async(resume_agentic_task(snapshot, executed))
+    final_response = str(outcome.get("final_response") or "").strip()
+    status = outcome.get("status")
+    if outcome.get("requires_confirmation"):
+        # The resumed task ran into ANOTHER thing that needs confirmation
+        # (which may or may not itself be resumable -- see runner.py's
+        # `_pause_and_return`). Report it plainly; the user confirms it the
+        # same way they confirmed this one.
+        tail = f"\n\nThe task then paused again ({status}): {final_response or 'another action needs confirmation.'}"
+    elif final_response:
+        tail = f"\n\nResuming the task: {final_response}"
+    else:
+        tail = f"\n\nThe task resumed and finished with status `{status}`, but reported no message."
+    return f"{rendered}{tail}"
 
 
 def _render_executed(action_id: str, base: str, executed: Any) -> str:

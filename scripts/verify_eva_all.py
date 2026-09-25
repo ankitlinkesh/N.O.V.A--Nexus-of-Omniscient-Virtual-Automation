@@ -146,6 +146,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase114_input_readiness.py",
     "verify_eva_phase115_analyze_screen_scope.py",
     "verify_eva_phase116_typing_threshold.py",
+    "verify_eva_phase117_resume_after_approval.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -268,6 +269,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase114_input_readiness.py",
     "verify_eva_phase115_analyze_screen_scope.py",
     "verify_eva_phase116_typing_threshold.py",
+    "verify_eva_phase117_resume_after_approval.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -354,6 +356,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase114_input_readiness.py": ("phase114", "screen", "typing", "focus"),
     "verify_eva_phase115_analyze_screen_scope.py": ("phase115", "screen", "privacy", "vision"),
     "verify_eva_phase116_typing_threshold.py": ("phase116", "screen", "typing", "focus"),
+    "verify_eva_phase117_resume_after_approval.py": ("phase117", "agent", "approval", "resume"),
     "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 

@@ -437,6 +437,40 @@ def focus_window(query: str, *, settle_timeout: float = 0.5, settle_interval: fl
     return payload
 
 
+def focus_window_handle(hwnd: int, *, settle_timeout: float = 0.5, settle_interval: float = 0.05) -> dict[str, object]:
+    """Like `focus_window`, but for an ALREADY-KNOWN window handle rather than
+    a text query (Phase 117 review: restoring an approved screen-input
+    action's recorded target window). Re-matching by title here would risk
+    landing on a DIFFERENT window that happens to share it (two "Untitled -
+    Notepad" windows is the ordinary case); the hwnd recorded at gate time is
+    unambiguous, so this skips `find_window` entirely and drives the same
+    foreground dance directly against it.
+
+    A window that no longer exists (closed since the pending action was
+    created) reads as `window_not_found`, not a crash.
+    """
+    if _unsupported():
+        return {"ok": False, "error": "unsupported_platform"}
+    info = _window_info(hwnd)
+    if info is None:
+        return {"ok": False, "error": "window_not_found"}
+    _try_set_foreground(hwnd)
+    active, verified = _wait_for_focus(hwnd, settle_timeout=settle_timeout, settle_interval=settle_interval)
+    payload: dict[str, object] = {
+        "ok": verified,
+        "focused": verified,
+        "verified": verified,
+        "window": info.as_dict(),
+        "active_window": active.as_dict() if active else None,
+    }
+    if not verified:
+        payload["error"] = "focus_failed"
+        lock_timeout_ms = foreground_lock_timeout_ms()
+        if lock_timeout_ms:
+            payload["message"] = _foreground_lock_explanation(lock_timeout_ms)
+    return payload
+
+
 def minimize_window(query: str) -> dict[str, object]:
     return _show_window(query, SW_SHOWMINIMIZED)
 
