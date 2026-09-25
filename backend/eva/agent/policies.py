@@ -25,6 +25,14 @@ DEFAULT_MAX_TOOLS_PER_STEP = 3
 # many steps without progress before declaring a stall.
 DEFAULT_MAX_CONSECUTIVE_FAILURES = 2
 DEFAULT_MAX_STEPS_WITHOUT_PROGRESS = 3
+# Phase 119: adaptive step budget. `max_agent_steps()` stays the BASE budget a
+# task starts with (still 6 by default -- a task that never earns an
+# extension behaves exactly as before). A task that keeps making VERIFIED
+# progress may grow past that base, one step at a time, but never past this
+# ceiling, and the ceiling itself is hard-capped regardless of env override
+# so a misconfigured deployment cannot turn the loop effectively unbounded.
+DEFAULT_MAX_AGENT_STEPS_CEILING = 12
+MAX_AGENT_STEPS_HARD_CEILING = 20
 
 POWER_TOOLS = {"guarded_power_action", "system_power"}
 WORKSPACE_TOOLS = {"workspace_status", "workspace_list_files", "workspace_read_file", "workspace_search", "workspace_summarize_file", "workspace_project_summary"}
@@ -135,6 +143,20 @@ def max_consecutive_failures() -> int:
 
 def max_steps_without_progress() -> int:
     return max(1, env_int("EVA_AGENT_MAX_STEPS_WITHOUT_PROGRESS", DEFAULT_MAX_STEPS_WITHOUT_PROGRESS))
+
+
+def max_agent_steps_ceiling() -> int:
+    """The hard ceiling the Phase 119 adaptive step budget may grow to.
+
+    Never below the base budget (an extension that cannot exceed the base
+    would be a no-op) and never above ``MAX_AGENT_STEPS_HARD_CEILING``
+    regardless of the env override -- the loop must never become effectively
+    unbounded just because an env var was set too high.
+    """
+    base = max_agent_steps()
+    raw = env_int("EVA_AGENT_MAX_STEPS_CEILING", DEFAULT_MAX_AGENT_STEPS_CEILING)
+    clamped = max(1, min(raw, MAX_AGENT_STEPS_HARD_CEILING))
+    return max(base, clamped)
 
 
 def agentic_goal(message: str) -> str:

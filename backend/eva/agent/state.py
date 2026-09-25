@@ -30,9 +30,38 @@ class AgentRunState:
     # Phase 42: confidence of the most recent reflection (for confidence-aware
     # escalation of the next action).
     last_confidence: float | None = None
+    # Phase 119 adaptive step budget: transient, loop-local bookkeeping (the
+    # durable, reportable budget facts -- base/ceiling/extensions -- live on
+    # `AgentTask` instead, since that is what `_return_task` already threads
+    # everywhere a result is built). `last_step_progress` is what the last
+    # EXECUTED step (real or a Phase 117 resumed replay) actually achieved,
+    # read by the loop only at the instant it reaches its current budget, to
+    # decide whether to grant one more step. `consecutive_no_progress` is a
+    # separate streak, counting only executed steps (never a planner-JSON
+    # retry or a critic-revise iteration, which have their own bounded
+    # retries elsewhere) -- two in a row stops the loop early rather than
+    # waiting for the budget to run out. Both survive a Phase 117 pause/
+    # resume unchanged, because resume reuses this same state object by
+    # reference (`PausedTask.env`), never rebuilding it.
+    last_step_progress: bool = False
+    consecutive_no_progress: int = 0
 
     def record_critic_revision(self) -> None:
         self.critic_revisions += 1
+
+    def record_step_progress(self, progress: bool) -> None:
+        """Called once per EXECUTED step (real or resumed), never for a
+        planner-error retry or a critic-revise iteration -- those instead set
+        ``last_step_progress`` directly, since they are not the executed-step
+        streak this counts."""
+        self.last_step_progress = progress
+        if progress:
+            self.consecutive_no_progress = 0
+        else:
+            self.consecutive_no_progress += 1
+
+    def no_progress_stalled(self, limit: int = 2) -> bool:
+        return self.consecutive_no_progress >= limit
 
     def repeated_without_progress(self, call: PlannedToolCall) -> bool:
         signature = tool_signature(call)

@@ -21,6 +21,7 @@ from .policies import (
     explicitly_requests_screen,
     is_unsupported_capability,
     max_agent_steps,
+    max_agent_steps_ceiling,
     max_consecutive_failures,
     max_screen_captures_per_task,
     max_steps_without_progress,
@@ -204,6 +205,33 @@ def _observation_text(call: PlannedToolCall, result: ToolExecutionResult) -> str
     return describe_tool_observation(call.tool, result.result) + _provenance_suffix(result.verification)
 
 
+def _step_made_progress(task: AgentTask, observation: str, *, ok: bool, verified: bool) -> bool:
+    """Phase 119: did this EXECUTED step earn the adaptive loop one more step?
+
+    A failed call, a refusal, or a gate pause (``ok`` is False for all three
+    -- ``ToolExecutor._finalize`` demotes ``requires_confirmation`` to
+    ``ok=False`` the same way an independently-failed post-condition is)
+    never counts, matching the brief's "repeated identical calls, failures,
+    refusals, gate pauses... do not count." An independently verified
+    post-condition always counts. Otherwise, progress means the observation
+    text is genuinely NEW -- not one this task has already seen, which is
+    what "not a repeat of the same tool and args with the same result"
+    actually cashes out to once results are compared by what the model reads
+    rather than by the call shape: two calls with different args that both
+    come back with the identical formatted text taught the loop nothing new
+    the second time. Checked against ``task.observations`` AFTER this
+    observation was appended, so a first-ever occurrence is a count of 1.
+    """
+    if not ok:
+        return False
+    if verified:
+        return True
+    text = (observation or "").strip()
+    if not text:
+        return False
+    return task.observations.count(observation) <= 1
+
+
 def _planned_tools(task: AgentTask) -> list[str]:
     return [step.tool_name for step in task.steps if step.tool_name]
 
@@ -227,6 +255,21 @@ def _final_result(task: AgentTask, *, ok: bool, requires_confirmation: bool = Fa
         "critic": critic,
         "task": task.as_dict(),
         "events": events or [],
+        # Phase 119: honest reporting of the adaptive step budget -- how many
+        # steps this task actually took, the budget it started with, the
+        # budget it finished with (>= base only if it earned extensions),
+        # the hard ceiling it could never pass, and whether it extended at
+        # all. `steps_count` above is the authoritative "steps used" (it is
+        # `len(task.steps)`, not a loop-iteration count, so a resumed task's
+        # steps are counted exactly once).
+        "step_budget": {
+            "steps_used": len(task.steps),
+            "base_budget": task.base_max_steps,
+            "final_budget": task.max_steps,
+            "ceiling": task.step_ceiling,
+            "extended": task.step_extensions > 0,
+            "extensions": task.step_extensions,
+        },
     }
 
 
@@ -280,6 +323,7 @@ def _store_task_state(session_context: Any, result: dict[str, Any]) -> None:
         "requires_confirmation": result.get("requires_confirmation"),
         "action": result.get("action"),
         "safety_stops": result.get("safety_stops"),
+        "step_budget": result.get("step_budget"),
     }
     session_context["active_task_status"] = result.get("status")
 
@@ -476,6 +520,15 @@ def _process_executed_call(
     step.error = result.error
     task.add_observation(observation)
     events.append({"type": "agent_observation", "task_id": task.id, "step": index, "message": observation})
+    # Phase 39/119: whether the post-condition was *independently* verified,
+    # computed once here so both the reliability bookkeeping below and the
+    # Phase 119 adaptive step budget read the same signal.
+    verified = bool(
+        result.ok
+        and result.verification
+        and result.verification.get("independent")
+        and result.verification.get("verified")
+    )
     task.status = "reflecting"
     reflection = reflect_on_step(goal, task, step, result)
     task.add_reflection(reflection)
@@ -494,15 +547,19 @@ def _process_executed_call(
     _safe_log(memory, session_id, "agent_tool_executed", {"task_id": task.id, "step": index, "tool": call.tool, "args": call.args, "result": _compact_tool_result(result)})
     _safe_log(memory, session_id, "agent_step_reflection", {"task_id": task.id, "step": index, "reflection": reflection.as_dict()})
 
+    # Phase 119: a gate pause is not "no progress" -- it is not a completed
+    # step at all yet (the call has not run; `_pause_and_return`, reached
+    # below, ends this function before anything else happens). Recorded only
+    # for the step's real conclusion, so the SAME gated call is never counted
+    # twice against the no-progress streak: once as the pause, once again as
+    # the resumed execution.
+    if reflection.status != "needs_confirmation":
+        state.record_step_progress(_step_made_progress(task, observation, ok=result.ok, verified=verified))
+
     # Phase 39: track reliability. A successful step resets the failure
     # streak; a step whose post-condition was independently verified
     # (Phase 38) counts as proven progress.
     if result.ok:
-        verified = bool(
-            result.verification
-            and result.verification.get("independent")
-            and result.verification.get("verified")
-        )
         state.record_success(verified)
 
     # Phase 39: a failed step no longer kills the task outright. Record
@@ -651,6 +708,14 @@ async def _run_step(
             task.final_response = "I could not plan this safely after two attempts. Try a simpler task."
             safety_stops.append("planner_invalid_json_twice")
             return _return_task(task, session_context, ok=False, events=events, safety_stops=safety_stops)
+        # Phase 119: a planner retry executed no step, so it must not inherit
+        # the previous real step's `last_step_progress` -- otherwise, landing
+        # on the budget boundary right after a retry would grant an
+        # extension for doing nothing. Deliberately NOT routed through
+        # `record_step_progress`: the no-progress streak counts only
+        # executed steps (this already has its own bounded 2-attempt retry,
+        # just above).
+        state.last_step_progress = False
         return None
 
     _safe_log(
@@ -691,6 +756,10 @@ async def _run_step(
                 task.add_observation(feedback)
                 events.append({"type": "agent_critic", "task_id": task.id, "step": index, "message": feedback, "satisfied": False})
                 _safe_log(memory, session_id, "agent_critic_revision", {"task_id": task.id, "step": index, "reasons": list(pre_verdict.reasons)})
+                # Phase 119: same reasoning as the planner-retry branch above --
+                # a revision executed no step and must not inherit stale
+                # progress from an earlier real step.
+                state.last_step_progress = False
                 return None
         step = AgentStep(index=index, thought_summary=decision.reason, planned_action=decision.type, observation=decision.final_response, status="done")
         task.add_step(step)
@@ -931,20 +1000,52 @@ async def _drive_loop(
     start_index: int,
     forced: tuple[PlannedToolCall, AgentStep, ToolExecutionResult, bool] | None = None,
 ) -> dict[str, Any]:
-    """Runs the plan->act->observe loop from `start_index` through
-    `task.max_steps`. `forced` supplies the FIRST step's already-executed
-    call/result instead of planning it (Phase 117 resume: the just-approved
-    action); every step after that plans normally. A fresh run calls this
-    with `start_index=1, forced=None`; `resume_agentic_task` calls it with
-    the paused step's own index and the approved result -- so a resumed
-    task's step-count budget is `task.max_steps` TOTAL across the pause, not
-    reset, because it is the same `task` and the same range ceiling.
+    """Runs the plan->act->observe loop from `start_index` while `task.max_steps`
+    -- the current adaptive budget, Phase 119 -- allows. `forced` supplies the
+    FIRST step's already-executed call/result instead of planning it (Phase
+    117 resume: the just-approved action); every step after that plans
+    normally. A fresh run calls this with `start_index=1, forced=None`;
+    `resume_agentic_task` calls it with the paused step's own index and the
+    approved result, reusing the SAME `env` (so the SAME `state` and the
+    SAME, possibly-already-grown, `task.max_steps`) -- a resumed task's step
+    budget is never reset and never loses extensions it already earned.
+
+    `task.max_steps` is deliberately re-read every iteration (a `while`, not
+    the `range()` this replaced) because Phase 119 grows it in place: a fixed
+    `range` is computed once and would never see the growth.
     """
-    task = env.task
-    for index in range(start_index, task.max_steps + 1):
+    task, state = env.task, env.state
+    index = start_index
+    while index <= task.max_steps:
         outcome = await _run_step(env, index, forced=forced if index == start_index else None)
         if outcome is not None:
             return outcome
+
+        # Phase 119 stall detection: two EXECUTED steps in a row that earned
+        # no progress (not two mere loop iterations -- a planner-JSON retry
+        # or a critic revision never touches this streak, see `_run_step`)
+        # stop the errand early rather than burning the rest of the budget.
+        # This is the loosely-related-but-distinct sibling of the exact
+        # tool+args repeat guard above (`state.repeated_without_progress`),
+        # which still fires first and separately for that narrower case.
+        if state.no_progress_stalled(2):
+            task.status = "failed"
+            task.final_response = summarize_progress(task, "I stopped because two steps in a row made no verified progress.")
+            env.safety_stops.append("stall_detected")
+            _safe_log(env.memory, env.session_id, "agent_task_failed", {"task_id": task.id, "reason": "stall_detected", "observations": task.observations})
+            return _return_task(task, env.session_context, ok=False, events=env.events, safety_stops=env.safety_stops)
+
+        if index == task.max_steps:
+            # At the budget boundary: extend by exactly one step, and only
+            # one, if the step that just ran earned it and there is still
+            # ceiling room -- never unconditionally (that would make the cap
+            # meaningless) and never past the hard ceiling (never unbounded).
+            if state.last_step_progress and task.max_steps < task.step_ceiling:
+                task.max_steps += 1
+                task.step_extensions += 1
+            else:
+                break
+        index += 1
 
     task.status = "failed"
     # Phase 93: this used to be a fixed sentence claiming "I stopped with the
@@ -1028,6 +1129,12 @@ async def _run_agentic_task(user_message: str, context: dict[str, Any]) -> dict[
             max_screen_captures=max_screen_captures_per_task(),
         )
         task.plan = build_initial_plan(goal)
+        # Phase 119: the adaptive step budget's fixed points for this task,
+        # set once here and never touched again (a Phase 117 resume reuses
+        # this same `task` object by reference via `PausedTask.env`, so
+        # nothing needs to be re-derived or re-snapshotted on resume).
+        task.base_max_steps = task.max_steps
+        task.step_ceiling = max_agent_steps_ceiling()
         state = AgentRunState()
         # Injectable planner is the testability seam that lets the reliability of
         # the plan->act->observe->reflect loop be driven deterministically (P39).

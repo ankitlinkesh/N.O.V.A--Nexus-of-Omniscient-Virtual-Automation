@@ -59,6 +59,18 @@ class AgentTask:
     max_tool_calls: int = 10
     max_web_searches: int = 4
     max_screen_captures: int = 2
+    # Phase 119 adaptive step budget. `max_steps` above is now the CURRENT
+    # effective budget and grows in place as the runner grants extensions;
+    # these three record the fixed points around that growth for honest
+    # reporting -- the budget this task started with, the hard ceiling it
+    # may never pass, and how many one-step extensions it actually earned.
+    # `base_max_steps` and `step_ceiling` default equal to the dataclass
+    # default `max_steps` (6) so a task built directly (as most tests build
+    # `AgentTask`, without going through the runner) reports a budget that
+    # never extended, rather than an inconsistent one.
+    base_max_steps: int = 6
+    step_ceiling: int = 6
+    step_extensions: int = 0
 
     def touch(self) -> None:
         self.updated_at = utc_now()
@@ -96,6 +108,9 @@ class AgentTask:
             "max_tool_calls": self.max_tool_calls,
             "max_web_searches": self.max_web_searches,
             "max_screen_captures": self.max_screen_captures,
+            "base_max_steps": self.base_max_steps,
+            "step_ceiling": self.step_ceiling,
+            "step_extensions": self.step_extensions,
         }
 
 
