@@ -31,6 +31,14 @@ from .policies import (
     user_asked_for_screenshot,
 )
 from ..screen.capture_grant import GRANTABLE_SCREEN_TOOLS, open_capture_grant
+from ..screen.click_grant import (
+    CLICK_TOOL,
+    DEFAULT_MAX_CLICKS_PER_TASK,
+    open_click_grant,
+    open_click_offer,
+    user_asked_to_click,
+    user_named_label,
+)
 from ..screen.target_app import open_target_app_scope
 from ..screen.type_grant import (
     DEFAULT_MAX_TYPES_PER_TASK,
@@ -360,11 +368,16 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
     # a type grant (opened per call below) or it stays confirm-class. Opened here,
     # around the whole run, on the coroutine that plans -- the planner reads the
     # offer when it builds its tool list.
+    # Phase 120: same shape for screen.click, opened only when the goal both
+    # asks to interact with something and names a label-like target
+    # (`user_asked_to_click`). The two offers are independent and both may be
+    # open at once (e.g. "open notepad, type X, then click Save").
     goal = agentic_goal(user_message)
-    if context.get("goal_from_user") is True and user_asked_to_type(goal):
-        with open_typing_offer(goal):
-            return await _run_agentic_task(user_message, context)
-    return await _run_agentic_task(user_message, context)
+    from_user = context.get("goal_from_user") is True
+    typing_offer_ctx = open_typing_offer(goal) if (from_user and user_asked_to_type(goal)) else nullcontext()
+    click_offer_ctx = open_click_offer(goal) if (from_user and user_asked_to_click(goal)) else nullcontext()
+    with typing_offer_ctx, click_offer_ctx:
+        return await _run_agentic_task(user_message, context)
 
 
 @dataclass
@@ -982,6 +995,24 @@ async def _run_step(
             loop_vars["types_used"] += 1
             with open_type_grant(str(call.args.get("text") or "")):
                 result = executor.execute(call)
+        elif (
+            call.tool == CLICK_TOOL
+            and context.get("goal_from_user") is True
+            and str(call.args.get("label") or "").strip()
+            and user_named_label(str(call.args.get("label") or ""), goal)
+            and not state.injection_flagged
+            and loop_vars["clicks_used"] < DEFAULT_MAX_CLICKS_PER_TASK
+            and loop_vars["typing_target"] is not None
+            and _target_in_front(loop_vars["typing_target"])
+        ):
+            # Phase 120: a label the user's own words named, clicked inside
+            # the app this task opened, with that app verified in front
+            # immediately before clicking. Raw x/y calls never reach here --
+            # there is no `label` to check -- so they fall through to the
+            # ordinary gated path below and stay confirm-class.
+            loop_vars["clicks_used"] += 1
+            with open_click_grant(str(call.args.get("label") or "")):
+                result = executor.execute(call)
         else:
             result = executor.execute(call)
     if result.ok and call.tool in {"open_app", "window_focus"}:
@@ -1161,7 +1192,7 @@ async def _run_agentic_task(user_message: str, context: dict[str, Any]) -> dict[
         # window a type grant may type into -- and how many grants were spent.
         # Phase 117: moved into a dict (`loop_vars`) rather than two locals so a
         # resumed run can restore them onto a fresh `_RunEnv`.
-        loop_vars: dict[str, Any] = {"typing_target": None, "types_used": 0}
+        loop_vars: dict[str, Any] = {"typing_target": None, "types_used": 0, "clicks_used": 0}
         events: list[dict[str, Any]] = [
             {"type": "agent_task", "task_id": task.id, "message": "Agent task started"},
             {"type": "agent_plan", "task_id": task.id, "plan": list(task.plan), "message": "Plan ready"},

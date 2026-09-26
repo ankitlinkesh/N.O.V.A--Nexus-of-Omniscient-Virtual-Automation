@@ -149,6 +149,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase117_resume_after_approval.py",
     "verify_eva_phase118_planner_file_tools.py",
     "verify_eva_phase119_adaptive_step_budget.py",
+    "verify_eva_phase120_click_grant.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -274,6 +275,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase117_resume_after_approval.py",
     "verify_eva_phase118_planner_file_tools.py",
     "verify_eva_phase119_adaptive_step_budget.py",
+    "verify_eva_phase120_click_grant.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -363,6 +365,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase117_resume_after_approval.py": ("phase117", "agent", "approval", "resume"),
     "verify_eva_phase118_planner_file_tools.py": ("phase118", "planner", "file", "tools"),
     "verify_eva_phase119_adaptive_step_budget.py": ("phase119", "agent", "budget", "steps"),
+    "verify_eva_phase120_click_grant.py": ("phase120", "screen", "click", "grant"),
     "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 

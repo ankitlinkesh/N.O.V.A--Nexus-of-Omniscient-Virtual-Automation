@@ -1754,6 +1754,16 @@ class ToolRegistry:
         if typing_offered() and TYPE_TOOL in self._tools and all(spec["name"] != TYPE_TOOL for spec in specs):
             specs.append(self._public_spec(self._tools[TYPE_TOOL]))
 
+        # Phase 120: inside an agent task whose user-typed goal both asks to
+        # interact with something and names a label-like target, the planner
+        # may SEE screen.click. Visibility only -- a call is still confirm-class
+        # unless the runner opens a click grant for that exact label
+        # (screen/click_grant.py). Only the agent runner opens an offer.
+        from ..screen.click_grant import CLICK_TOOL, click_offered
+
+        if click_offered() and CLICK_TOOL in self._tools and all(spec["name"] != CLICK_TOOL for spec in specs):
+            specs.append(self._public_spec(self._tools[CLICK_TOOL]))
+
         return specs
 
     def get(self, name: str) -> ToolSpec | None:
@@ -1960,6 +1970,36 @@ class ToolRegistry:
             if type_grant.consume(name, call_args):
                 decision = "allow"
                 trace_gate_decision(name, "user_words_type_grant", spec)
+
+        # Phase 120: clicking a UI control from an ordinary chat task, on a
+        # label the user named themselves. screen.click's static class is
+        # allow (SAFE_LOCAL_UI/"safe") because inside a `gui:` scope that is
+        # the deliberate, unrelated Phase 96 decision ("clicking flows,
+        # keystrokes ask" -- core/fast_command_gui.py), so `not _gui_open()`
+        # leaves that scope's behavior byte-identical. Outside it, a click
+        # RAISES to confirm-class by default and the runner's single-use
+        # grant, bound to the exact label, lowers it back for that one call
+        # (screen/click_grant.py documents every condition). Only the
+        # `label` path can ever be granted -- a raw x/y (or `target`) call
+        # carries no label, so `consume()` never matches it and it falls to
+        # the same confirm default, dominance identical to the two grants
+        # above. A call with NO targeting argument at all (no label, x, y or
+        # target) is left alone: it was already dead at the handler before
+        # this phase (`screen_tools.screen_click` self-refuses with
+        # "I will not click raw coordinates"/"ui_target_required"), and
+        # `test_postconditions.py::test_executor_does_not_demote_ok_for_an_
+        # unverifiable_screen_method` pins that exact allow-class,
+        # handler-refuses shape for that specific call.
+        _click_attempted = bool(call_args.get("label")) or any(call_args.get(k) is not None for k in ("x", "y", "target"))
+        if name == "screen.click" and decision == "allow" and not friction.escalated and not _gui_open() and _click_attempted:
+            from ..screen import click_grant
+
+            label = str(call_args.get("label") or "")
+            if label and click_grant.consume(name, call_args):
+                trace_gate_decision(name, "user_named_label_click_grant", spec)
+            else:
+                decision = "confirm"
+                trace_gate_decision(name, "click_needs_confirmation", spec)
 
         # Phase 72 ORANGE: raise friction one step for a tool this role may use
         # but should never use unattended. Applied LAST, after the Phase 42

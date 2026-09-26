@@ -53,13 +53,39 @@ def verify_app_opened(app: str, *, retries: int = 4, delay_seconds: float = 0.2)
         if matches:
             break
         time.sleep(delay_seconds)
-    return {
+    result: dict[str, Any] = {
         "ok": True,
         "verified": bool(matches),
         "target": app,
         "matches": [match.as_dict() for match in matches[:5]],
         "message": f"{app} is open." if matches else f"I could not verify a {app} window.",
     }
+    if matches:
+        result["input_ready"] = _settle_if_in_front(matches[0])
+    return result
+
+
+def _settle_if_in_front(window: Any) -> bool | None:
+    """Phase 120: live, "open calculator, then click Seven, Plus, Two, Equals"
+    left the display at 2 -- every click reported success and the first had
+    gone nowhere. A just-opened window is in front before the app inside it
+    listens (measured for keystrokes in Phases 114/116), so wait for it ONCE
+    here, where the app was opened, rather than on every later click or key.
+
+    Only when the opened window is the one in front: a window behind others
+    cannot take input anyway. None when there was nothing to wait for.
+    Never raises.
+    """
+    try:
+        active = get_active_window()
+        hwnd = int(getattr(window, "hwnd", 0) or 0)
+        if not hwnd or active is None or int(active.hwnd) != hwnd:
+            return None
+        from ..screen.input_ready import wait_for_input_ready
+
+        return wait_for_input_ready(hwnd, timeout=3.0)
+    except Exception:
+        return None
 
 
 def verify_folder_opened(folder: str, *, retries: int = 4, delay_seconds: float = 0.2) -> dict[str, Any]:
