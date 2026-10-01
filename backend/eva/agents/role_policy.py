@@ -133,7 +133,11 @@ ROLE_POLICIES: dict[str, RolePolicy] = {
         ),
         # submit_form commits a whole staged form; close_app can discard unsaved
         # work (the open Phase 73 debt) -- both stay confirmed for a sub-task.
-        orange=frozenset({"screen.submit_form", "close_app"}),
+        # Phase 127: volume/brightness/theme are reversible local preferences, but a
+        # sub-task driven by untrusted screen content should not change them
+        # unattended, so they are ORANGE (allow -> confirm). radio_set is RED
+        # (absent): cutting Wi-Fi off is the human's call from the console.
+        orange=frozenset({"screen.submit_form", "close_app", "system_volume", "display_brightness", "theme_mode"}),
     ),
     "file": RolePolicy(
         name="file",
@@ -168,6 +172,7 @@ ROLE_POLICIES: dict[str, RolePolicy] = {
             {
                 "media_control",
                 "media_key",
+                "system_volume",
                 "spotify_next",
                 "spotify_now_playing_status",
                 "spotify_pause",

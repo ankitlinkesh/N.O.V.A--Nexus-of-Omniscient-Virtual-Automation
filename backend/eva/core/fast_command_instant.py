@@ -348,6 +348,12 @@ def synthesize_single_result(message: str, results: list[Any]) -> str | None:
         return format_status(data, "full")
     if tool == "window_list":
         return format_windows(data)
+    if tool in {"system_volume", "display_brightness", "theme_mode", "radio_status", "radio_set"}:
+        # Phase 127: these tools write their own read-back sentence. A failed read
+        # or a gated call is not a success, so it falls through to the LLM.
+        if isinstance(data, dict) and data.get("ok") and isinstance(data.get("message"), str):
+            return data["message"] or None
+        return None
     if tool == "file.list_dir":
         # A listing answers "how many / what's in"; it does not answer "is X in there".
         if not _LISTING_ASK.search(str(message or "")):

@@ -71,6 +71,7 @@ from ..desktop import (
     verify_last_action,
 )
 from .app_control_tools import app_focus, browser_open_url_tool, browser_search_tool
+from . import system_settings
 from .desktop import close_app, media_key, open_app, open_folder, open_url, system_power, system_status, web_search
 from .message_tools import message_confirm_send, message_prepare, message_send_via_ui
 from .safe_file_tools import file_copy, file_delete, file_list_dir, file_move, file_write_text
@@ -1176,6 +1177,74 @@ class ToolRegistry:
                 category="media",
                 risk="low",
             ),
+            # Phase 127: system settings. Each setter reads the state back and the
+            # reply reports what was READ. volume/brightness/theme are reversible
+            # local preferences, the same class as media_control (SAFE_LOCAL_UI,
+            # no prompt). radio_set is confirm-class (the close_app pattern):
+            # turning Wi-Fi off cuts NOVA's own cloud access.
+            "system_volume": ToolSpec(
+                name="system_volume",
+                description="Get or set the exact system volume. action: get (read the level), set (level 0-100), mute, unmute. Reads the level back after setting it.",
+                args_schema=_schema({"action": {"type": "string", "enum": ["get", "set", "mute", "unmute"]}, "level": {"type": "integer"}}, ["action"]),
+                safety_level="safe",
+                handler=lambda action="get", level=None: system_settings.system_volume(action, level),
+                category="system",
+                risk="low",
+                action_type="SAFE_LOCAL_UI",
+                risk_categories=("SAFE_LOCAL_UI",),
+                supports_rollback=True,
+            ),
+            "display_brightness": ToolSpec(
+                name="display_brightness",
+                description="Get or set the laptop screen brightness. action: get, set (level 0-100), up or down (steps of 10; for 'dim the screen' use down). Built-in laptop panels only. Reads the level back.",
+                args_schema=_schema({"action": {"type": "string", "enum": ["get", "set", "up", "down"]}, "level": {"type": "integer"}}, ["action"]),
+                safety_level="safe",
+                handler=lambda action="get", level=None: system_settings.display_brightness(action, level),
+                category="system",
+                risk="low",
+                action_type="SAFE_LOCAL_UI",
+                risk_categories=("SAFE_LOCAL_UI",),
+                supports_rollback=True,
+            ),
+            "theme_mode": ToolSpec(
+                name="theme_mode",
+                description="Get or set the Windows dark/light mode (apps and system). action: get, or set with mode dark or light. Reads the setting back.",
+                args_schema=_schema({"action": {"type": "string", "enum": ["get", "set"]}, "mode": {"type": "string", "enum": ["dark", "light"]}}, ["action"]),
+                safety_level="safe",
+                handler=lambda action="get", mode=None: system_settings.theme_mode(action, mode),
+                category="system",
+                risk="low",
+                action_type="SAFE_LOCAL_UI",
+                risk_categories=("SAFE_LOCAL_UI",),
+                supports_rollback=True,
+            ),
+            "radio_status": ToolSpec(
+                name="radio_status",
+                description="Read whether Wi-Fi or Bluetooth is on or off. Read-only.",
+                args_schema=_schema({"kind": {"type": "string", "enum": ["wifi", "bluetooth"]}}, ["kind"]),
+                safety_level="safe",
+                handler=lambda kind="wifi": system_settings.radio_status(kind),
+                category="system",
+                risk="low",
+                action_type="SAFE_LOCAL_READ",
+                risk_categories=("SAFE_LOCAL_READ",),
+            ),
+            "radio_set": ToolSpec(
+                name="radio_set",
+                description=(
+                    "Turn the Wi-Fi or Bluetooth radio on or off (not the adapter; no admin needed). "
+                    "Turning Wi-Fi off cuts this computer's internet, including NOVA's own cloud AI access, until it is turned back on."
+                ),
+                args_schema=_schema({"kind": {"type": "string", "enum": ["wifi", "bluetooth"]}, "state": {"type": "string", "enum": ["on", "off"]}}, ["kind", "state"]),
+                safety_level="sensitive",
+                requires_confirmation=True,
+                handler=lambda kind="wifi", state="on": system_settings.radio_set(kind, state),
+                category="system",
+                risk="medium",
+                action_type="SAFE_LOCAL_UI",
+                risk_categories=("SAFE_LOCAL_UI",),
+                supports_rollback=True,
+            ),
             "spotify_status": ToolSpec(
                 name="spotify_status",
                 description="Report whether a visible Spotify desktop window is available without reading account data.",
@@ -1651,6 +1720,12 @@ class ToolRegistry:
             "browser_recover_target",
             "chatgpt_in_chrome",
             "media_control",
+            # Phase 127: system settings (volume/brightness/theme/radios).
+            "system_volume",
+            "display_brightness",
+            "theme_mode",
+            "radio_status",
+            "radio_set",
             "spotify_status",
             "spotify_search_desktop",
             "spotify_play_desktop",

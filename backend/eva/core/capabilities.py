@@ -121,9 +121,9 @@ CAPABILITIES: dict[str, Capability] = {
     "operator_control": Capability(
         name="operator_control",
         description="Safe laptop controls for apps, folders, URLs, media keys, and guarded power actions.",
-        trigger_concepts=("open app", "close app", "volume", "lock laptop", "shutdown"),
-        related_tools=("open_app", "open_folder", "open_url", "media_control", "guarded_power_action"),
-        example_intents=("open chrome", "volume up", "shutdown my laptop"),
+        trigger_concepts=("open app", "close app", "volume", "lock laptop", "shutdown", "brightness", "dark mode", "wifi", "bluetooth"),
+        related_tools=("open_app", "open_folder", "open_url", "media_control", "guarded_power_action", "system_volume", "display_brightness", "theme_mode", "radio_set", "radio_status"),
+        example_intents=("open chrome", "volume up", "set volume to 30", "set brightness to 60", "turn on dark mode", "turn off wifi", "shutdown my laptop"),
         route_type="deterministic",
     ),
     "media_music_control": Capability(

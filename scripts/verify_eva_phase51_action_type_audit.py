@@ -70,7 +70,9 @@ def check(value: object, message: str) -> None:
 # pixels, mutates nothing and reaches no network. allow 82 -> 83; override and
 # confirm unchanged. This pin fired before it was updated, which is the point of
 # having it.
-EXPECTED_CLASS_COUNTS = {"allow": 83, "override": 10, "confirm": 9}
+# Phase 127: +4 allow (system_volume, display_brightness, theme_mode, radio_status)
+# and +1 confirm (radio_set) -> allow 87, confirm 10.
+EXPECTED_CLASS_COUNTS = {"allow": 87, "override": 10, "confirm": 10}
 
 SCREEN_CAPTURE_TOOLS = ("capture_screen", "analyze_screen", "screen.observe")
 

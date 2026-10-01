@@ -90,8 +90,13 @@ _WORKSPACE_READ_TOOLS = frozenset(
 # --- Local research knowledge (local SQLite, no network). --------------------
 _RESEARCH_LOCAL_TOOLS = frozenset({"research_recall", "research_summary"})
 
+# --- Radio state (Phase 127). Reports "Wi-Fi: on/off" / "Bluetooth: on/off" from
+# the Windows radio API. Reads no network data, no SSIDs, no pixels, mutates
+# nothing. The setter, radio_set, is a separate confirm-class tool. ------------
+_RADIO_READ_TOOLS = frozenset({"radio_status"})
+
 AUDITED_SAFE_LOCAL_READ: frozenset[str] = frozenset(
-    _STATUS_TOOLS | _WINDOW_METADATA_TOOLS | _WORKSPACE_READ_TOOLS | _RESEARCH_LOCAL_TOOLS
+    _STATUS_TOOLS | _WINDOW_METADATA_TOOLS | _WORKSPACE_READ_TOOLS | _RESEARCH_LOCAL_TOOLS | _RADIO_READ_TOOLS
 )
 
 # Tools that reach the network. Typed NETWORK_ACTION for honesty; that is

@@ -112,3 +112,38 @@ def import_tool_gate():
             pytrace=False,
         )
     return tool_gate
+
+
+@pytest.fixture(autouse=True)
+def _no_real_system_settings(monkeypatch):
+    """Phase 127: no pytest run may change a real volume, brightness, theme or radio.
+
+    Every real backend of tools/system_settings.py sits behind one of these seams.
+    They raise here unless a test fakes them (monkeypatch overrides this), so a
+    test that routes "set volume to 30" through the fast path without a fake fails
+    loudly instead of really changing the machine's volume.
+    """
+    import importlib
+
+    touched: list[str] = []
+
+    class _RealSettingTouched(BaseException):
+        """BaseException so the tools' own `except Exception` cannot swallow it."""
+
+    def _make(name):
+        def _blocked(*_a, **_k):
+            touched.append(name)
+            raise _RealSettingTouched(f"a test reached the REAL system-settings backend {name}; fake it")
+
+        return _blocked
+
+    # The suite imports the package both as `backend.eva` and as `eva`; guard each copy.
+    for pkg in ("backend.eva", "eva"):
+        try:
+            ss = importlib.import_module(f"{pkg}.tools.system_settings")
+        except ImportError:
+            continue
+        for name in ("_audio_endpoint", "_run_powershell", "_theme_read", "_theme_write", "_broadcast_theme_change"):
+            monkeypatch.setattr(ss, name, _make(name))
+    yield
+    assert not touched, f"real system-settings backend touched during a test: {touched}"

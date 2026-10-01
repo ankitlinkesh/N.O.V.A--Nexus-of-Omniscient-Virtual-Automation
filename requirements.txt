@@ -49,3 +49,12 @@ sounddevice==0.5.5
 # (default D:\eva-agent-toolsoice\openwakeword). Nothing opens an audio device
 # unless voice input is explicitly enabled, and no activation profile may enable it.
 openwakeword==0.6.0
+
+# System settings (Phase 127): exact volume through the Windows Core Audio API.
+# pycaw wraps IAudioEndpointVolume over comtypes (pure Python, no admin). psutil
+# is pycaw's own dependency, pinned for reproducibility. Brightness, theme and the
+# Wi-Fi/Bluetooth radios use PowerShell/winreg and need no package. Only touched
+# when the user asks for a volume change; nothing opens an audio device at import.
+pycaw==20260927
+comtypes==1.4.16
+psutil==7.2.2

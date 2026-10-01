@@ -62,7 +62,7 @@ What this verifies (all against the real registry/gate, fully offline):
   10. The vault's only plaintext egress is ``Vault.resolve()``; no
       show/dump/export/reveal-shaped method exists anywhere on it.
   11. Phase 51's audited gate-class counts (``EXPECTED_CLASS_COUNTS``) say
-      ``confirm == 9`` (Phase 82 added ``close_app`` as confirm-class); this
+      ``confirm == 10`` (Phase 82 added ``close_app``, Phase 127 ``radio_set``); this
       file imports that verifier's module and cross-checks the number so the
       two files cannot silently drift apart.
   12. Source property: ``stage_form`` -- the console-only entry point into
@@ -357,8 +357,8 @@ def _run() -> int:
     # close_app from allow to confirm (it can discard unsaved work);
     # screen.submit_form remains among the confirm-class tools.
     check(
-        phase51.EXPECTED_CLASS_COUNTS["confirm"] == 9,
-        "Phase 51's EXPECTED_CLASS_COUNTS['confirm'] must be 9 (Phase 82 added close_app as confirm-class); "
+        phase51.EXPECTED_CLASS_COUNTS["confirm"] == 10,
+        "Phase 51's EXPECTED_CLASS_COUNTS['confirm'] must be 10 (Phase 82 added close_app as confirm-class, Phase 127 radio_set); "
         f"got {phase51.EXPECTED_CLASS_COUNTS.get('confirm')}. If this genuinely changed, update the count pins "
         "together and say why.",
     )

@@ -12,6 +12,7 @@ from .fast_command_think import maybe_handle_think_command
 from .fast_command_explain import _handle_explain_command
 from .fast_command_shell import _handle_shell_command
 from .fast_command_instant import maybe_handle_instant_answer
+from .fast_command_settings import maybe_handle_setting_command
 from .fast_command_formatters import (
     _format_activation_status,
     _format_agent_status,
@@ -827,6 +828,13 @@ def maybe_handle_fast_command(
     instant = maybe_handle_instant_answer(original, tools, session_context)
     if instant:
         return instant
+
+    # Phase 127 system settings: exact volume, brightness, dark/light mode and
+    # Wi-Fi/Bluetooth, from whole-message phrasings. Runs through the registry, so
+    # the gate still applies (radio_set asks for confirmation from here too).
+    setting = maybe_handle_setting_command(original, tools, session_context)
+    if setting:
+        return setting
 
     # Phase 75. Claims `explain` ONLY for a pending-action id (or bare, when a
     # pending action exists), so the later `explain feature ...` and

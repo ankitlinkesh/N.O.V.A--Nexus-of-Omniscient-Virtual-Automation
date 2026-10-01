@@ -147,10 +147,22 @@ def explain_action(
     else:
         declined = "If you do nothing, it will not run."
 
+    what = description or "(the tool declares no description)"
+    # Phase 127: say the concrete consequence of the exact call, in the tool's own
+    # words. Derived only from the (masked) args, never from a model.
+    if tool == "radio_set" and isinstance(args, dict):
+        kind, state = str(args.get("kind", "")).lower(), str(args.get("state", "")).lower()
+        if kind == "wifi" and state == "off":
+            what += " THIS CALL turns Wi-Fi OFF: NOVA loses its own cloud access (its AI models need the internet), so it may not be able to answer or help you turn Wi-Fi back on."
+        elif kind == "wifi" and state == "on":
+            what += " THIS CALL turns Wi-Fi on."
+        elif kind == "bluetooth":
+            what += f" THIS CALL turns Bluetooth {state or 'on/off'}; connected Bluetooth devices will disconnect if it goes off."
+
     return ActionExplanation(
         tool=tool,
         command_line=_format_call(tool, args),
-        what_it_does=description or "(the tool declares no description)",
+        what_it_does=what,
         why_gated=why,
         approval_meaning=_DECISION_PLAIN.get(decision, f"Classified as {decision}."),
         if_declined=declined,
