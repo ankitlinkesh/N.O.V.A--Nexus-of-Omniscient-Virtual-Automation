@@ -13,7 +13,11 @@ def _app_queries(app: str) -> list[str]:
     for canonical, aliases in APP_ALIASES.items():
         if clean == canonical or clean in aliases:
             return [canonical, *aliases]
-    return [clean]
+    # Phase 124: a window is titled "Visual Studio Code", not "vscode". For an app
+    # resolved from the installed-app index, also look for its display name / exe.
+    from ..tools.app_index import resolved_window_queries
+
+    return list(dict.fromkeys([clean, *resolved_window_queries(clean)]))
 
 
 def verify_window_focused(query: str, *, retries: int = 4, delay_seconds: float = 0.2) -> dict[str, Any]:

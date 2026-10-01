@@ -153,6 +153,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase121_provider_cooldown_and_routing.py",
     "verify_eva_phase122_ui_prompting_findings.py",
     "verify_eva_phase123_ui_prompting_round2.py",
+    "verify_eva_phase124_open_any_app.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -282,6 +283,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase121_provider_cooldown_and_routing.py",
     "verify_eva_phase122_ui_prompting_findings.py",
     "verify_eva_phase123_ui_prompting_round2.py",
+    "verify_eva_phase124_open_any_app.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -375,6 +377,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase121_provider_cooldown_and_routing.py": ("phase121", "llm", "latency", "routing"),
     "verify_eva_phase122_ui_prompting_findings.py": ("phase122", "planner", "rules", "approval"),
     "verify_eva_phase123_ui_prompting_round2.py": ("phase123", "routing", "diagnostics", "status"),
+    "verify_eva_phase124_open_any_app.py": ("phase124", "apps", "launch", "desktop"),
     "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 

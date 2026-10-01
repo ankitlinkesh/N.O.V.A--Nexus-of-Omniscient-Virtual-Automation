@@ -786,7 +786,7 @@ Rules:
 - Maximum 3 tool calls.
 - Never call tools outside the registry.
 - Never invent tool names.
-- Use open_app for known apps such as chrome, spotify, vscode, codex, settings, notepad.
+- Use open_app to open any installed app by name (chrome, spotify, vscode, discord, vlc, obs studio, settings, notepad, ...). Pass the name the user said; it asks which one if several match.
 - Use open_folder for known folders such as downloads, documents, desktop, eva folder.
 - Use web_search for web searches; use open_url for explicit URLs.
 - Use browser_status/browser_current_page for browser state questions such as "what page am I on" or "what website is open".
@@ -860,7 +860,7 @@ Rules:
 - Use browser_search for browser-heavy search tasks, browser_current_page for current page questions, browser_summarize_page for explicit current-page summaries, browser_extract_links for explicit link extraction, and browser_save_page_to_research when the user asks to save the current page into research.
 - Browser tools must not access cookies, tokens, password fields, payment/account pages, or private page content. If browser reading is blocked, ask for a safe URL or pasted visible text.
 - Use research_recall first, then research_web for research knowledge-base goals where the user wants to save, remember, build knowledge, make Eva a superbrain, or research a topic over time.
-- Use open_app/open_folder/open_url only for explicit desktop/navigation goals.
+- Use open_app/open_folder/open_url only for explicit desktop/navigation goals. open_app opens any installed app by name, not just a fixed list.
 - Use analyze_screen when the user explicitly asks to inspect/look/check/analyze the screen or identify a visible error. Use capture_screen only for raw screenshot capture.
 - Use system_time for the current time, date, day of the week, or timezone. Never guess the time and never open a website to read a clock.
 - Use file.list_dir to list a folder's contents (for the user's own Desktop, Documents or Downloads folder pass just that name, e.g. path="Downloads"; never invent a full path to a user's home folder), and system_status for laptop status: battery percent, whether it is plugged in, memory use, and free disk space on each drive. Use window_focus (not app.focus, which does not exist in your tool list) to bring a visible window to the foreground when the goal requires switching to or focusing an app.

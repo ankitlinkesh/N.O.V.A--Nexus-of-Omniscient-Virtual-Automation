@@ -111,6 +111,23 @@ def _is_privileged_tool(registry: ToolRegistry, tool_name: str) -> bool:
         return True
 
 
+def _opens_unlisted_app(call: PlannedToolCall) -> bool:
+    """Phase 124: `open_app` can now launch ANY installed app, and it is
+    allow-class, which the injection check above lets through untouched. With
+    untrusted content in the task, a hostile page could have NOVA open a
+    remote-support tool or anything else installed. A built-in alias app keeps
+    its old treatment; any other app counts as privileged for that check, so it
+    asks only when the task is tainted -- a clean typed request stays instant."""
+    if call.tool != "open_app":
+        return False
+    try:
+        from ..tools.desktop import APP_ALIASES, _canonical_app
+
+        return _canonical_app(str(call.args.get("app") or "")) not in APP_ALIASES
+    except Exception:
+        return True
+
+
 def _safe_log(memory: Any, session_id: str | None, kind: str, payload: dict[str, Any]) -> None:
     if memory is None or not session_id:
         return
@@ -881,7 +898,7 @@ async def _run_step(
     # next action is privileged, it cannot run on that content's say-so —
     # escalate to explicit user confirmation carrying an injection
     # warning. The permission gate still governs it too.
-    privileged = _is_privileged_tool(registry, call.tool)
+    privileged = _is_privileged_tool(registry, call.tool) or _opens_unlisted_app(call)
     auth = authorize_action(
         tool_privileged=privileged,
         context_tainted=state.injection_flagged,

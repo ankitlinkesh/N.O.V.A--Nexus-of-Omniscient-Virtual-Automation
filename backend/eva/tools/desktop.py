@@ -152,12 +152,17 @@ def _iter_start_menu_shortcuts() -> Iterable[Path]:
 
 
 def _find_shortcut(app_name: str) -> Path | None:
-    names = _candidate_names(app_name)
+    # Phase 124: whole words, not substrings ("word" used to match WordPad and
+    # Password Manager). An exact name beats a name that merely contains the words.
+    from .app_index import _query_words, _score
+
+    names = [_query_words(name) for name in _candidate_names(app_name)]
+    best: tuple[float, Path] | None = None
     for shortcut in _iter_start_menu_shortcuts():
-        stem = shortcut.stem.lower()
-        if any(name in stem or stem in name for name in names):
-            return shortcut
-    return None
+        score = max((_score(words, shortcut.stem) for words in names), default=0.0)
+        if score > 0 and (best is None or score > best[0]):
+            best = (score, shortcut)
+    return best[1] if best else None
 
 
 def _canonical_app(app_name: str) -> str:
@@ -204,8 +209,12 @@ def close_app_refusal(app_name: str) -> str:
 def open_app(app_name: str) -> str:
     key = _canonical_app(app_name)
     if key not in APP_ALIASES:
-        supported = ", ".join(sorted(APP_ALIASES))
-        raise ValueError(f"Unknown app: {app_name}. Supported apps: {supported}.")
+        # Phase 124: any installed app, by name. Raises (without launching) when the
+        # name is refused, ambiguous, or not installed. Opening an app is still not
+        # closing it: close_app's allowlist (is_closeable) is untouched.
+        from .app_index import open_installed_app
+
+        return open_installed_app(app_name)
     aliases = APP_ALIASES.get(key, (app_name.strip(),))
 
     for alias in aliases:

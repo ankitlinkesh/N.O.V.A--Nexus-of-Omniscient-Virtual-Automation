@@ -466,8 +466,9 @@ class ToolRegistry:
             ),
             "open_app": ToolSpec(
                 name="open_app",
-                description="Open a known desktop app by common name. Supported examples: chrome, spotify, vscode, codex, settings, notepad.",
-                args_schema=_schema({"app": {"type": "string", "enum": sorted(KNOWN_APPS)}}, ["app"]),
+                description="Open any installed desktop app by name (Start Menu or Store apps), e.g. chrome, spotify, vscode, discord, vlc, obs studio, settings, notepad. Asks which one when several match; refuses shells, admin consoles and installers.",
+                # Phase 124: no enum -- the app list is whatever is installed.
+                args_schema=_schema({"app": {"type": "string"}}, ["app"]),
                 safety_level="safe",
                 handler=lambda app=None, app_name=None: open_app(str(app or app_name or "")),
                 # Phase 70: inherited from the deleted `app.open` (Phase 64's
