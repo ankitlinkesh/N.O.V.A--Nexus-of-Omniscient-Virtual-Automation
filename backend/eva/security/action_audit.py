@@ -95,8 +95,18 @@ _RESEARCH_LOCAL_TOOLS = frozenset({"research_recall", "research_summary"})
 # nothing. The setter, radio_set, is a separate confirm-class tool. ------------
 _RADIO_READ_TOOLS = frozenset({"radio_status"})
 
+# --- A user file's text (Phase 128). REVIEWED DECISION, the same shape as the
+# workspace reads above, and it differs from them in exactly one way that matters:
+# the CONTENT is untrusted. Allow-class because (1) `_safe_path` bounds it to the
+# project and Documents/Desktop/Downloads and denies .env*/keys/.git, and Phase 55
+# still escalates a sensitive-looking path to confirm; (2) a read mutates nothing
+# and reaches no network. The injection risk lives in what the model does NEXT,
+# which is the runner's taint tracking (source_type_for_tool -> file_content), not
+# this gate: a tainted task cannot take a privileged step on the file's say-so. ---
+_USER_FILE_READ_TOOLS = frozenset({"file.read_text"})
+
 AUDITED_SAFE_LOCAL_READ: frozenset[str] = frozenset(
-    _STATUS_TOOLS | _WINDOW_METADATA_TOOLS | _WORKSPACE_READ_TOOLS | _RESEARCH_LOCAL_TOOLS | _RADIO_READ_TOOLS
+    _STATUS_TOOLS | _WINDOW_METADATA_TOOLS | _WORKSPACE_READ_TOOLS | _RESEARCH_LOCAL_TOOLS | _RADIO_READ_TOOLS | _USER_FILE_READ_TOOLS
 )
 
 # Tools that reach the network. Typed NETWORK_ACTION for honesty; that is

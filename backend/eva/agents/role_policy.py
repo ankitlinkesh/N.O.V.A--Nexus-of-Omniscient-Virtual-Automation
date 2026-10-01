@@ -137,12 +137,18 @@ ROLE_POLICIES: dict[str, RolePolicy] = {
         # sub-task driven by untrusted screen content should not change them
         # unattended, so they are ORANGE (allow -> confirm). radio_set is RED
         # (absent): cutting Wi-Fi off is the human's call from the console.
-        orange=frozenset({"screen.submit_form", "close_app", "system_volume", "display_brightness", "theme_mode"}),
+        #
+        # Phase 128: clipboard.write is ORANGE (a sub-task steered by screen text
+        # could plant a command for the user's next paste). clipboard.read is RED
+        # for every role: the clipboard holds passwords, and the human asks for it.
+        orange=frozenset({"screen.submit_form", "close_app", "system_volume", "display_brightness", "theme_mode", "clipboard.write"}),
     ),
     "file": RolePolicy(
         name="file",
         description="Reads and organizes files in the workspace. Can write, copy and move under confirmation; can never delete.",
-        green=frozenset({"file.list_dir", "open_folder", "status"} | _WORKSPACE_READS),
+        # Phase 128: file.read_text is GREEN here only. Its result is untrusted file
+        # content, so the runner taints the sub-task on it like any web read.
+        green=frozenset({"file.list_dir", "file.read_text", "open_folder", "status"} | _WORKSPACE_READS),
         orange=frozenset({"file.write_text", "file.copy", "file.move"}),
         # file.delete is deliberately absent -> RED. A delegated sub-task never
         # deletes; the human deletes from the console.

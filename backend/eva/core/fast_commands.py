@@ -13,6 +13,7 @@ from .fast_command_explain import _handle_explain_command
 from .fast_command_shell import _handle_shell_command
 from .fast_command_instant import maybe_handle_instant_answer
 from .fast_command_settings import maybe_handle_setting_command
+from .fast_command_clipboard import maybe_handle_clipboard_command
 from .fast_command_formatters import (
     _format_activation_status,
     _format_agent_status,
@@ -835,6 +836,12 @@ def maybe_handle_fast_command(
     setting = maybe_handle_setting_command(original, tools, session_context)
     if setting:
         return setting
+
+    # Phase 128 clipboard: "copy <text> to my clipboard" and "what's on my clipboard"
+    # (the read is confirm-class and comes back as an approval prompt from here too).
+    clipboard = maybe_handle_clipboard_command(original, tools, session_context)
+    if clipboard:
+        return clipboard
 
     # Phase 75. Claims `explain` ONLY for a pending-action id (or bare, when a
     # pending action exists), so the later `explain feature ...` and

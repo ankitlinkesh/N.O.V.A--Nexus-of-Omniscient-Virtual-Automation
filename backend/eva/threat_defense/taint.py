@@ -41,6 +41,7 @@ UNTRUSTED_SOURCE_TYPES = frozenset(
         "mcp_result",
         "tool_output",
         "screen_ocr",
+        "clipboard",
         "retrieved_context",
         "memory",
     }
@@ -73,6 +74,9 @@ _SCREEN_TOPIC_CATEGORIES = frozenset(
     }
 )
 _SCREEN_TOOL_NAMES = frozenset({"analyze_screen"})
+# Phase 128: whatever is on the clipboard was put there by some other program or
+# web page. Its text is data, never instructions.
+_CLIPBOARD_TOOL_NAMES = frozenset({"clipboard.read"})
 
 _SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 
@@ -118,6 +122,8 @@ def source_type_for_tool(tool_name: str) -> str:
     for prefix in _UNTRUSTED_TOOL_PREFIXES:
         if name.startswith(prefix):
             return "web_result" if ("web" in prefix or "research" in prefix) else "tool_output"
+    if name in _CLIPBOARD_TOOL_NAMES:
+        return "clipboard"
     if name.startswith("file.read") or name in {"workspace_read_file", "file_read_text"}:
         return "file_content"
     return "trusted_tool"

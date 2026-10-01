@@ -325,6 +325,44 @@ def tool_signature(call: PlannedToolCall) -> str:
     return f"{call.tool}:{repr(sorted(args.items()))}"
 
 
+
+# Phase 128. File and clipboard CONTENT is the one observation the planner must
+# actually READ, so it gets a far bigger window than the generic 600 characters
+# the native planner shows per step (agent/planner.py). It is also untrusted data,
+# so it is ALWAYS fenced here -- not only when an injection detector fires.
+READ_OBSERVATION_CHARS = 8000
+OBSERVATION_WINDOW = {"file.read_text": READ_OBSERVATION_CHARS + 600, "clipboard.read": 4600}
+
+
+def _fenced_content(label: str, header: str, text: str, limit: int, source_type: str) -> str:
+    from ..threat_defense.taint import wrap_as_untrusted_data
+
+    shown = text[:limit]
+    note = f"\n[showing the first {len(shown)} of {len(text)} characters]" if len(text) > len(shown) else ""
+    return header + "\n" + wrap_as_untrusted_data(shown + note, source_type)
+
+
+def _describe_read_text(result: dict) -> str:
+    if not result.get("ok"):
+        return f"file.read_text could not read the file: {result.get('message') or result.get('error') or 'unknown error'}"
+    text = str(result.get("text") or "")
+    header = f"file.read_text read {result.get('name') or result.get('path')} ({result.get('format', 'text')}, {result.get('chars', len(text))} characters"
+    header += ", TRUNCATED: more of the file was not read)." if result.get("truncated") else ")."
+    if not text.strip():
+        return header + " The file is empty."
+    return _fenced_content("file", header, text, READ_OBSERVATION_CHARS, "file_content")
+
+
+def _describe_clipboard_read(result: dict) -> str:
+    if not result.get("ok"):
+        return f"clipboard.read failed: {result.get('message') or result.get('error') or 'unknown error'}"
+    text = str(result.get("text") or "")
+    if not text:
+        return str(result.get("message") or "clipboard.read: the clipboard is empty.")
+    header = "clipboard.read returned the clipboard text" + (" (masked: it looks like a secret)." if result.get("masked") else ".")
+    return _fenced_content("clipboard", header, text, 4000, "clipboard")
+
+
 def describe_tool_observation(tool: str, result: Any) -> str:
     if isinstance(result, dict):
         if tool == "web_search":
@@ -380,6 +418,12 @@ def describe_tool_observation(tool: str, result: Any) -> str:
                 if isinstance(item, dict):
                     lines.append(f"- {item.get('path')}:{item.get('line')} - {item.get('snippet')}")
             return "\n".join(lines)
+        if tool == "file.read_text":
+            return _describe_read_text(result)
+        if tool == "clipboard.read":
+            return _describe_clipboard_read(result)
+        if tool == "clipboard.write":
+            return str(result.get("message") or ("clipboard.write copied the text." if result.get("ok") else f"clipboard.write failed: {result.get('error') or 'unknown error'}."))
         if tool == "file.list_dir" and result.get("ok"):
             # Phase 118: live, "how many files are in my Downloads" answered 7
             # for a folder holding 45 -- the generic dump reached the planner cut

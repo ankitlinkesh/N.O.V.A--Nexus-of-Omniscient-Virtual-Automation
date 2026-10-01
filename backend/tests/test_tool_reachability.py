@@ -87,7 +87,10 @@ def _dummy_spec(name: str):
 
 # --- Ground truth: the four duplicates are GONE, not merely exempted. -------
 
-_DELETED_DUPLICATE_TOOLS = {"app.close_request", "app.open", "file.patch_text", "file.read_text"}
+# Phase 128 re-registered the NAME `file.read_text`, but not the tool Phase 70 deleted: that one was an
+# arbitrary-path PRIVACY_FILE_READ nobody called. This one is path-bounded (`_safe_path`), allow-class,
+# taint-tracked and planner-visible, so it is no longer in the deleted set.
+_DELETED_DUPLICATE_TOOLS = {"app.close_request", "app.open", "file.patch_text"}
 _DELETED_DUPLICATE_COUNTERPARTS = {"close_app", "open_app", "file.write_text", "workspace_read_file"}
 
 

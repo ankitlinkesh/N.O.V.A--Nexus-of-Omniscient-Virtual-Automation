@@ -147,3 +147,37 @@ def _no_real_system_settings(monkeypatch):
             monkeypatch.setattr(ss, name, _make(name))
     yield
     assert not touched, f"real system-settings backend touched during a test: {touched}"
+
+
+@pytest.fixture(autouse=True)
+def _no_real_clipboard(monkeypatch):
+    """Phase 128: no pytest run may read or overwrite the real clipboard.
+
+    The only two OS touches of tools/clipboard_tools.py are _get_text/_set_text.
+    They raise here unless a test fakes them (monkeypatch overrides this), so a
+    test that routes "copy hello to my clipboard" without a fake fails loudly
+    instead of replacing what the developer had copied.
+    """
+    import importlib
+
+    touched: list[str] = []
+
+    class _RealClipboardTouched(BaseException):
+        """BaseException so the tools' own `except Exception` cannot swallow it."""
+
+    def _make(name):
+        def _blocked(*_a, **_k):
+            touched.append(name)
+            raise _RealClipboardTouched(f"a test reached the REAL clipboard backend {name}; fake it")
+
+        return _blocked
+
+    for pkg in ("backend.eva", "eva"):
+        try:
+            ct = importlib.import_module(f"{pkg}.tools.clipboard_tools")
+        except ImportError:
+            continue
+        for name in ("_get_text", "_set_text", "_win32"):
+            monkeypatch.setattr(ct, name, _make(name))
+    yield
+    assert not touched, f"real clipboard backend touched during a test: {touched}"

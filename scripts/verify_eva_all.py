@@ -157,6 +157,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase125_instant_answers.py",
     "verify_eva_phase126_timers.py",
     "verify_eva_phase127_system_settings.py",
+    "verify_eva_phase128_read_files_clipboard.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -290,6 +291,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase125_instant_answers.py",
     "verify_eva_phase126_timers.py",
     "verify_eva_phase127_system_settings.py",
+    "verify_eva_phase128_read_files_clipboard.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -387,6 +389,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase125_instant_answers.py": ("phase125", "latency", "fast-commands", "templates"),
     "verify_eva_phase126_timers.py": ("phase126", "timers", "reminders", "proactivity"),
     "verify_eva_phase127_system_settings.py": ("phase127", "settings", "system", "control"),
+    "verify_eva_phase128_read_files_clipboard.py": ("phase128", "files", "clipboard", "taint"),
     "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 

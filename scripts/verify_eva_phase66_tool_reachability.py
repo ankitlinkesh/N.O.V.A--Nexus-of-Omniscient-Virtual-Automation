@@ -229,7 +229,9 @@ EXCLUDED_FILES = (REGISTRY_FILE, CATALOG_FILE)
 # Phase 91 added `system_time` (101 -> 102); it is planner-reachable.
 # Phase 127 added system_volume, display_brightness, theme_mode, radio_status and
 # radio_set (102 -> 107); all five are planner-visible.
-EXPECTED_TOOL_COUNT = 107
+# Phase 128 added file.read_text, clipboard.write and clipboard.read (107 -> 110);
+# all three are planner-visible.
+EXPECTED_TOOL_COUNT = 110
 # Phase 91 made `system_time` planner-visible (72 -> 73 default, 79 -> 80 with
 # Playwright). It had to be: registered + audited + referenced from production
 # source satisfied the reachability check above while the model still could not
@@ -246,8 +248,10 @@ EXPECTED_TOOL_COUNT = 107
 # {"open_app", "window_focus"} (agent/runner.py::_run_step) -- a
 # planner-chosen app.focus would never set typing_target.
 # Phase 127: +5 settings tools (78 -> 83 default, 85 -> 90 with Playwright).
-EXPECTED_DEFAULT_PLANNER_VISIBLE_COUNT = 83
-EXPECTED_PLAYWRIGHT_PLANNER_VISIBLE_COUNT = 90
+# Phase 128: +3 (file.read_text, clipboard.write, clipboard.read): 83 -> 86 default,
+# 90 -> 93 with Playwright.
+EXPECTED_DEFAULT_PLANNER_VISIBLE_COUNT = 86
+EXPECTED_PLAYWRIGHT_PLANNER_VISIBLE_COUNT = 93
 
 # The reviewed set of intentionally-exempt tools: name -> justification.
 # Growing this list is a deliberate act with a real reason, not a place to

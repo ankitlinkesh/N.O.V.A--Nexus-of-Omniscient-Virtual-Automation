@@ -72,7 +72,9 @@ def check(value: object, message: str) -> None:
 # having it.
 # Phase 127: +4 allow (system_volume, display_brightness, theme_mode, radio_status)
 # and +1 confirm (radio_set) -> allow 87, confirm 10.
-EXPECTED_CLASS_COUNTS = {"allow": 87, "override": 10, "confirm": 10}
+# Phase 128: +2 allow (file.read_text, clipboard.write) and +1 confirm (clipboard.read)
+# -> allow 89, confirm 11.
+EXPECTED_CLASS_COUNTS = {"allow": 89, "override": 10, "confirm": 11}
 
 SCREEN_CAPTURE_TOOLS = ("capture_screen", "analyze_screen", "screen.observe")
 

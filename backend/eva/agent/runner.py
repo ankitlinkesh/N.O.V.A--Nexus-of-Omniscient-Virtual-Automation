@@ -128,11 +128,53 @@ def _opens_unlisted_app(call: PlannedToolCall) -> bool:
         return True
 
 
+_LOG_REDACTED_TOOLS = frozenset({"file.read_text", "clipboard.read", "clipboard.write"})
+
+# Phase 128. Allow-class tools that become privileged once untrusted content has
+# entered the task. clipboard.write is a local UI action nobody gates, but a page or
+# file that tells NOVA to "copy this command" is clipboard poisoning: the user's
+# next paste runs attacker text. The ordinary gate class stays allow for a clean,
+# user-typed request; this only adds friction after a taint.
+_PRIVILEGED_WHEN_TAINTED = frozenset({"clipboard.write"})
+
+
+def _logged_args(tool: str, args: Any) -> Any:
+    if tool not in _LOG_REDACTED_TOOLS:
+        return args
+    from ..tools.clipboard_tools import redact_for_log
+
+    return redact_for_log(tool, args, None)[0]
+
+
+_FENCED_CONTENT = re.compile(
+    r"\[UNTRUSTED (FILE_CONTENT|CLIPBOARD) CONTENT[^\]]*\](.*?)(?:\[END UNTRUSTED \1 CONTENT\]|\Z)", re.S
+)
+
+
+def _scrub_fenced(value: Any) -> Any:
+    """Phase 128: drop file/clipboard CONTENT from anything headed for the event log.
+
+    Observations, reflections and failure records all quote the observation, and
+    the observation for these two tools always carries the content inside an
+    UNTRUSTED fence (agent/policies.py). Replace each fenced body, wherever it
+    appears, with its length.
+    """
+    if isinstance(value, str):
+        if "[UNTRUSTED " not in value:
+            return value
+        return _FENCED_CONTENT.sub(lambda m: f"[{len(m.group(2).strip())} characters of {m.group(1).lower().replace('_', ' ')} not logged]", value)
+    if isinstance(value, dict):
+        return {key: _scrub_fenced(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_scrub_fenced(item) for item in value]
+    return value
+
+
 def _safe_log(memory: Any, session_id: str | None, kind: str, payload: dict[str, Any]) -> None:
     if memory is None or not session_id:
         return
     try:
-        memory.log_event(session_id, kind, payload)
+        memory.log_event(session_id, kind, _scrub_fenced(payload))
     except Exception:
         return
 
@@ -140,6 +182,12 @@ def _safe_log(memory: Any, session_id: str | None, kind: str, payload: dict[str,
 def _compact_tool_result(result: ToolExecutionResult) -> dict[str, Any]:
     payload = result.as_dict()
     raw = payload.get("result")
+    if result.tool in _LOG_REDACTED_TOOLS:
+        # Phase 128: file and clipboard CONTENT stays out of the plaintext event log.
+        from ..tools.clipboard_tools import redact_for_log
+
+        _args, raw = redact_for_log(result.tool, None, raw)
+        payload["result"] = raw
     if isinstance(raw, dict) and "results" in raw and isinstance(raw["results"], list):
         payload["result"] = {
             **raw,
@@ -541,7 +589,8 @@ def _process_executed_call(
         verdict = assess_taint(result.result, source_type)
         if verdict.injection_detected:
             state.record_injection(source_type)
-            observation = wrap_as_untrusted_data(observation, source_type)
+            if not observation.startswith("[UNTRUSTED"):
+                observation = wrap_as_untrusted_data(observation, source_type)
             events.append({"type": "agent_threat", "task_id": task.id, "step": index, "message": verdict.summary})
             trace_threat({"tool": call.tool, "action": "taint", **verdict.as_dict()})
             _safe_log(memory, session_id, "agent_untrusted_content_flagged", {"task_id": task.id, "step": index, "tool": call.tool, "verdict": verdict.as_dict()})
@@ -574,7 +623,7 @@ def _process_executed_call(
             "next_focus": reflection.next_focus,
         }
     )
-    _safe_log(memory, session_id, "agent_tool_executed", {"task_id": task.id, "step": index, "tool": call.tool, "args": call.args, "result": _compact_tool_result(result)})
+    _safe_log(memory, session_id, "agent_tool_executed", {"task_id": task.id, "step": index, "tool": call.tool, "args": _logged_args(call.tool, call.args), "result": _compact_tool_result(result)})
     _safe_log(memory, session_id, "agent_step_reflection", {"task_id": task.id, "step": index, "reflection": reflection.as_dict()})
 
     # Phase 119: a gate pause is not "no progress" -- it is not a completed
@@ -875,7 +924,7 @@ async def _run_step(
         task.status = "done"
         task.final_response = step.observation
         events.append({"type": "agent_observation", "task_id": task.id, "step": index, "message": step.observation})
-        _safe_log(memory, session_id, "agent_tool_dry_run", {"task_id": task.id, "step": index, "tool": call.tool, "args": call.args})
+        _safe_log(memory, session_id, "agent_tool_dry_run", {"task_id": task.id, "step": index, "tool": call.tool, "args": _logged_args(call.tool, call.args)})
         return _return_task(task, session_context, ok=True, events=events, safety_stops=safety_stops)
 
     # Phase 40c least-privilege: if this task was handed a tool scope, a
@@ -898,7 +947,7 @@ async def _run_step(
     # next action is privileged, it cannot run on that content's say-so —
     # escalate to explicit user confirmation carrying an injection
     # warning. The permission gate still governs it too.
-    privileged = _is_privileged_tool(registry, call.tool) or _opens_unlisted_app(call)
+    privileged = _is_privileged_tool(registry, call.tool) or _opens_unlisted_app(call) or call.tool in _PRIVILEGED_WHEN_TAINTED
     auth = authorize_action(
         tool_privileged=privileged,
         context_tainted=state.injection_flagged,
