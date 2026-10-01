@@ -11,6 +11,7 @@ from .fast_command_gui import maybe_handle_gui_command
 from .fast_command_think import maybe_handle_think_command
 from .fast_command_explain import _handle_explain_command
 from .fast_command_shell import _handle_shell_command
+from .fast_command_instant import maybe_handle_instant_answer
 from .fast_command_formatters import (
     _format_activation_status,
     _format_agent_status,
@@ -807,6 +808,14 @@ def maybe_handle_fast_command(
     shell = _handle_shell_command(normalized, original, tools, session_context, memory, session_id)
     if shell:
         return shell
+
+    # Phase 125 instant answers: a CLOSED list of whole-question phrasings
+    # (time, battery, disk, memory, windows, folder counts) answered from a
+    # template with no LLM call. Anchored at both ends, so it cannot shadow a
+    # prefix command or swallow a longer request.
+    instant = maybe_handle_instant_answer(original, tools, session_context)
+    if instant:
+        return instant
 
     # Phase 75. Claims `explain` ONLY for a pending-action id (or bare, when a
     # pending action exists), so the later `explain feature ...` and

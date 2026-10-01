@@ -250,6 +250,14 @@ async def _synthesize_tool_response(message: str, results: list[ToolExecutionRes
     if any(result.tool == "analyze_screen" for result in results):
         return _local_tool_summary(results), "tool-summary"
 
+    # Phase 125: one successful call to a templated read-only tool needs no
+    # second LLM call just to phrase the sentence. Everything else still does.
+    from ..core.fast_command_instant import synthesize_single_result
+
+    templated = synthesize_single_result(message, results)
+    if templated:
+        return templated, "tool-template"
+
     payload = _results_payload(results)
     prompt = (
         "You are Eva. Summarize these tool execution results naturally and briefly. "
