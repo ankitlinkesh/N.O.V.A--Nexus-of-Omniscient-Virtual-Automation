@@ -143,6 +143,11 @@ def wants_previous_result(message: str) -> bool:
     text = " ".join(message.lower().strip().split())
     if not text.startswith("open ") or not _PREVIOUS_RESULT_WORDS.search(text):
         return False
+    # Phase 123: "open github.com/anthropics", even "open https://github.com/...",
+    # answered "I don't have previous search results" -- "github" is in the word
+    # list. A message holding an actual address is not a reference to a result.
+    if re.search(r"https?://|\b[a-z0-9-]+\.[a-z]{2,}\b", text):
+        return False
     from ..agent.policies import split_trailing_request
 
     return not split_trailing_request(text)[1]

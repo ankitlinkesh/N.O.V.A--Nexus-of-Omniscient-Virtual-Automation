@@ -69,4 +69,28 @@ def power_and_memory() -> dict[str, Any]:
             out["memory_total_gb"] = round(memory.ullTotalPhys / 1024**3, 1)
     except Exception:
         return out
+    out["disks"] = disk_space()
     return out
+
+
+def disk_space() -> list[dict[str, Any]]:
+    """Free and total space per fixed drive (Phase 123: "how much free space is on
+    my C drive?" was refused as "outside allowed local roots" -- a capacity
+    figure reveals no file and needs no path access)."""
+    import shutil
+    import string
+
+    drives: list[dict[str, Any]] = []
+    try:
+        mask = ctypes.windll.kernel32.GetLogicalDrives()
+        for index, letter in enumerate(string.ascii_uppercase):
+            if not mask & (1 << index):
+                continue
+            root = f"{letter}:\\"
+            if ctypes.windll.kernel32.GetDriveTypeW(root) != 3:  # DRIVE_FIXED only
+                continue
+            usage = shutil.disk_usage(root)
+            drives.append({"drive": f"{letter}:", "free_gb": round(usage.free / 1024**3, 1), "total_gb": round(usage.total / 1024**3, 1)})
+    except Exception:
+        return drives
+    return drives

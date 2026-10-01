@@ -3518,11 +3518,16 @@ def maybe_handle_fast_command(
         folder_name = folder or normalized.removeprefix("open ")
         return _run_tool(tools, "open_folder", session_context, folder_name=folder_name)
 
+    # Phase 123, live: "open github.com/anthropics and tell me what repos are
+    # pinned" opened the URL "github.com/anthropics and tell me what repos are
+    # pinned" -- `(/.*)?$` ran the path on through the spaces, and the second
+    # half of the request was dropped. A URL has no spaces; a target that does is
+    # an errand, and goes to the agent.
     url = _after_prefix(original, ("open url ", "open website ", "go to ", "visit "))
-    if url:
+    if url and not re.search(r"\s", url.strip()):
         return _run_tool(tools, "open_url", session_context, url=url)
 
-    if re.match(r"^(open|visit)\s+([a-z0-9-]+\.)+[a-z]{2,}(/.*)?$", normalized):
+    if re.match(r"^(open|visit)\s+([a-z0-9-]+\.)+[a-z]{2,}(/\S*)?$", normalized):
         target = original.split(maxsplit=1)[1]
         return _run_tool(tools, "open_url", session_context, url=target)
 

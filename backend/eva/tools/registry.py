@@ -435,14 +435,14 @@ class ToolRegistry:
         self._tools: dict[str, ToolSpec] = {
             "status": ToolSpec(
                 name="status",
-                description="Return laptop runtime status: OS, battery percent and whether it is plugged in, and memory use.",
+                description="Return laptop runtime status: OS, battery percent and whether it is plugged in, memory use, and free disk space per drive.",
                 args_schema=_schema({}),
                 safety_level="safe",
                 handler=_status,
             ),
             "system_status": ToolSpec(
                 name="system_status",
-                description="Laptop status: OS, battery percent and whether it is plugged in, and memory use.",
+                description="Laptop status: OS, battery percent and whether it is plugged in, memory use, and free disk space per drive.",
                 args_schema=_schema({}),
                 safety_level="safe",
                 handler=_status,

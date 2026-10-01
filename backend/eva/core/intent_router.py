@@ -37,11 +37,16 @@ def _contains_any(text: str, phrases: tuple[str, ...] | list[str]) -> bool:
     return any(phrase in text for phrase in phrases)
 
 
+def _has_word(text: str, word: str) -> bool:
+    return re.search(r"(?<!\w)" + re.escape(word) + r"(?!\w)", text) is not None
+
+
 def _provider_from_text(text: str) -> str | None:
-    if "clōd" in text or "clod" in text:
+    # Phase 123: whole words. "nim" matched inside "animal" and "minimum".
+    if _has_word(text, "clōd") or _has_word(text, "clod"):
         return "clod"
     for provider, aliases in _PROVIDER_ALIASES.items():
-        if any(alias in text for alias in aliases):
+        if any(_has_word(text, alias) for alias in aliases):
             return provider
     return None
 
@@ -519,7 +524,9 @@ def classify_capability_intent(message: str, context: dict | None = None) -> dic
         return _base_result(False, reason="openroute_maps_not_openrouter")
 
     provider = _provider_from_text(text)
-    if provider and any(word in text for word in ("test", "check", "working", "status", "api", "quota", "rate", "provider")):
+    # Phase 123, live: "what's the latest news about NVIDIA today?" returned NOVA's
+    # NIM provider diagnostics -- "test" matched inside "latest". Whole words.
+    if provider and any(_has_word(text, word) for word in ("test", "check", "working", "status", "api", "quota", "rate", "provider")):
         return _base_result(
             True,
             capability="provider_diagnostics",

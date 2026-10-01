@@ -30,7 +30,7 @@ def _bucket_provider(item: dict[str, Any]) -> str:
     status = item.get("status")
     if status == "ready":
         return "working"
-    if status in {"degraded", "quota_blocked", "model_unavailable", "auth_failed"}:
+    if status in {"degraded", "quota_blocked", "cooling_down", "model_unavailable", "auth_failed"}:
         return "degraded"
     return "unavailable"
 
@@ -60,7 +60,7 @@ def get_eva_health_summary(settings: ModelSettings | None = None) -> dict[str, A
         text = f"{name}: {status}"
         if status == "ready":
             working.append(text)
-        elif status in {"degraded", "quota_blocked", "model_unavailable", "auth_failed"}:
+        elif status in {"degraded", "quota_blocked", "cooling_down", "model_unavailable", "auth_failed"}:
             degraded.append(text)
         else:
             unavailable.append(text)

@@ -108,6 +108,10 @@ def _provider_status(configured: bool, safe_error: str, blocked_until: int | Non
         return "local_server_unreachable"
     if not configured:
         return "missing_key" if provider != "ollama" else "unknown"
+    if blocked_until and "timeout" in safe_error.lower():
+        # Phase 123: Phase 121 skips a model that timed out for a few minutes.
+        # That is not a quota, and "wait for quota/reset" sent people the wrong way.
+        return "cooling_down"
     if blocked_until:
         return "quota_blocked"
     if safe_error in {"none", ""}:
@@ -167,6 +171,8 @@ def _suggest_provider_fix(provider: str, configured: bool, status: str, safe_err
         return "Start Ollama locally or switch to a configured cloud provider."
     if not configured and provider != "ollama":
         return f"Add {label} key in local env or leave Eva on auto fallback."
+    if status == "cooling_down":
+        return f"Nothing to do: {label} stopped answering, so NOVA is skipping it for a few minutes and using the next provider, then will try it again."
     if status == "quota_blocked":
         return f"Wait for {label} quota/reset or use the next fallback provider."
     if status == "auth_failed":
@@ -239,7 +245,7 @@ def format_llm_status(settings: ModelSettings | None = None, *, raw: bool = Fals
             )
         )
     ready = [item["label"] for item in health.values() if item.get("status") == "ready"]
-    degraded = [item["label"] for item in health.values() if item.get("status") in {"degraded", "quota_blocked", "model_unavailable", "auth_failed"}]
+    degraded = [item["label"] for item in health.values() if item.get("status") in {"degraded", "quota_blocked", "cooling_down", "model_unavailable", "auth_failed"}]
     unavailable = [item["label"] for item in health.values() if item.get("status") in {"missing_key", "local_server_unreachable", "unavailable"}]
     lines = [
         "LLM status:",
