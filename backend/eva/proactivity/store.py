@@ -164,14 +164,20 @@ class ProactivityStore:
         except Exception:
             return None
 
-    def list_rules(self, *, enabled_only: bool = False) -> list[ProactiveRule]:
+    def list_rules(self, *, enabled_only: bool = False, kind: str | None = None) -> list[ProactiveRule]:
         try:
             with self._lock, closing(self._connect()) as conn:
                 sql = f"SELECT {_RULE_COLUMNS} FROM proactive_rules"
+                clauses, params = [], []
                 if enabled_only:
-                    sql += " WHERE enabled = 1"
+                    clauses.append("enabled = 1")
+                if kind:
+                    clauses.append("kind = ?")
+                    params.append(kind)
+                if clauses:
+                    sql += " WHERE " + " AND ".join(clauses)
                 sql += " ORDER BY created_at ASC"
-                return [_rule_from_row(row) for row in conn.execute(sql).fetchall()]
+                return [_rule_from_row(row) for row in conn.execute(sql, params).fetchall()]
         except Exception:
             return []
 
@@ -218,6 +224,39 @@ class ProactivityStore:
             return _rule_from_row(updated) if updated else None
         except Exception:
             return None
+
+    def claim_once(self, rule_id: str, *, fired_at: str, day: str) -> bool:
+        """Atomically mark a one-shot rule fired+done. True for exactly ONE caller.
+
+        The UPDATE is conditional on the row still being enabled and never
+        fired, and the check-and-set happens inside one SQL statement, so two
+        threads (the timer loop and the minute tick) or two processes racing on
+        the same due rule cannot both win. Whoever gets rowcount 1 notifies."""
+        try:
+            with self._lock, closing(self._connect()) as conn, conn:
+                cur = conn.execute(
+                    "UPDATE proactive_rules SET enabled = 0, last_fired_at = ?, state = ?, "
+                    "fires_today = 1, fires_day = ? "
+                    "WHERE id = ? AND kind = 'once' AND enabled = 1 AND last_fired_at IS NULL",
+                    (fired_at, json.dumps({"done": True}), day, rule_id),
+                )
+                return cur.rowcount == 1
+        except Exception:
+            return False
+
+    def prune_done_once(self, *, older_than: str) -> int:
+        """Drop finished one-shots fired before ``older_than`` (ISO). Keeps the
+        list tidy; a done record is only useful for a day."""
+        try:
+            with self._lock, closing(self._connect()) as conn, conn:
+                cur = conn.execute(
+                    "DELETE FROM proactive_rules WHERE kind = 'once' AND enabled = 0 "
+                    "AND last_fired_at IS NOT NULL AND last_fired_at < ?",
+                    (older_than,),
+                )
+                return cur.rowcount
+        except Exception:
+            return 0
 
     def update_state(self, rule_id: str, state: dict[str, Any]) -> None:
         """Persist trigger bookkeeping without counting a fire (e.g. a file

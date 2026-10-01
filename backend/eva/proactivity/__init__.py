@@ -18,11 +18,13 @@ from .models import (
     DAILY,
     FILE_CHANGE,
     INTERVAL,
+    ONCE,
     RULE_KINDS,
     ProactiveNotification,
     ProactiveRule,
 )
 from .nl_rules import ParsedRule, parse_rule_request
+from .timers import ParsedOnce, parse_once_request
 from .store import ProactivityStore
 from .triggers import should_fire
 
@@ -73,7 +75,13 @@ def open_default_engine(environ: dict[str, str] | None = None) -> ProactivityEng
             queue = open_default_queue(environ)
         except Exception:
             queue = None
-        return ProactivityEngine(store, queue)
+        try:
+            from ..runtime.toast import toast_notifier
+
+            notifier = toast_notifier
+        except Exception:
+            notifier = None
+        return ProactivityEngine(store, queue, notifier=notifier)
     except Exception:
         return None
 
@@ -90,9 +98,12 @@ __all__ = [
     "should_fire",
     "parse_rule_request",
     "ParsedRule",
+    "ParsedOnce",
+    "parse_once_request",
     "INTERVAL",
     "DAILY",
     "FILE_CHANGE",
+    "ONCE",
     "RULE_KINDS",
     "MAX_PROPOSALS_PER_TICK",
 ]

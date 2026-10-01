@@ -65,6 +65,54 @@ def scheduler_interval(environ: dict[str, str] | None = None) -> float:
     return max(_MIN_INTERVAL_SECONDS, value)
 
 
+# Phase 126: the 60s cycle above is far too coarse for a timer (a "5 minute"
+# timer could land up to a minute late). Timers get their own light loop that
+# looks only at one-shot rules; it executes nothing, it just notifies.
+_DEFAULT_TIMER_POLL_SECONDS = 2.0
+_MIN_TIMER_POLL_SECONDS = 0.5
+
+
+def timer_poll_interval(environ: dict[str, str] | None = None) -> float:
+    env = environ if environ is not None else os.environ
+    try:
+        value = float(str(env.get("EVA_TIMER_POLL_SECONDS", "") or _DEFAULT_TIMER_POLL_SECONDS))
+    except (TypeError, ValueError):
+        return _DEFAULT_TIMER_POLL_SECONDS
+    return max(_MIN_TIMER_POLL_SECONDS, value)
+
+
+async def run_timer_loop(
+    engine: Any,
+    stop: asyncio.Event | None = None,
+    *,
+    max_cycles: int | None = None,
+    sleep: Callable | None = None,
+    interval: float | None = None,
+) -> int:
+    """Poll one-shot timers/reminders every ``timer_poll_interval`` seconds.
+
+    Each poll is one cheap indexed read plus, only when something is due, a
+    notification. It runs in a worker thread so SQLite never blocks the event
+    loop, and a failed poll is swallowed so the loop survives. Returns the
+    number of polls made."""
+    naptime = sleep or asyncio.sleep
+    wait = interval if interval is not None else timer_poll_interval()
+    polls = 0
+    while not (stop is not None and stop.is_set()):
+        if max_cycles is not None and polls >= max_cycles:
+            break
+        try:
+            await asyncio.to_thread(engine.tick_once_rules)
+        except Exception:
+            pass
+        polls += 1
+        try:
+            await naptime(wait)
+        except asyncio.CancelledError:
+            break
+    return polls
+
+
 def max_tasks_per_cycle(environ: dict[str, str] | None = None) -> int:
     env = environ if environ is not None else os.environ
     try:
@@ -180,6 +228,7 @@ def scheduler_status(environ: dict[str, str] | None = None) -> dict[str, Any]:
         "interval_seconds": scheduler_interval(environ),
         "min_interval_seconds": _MIN_INTERVAL_SECONDS,
         "max_tasks_per_cycle": max_tasks_per_cycle(environ),
+        "timer_poll_seconds": timer_poll_interval(environ),
         "note": (
             "The scheduler proposes and drains; it approves nothing. Every drained task runs through the "
             "permission gate, so anything privileged parks in the confirmation ledger and waits for you."
@@ -192,6 +241,8 @@ __all__ = [
     "SchedulerStats",
     "background_worker_enabled",
     "scheduler_interval",
+    "timer_poll_interval",
+    "run_timer_loop",
     "max_tasks_per_cycle",
     "scheduler_status",
 ]

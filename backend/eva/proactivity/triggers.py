@@ -16,7 +16,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from .models import DAILY, FILE_CHANGE, INTERVAL, ProactiveRule
+from .models import DAILY, FILE_CHANGE, INTERVAL, ONCE, ProactiveRule
 
 
 def parse_iso(value: str | None) -> datetime | None:
@@ -113,6 +113,18 @@ def _file_change_should_fire(rule: ProactiveRule, now: datetime) -> tuple[bool, 
     return False, state
 
 
+def _once_should_fire(rule: ProactiveRule, now: datetime) -> bool:
+    """A one-shot is due when its absolute UTC instant has been reached, and it
+    has not already fired. Never early (strict ``now >= at``); never twice (a
+    done/fired rule is refused here, and the store's atomic claim backs it up)."""
+    if (rule.state or {}).get("done") or rule.last_fired_at:
+        return False
+    at = parse_iso(rule.spec.get("at_utc"))
+    if at is None:
+        return False
+    return now >= at
+
+
 def should_fire(rule: ProactiveRule, now: datetime) -> tuple[bool, dict[str, Any]]:
     """Whether ``rule`` fires at ``now``, plus its updated trigger state.
 
@@ -126,6 +138,8 @@ def should_fire(rule: ProactiveRule, now: datetime) -> tuple[bool, dict[str, Any
             return _interval_should_fire(rule, now), dict(rule.state or {})
         if rule.kind == DAILY:
             return _daily_should_fire(rule, now), dict(rule.state or {})
+        if rule.kind == ONCE:
+            return _once_should_fire(rule, now), dict(rule.state or {})
         if rule.kind == FILE_CHANGE:
             return _file_change_should_fire(rule, now)
         return False, dict(rule.state or {})

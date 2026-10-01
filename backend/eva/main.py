@@ -141,6 +141,33 @@ def _start_background_scheduler_if_enabled(app: FastAPI) -> None:
         pass
 
 
+def _start_timer_loop_if_enabled(app: FastAPI) -> None:
+    """Run the dedicated timer/reminder poll (Phase 126) whenever proactivity is
+    on. Independent of EVA_BACKGROUND_WORKER_ENABLED: that flag gates unattended
+    task EXECUTION, whereas a timer only notifies, and it must still fire when
+    the worker is off. Wrapped so it can never crash startup."""
+    try:
+        engine = getattr(app.state, "proactivity", None)
+        if engine is None:
+            return
+        from .runtime.scheduler import run_timer_loop
+
+        stop = asyncio.Event()
+
+        @app.on_event("startup")
+        async def _launch_timer_loop() -> None:  # pragma: no cover - needs a live loop
+            app.state.timer_task = asyncio.create_task(run_timer_loop(engine, stop))
+
+        @app.on_event("shutdown")
+        async def _stop_timer_loop() -> None:  # pragma: no cover - needs a live loop
+            stop.set()
+            task = getattr(app.state, "timer_task", None)
+            if task is not None:
+                task.cancel()
+    except Exception:
+        pass
+
+
 def create_app() -> FastAPI:
     load_project_env(ROOT)
     _apply_activation_profile()
@@ -162,6 +189,7 @@ def create_app() -> FastAPI:
     _recover_durable_tasks_if_enabled(app)
     _run_proactivity_catchup_if_enabled(app)
     _start_background_scheduler_if_enabled(app)
+    _start_timer_loop_if_enabled(app)
     app.include_router(router, prefix="/api")
     app.include_router(get_control_center_routes())
     # Phase 102: serve index.html with a cache-buster derived from the assets

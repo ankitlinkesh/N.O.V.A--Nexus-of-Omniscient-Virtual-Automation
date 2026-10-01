@@ -47,6 +47,7 @@ from .fast_command_helpers import (
     _parse_replace_draft,
     _parse_replace_with_prefix,
 )
+from .fast_command_timers import describe_once_rule, maybe_handle_timer_command
 from .fast_command_rules import _proactivity_create_rule, _proactivity_delete_rule, _proactivity_set_enabled
 from .fast_command_skills import _approve_learned_skill, _learn_skills_from_traces, _learned_skills_list, _run_learned_skill
 from .fast_command_table import dispatch_status_command
@@ -474,10 +475,20 @@ def _proactivity_rules() -> str:
     store = open_default_store()
     if store is None:
         return _PROACTIVITY_DISABLED_MSG
-    rules = store.list_rules()
-    if not rules:
+    all_rules = store.list_rules()
+    # Phase 126: one-shot timers/reminders are listed with their time left, and
+    # finished ones are a record, not something to show.
+    once = [r for r in all_rules if r.kind == "once" and r.enabled and not r.last_fired_at]
+    rules = [r for r in all_rules if r.kind != "once"]
+    if not rules and not once:
         return "No proactive rules yet. Rules propose work on a schedule or when a file changes; they never act on their own."
-    lines = [f"Proactive rules ({len(rules)}):"]
+    lines = []
+    if once:
+        lines.append(f"Timers and reminders ({len(once)}):")
+        lines.extend(f"- {describe_once_rule(r)}" for r in once[:15])
+    if not rules:
+        return "\n".join(lines)
+    lines.append(f"Proactive rules ({len(rules)}):")
     for rule in rules[:15]:
         state = "on" if rule.enabled else "off"
         last = rule.last_fired_at or "never"
@@ -3070,6 +3081,15 @@ def maybe_handle_fast_command(
     enqueue_text = _after_prefix(original, ("enqueue task ", "queue task ", "add task ", "enqueue "))
     if enqueue_text:
         return _durable_queue_enqueue(enqueue_text), "fast-command"
+
+    # Phase 126: one-shot timers and reminders ("set a timer for 5 minutes",
+    # "remind me at 6 pm to call mom", "cancel my timer", "timers"). Whole-
+    # sentence patterns only; typed-console only, never a planner tool. Must
+    # precede the recurring-rule creator below, which would otherwise read
+    # "remind me at 6 pm to ..." as a DAILY rule.
+    timer_reply = maybe_handle_timer_command(original, normalized)
+    if timer_reply is not None:
+        return timer_reply, "fast-command"
 
     # Phase 122: the rule-creation reply tells people to "say 'rules'", and they
     # say "list my rules" -- which took 26.7s through the planner. Same exact-

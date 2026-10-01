@@ -9,8 +9,12 @@ from typing import Any
 INTERVAL = "interval"        # spec: {"seconds": N} — fire every N seconds
 DAILY = "daily"              # spec: {"at": "HH:MM"} — fire once a day at a local time
 FILE_CHANGE = "file_change"  # spec: {"path": "..."} — fire when a file's fingerprint changes
+# Phase 126: a one-shot timer/reminder. spec: {"at_utc": ISO, "what": "timer"|"reminder", "text": "..."}.
+# Fires exactly once, then marks itself done. Unlike every other kind it only
+# NOTIFIES: its text is shown to the user, never enqueued as a task.
+ONCE = "once"
 
-RULE_KINDS = frozenset({INTERVAL, DAILY, FILE_CHANGE})
+RULE_KINDS = frozenset({INTERVAL, DAILY, FILE_CHANGE, ONCE})
 
 # Safety defaults: a rule may not fire more often than this, nor more times per
 # day, no matter what its spec says. A runaway rule must never be able to flood
@@ -66,6 +70,7 @@ __all__ = [
     "INTERVAL",
     "DAILY",
     "FILE_CHANGE",
+    "ONCE",
     "RULE_KINDS",
     "DEFAULT_COOLDOWN_SECONDS",
     "DEFAULT_MAX_FIRES_PER_DAY",

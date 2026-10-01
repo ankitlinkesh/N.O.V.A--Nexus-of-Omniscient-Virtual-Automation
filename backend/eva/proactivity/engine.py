@@ -34,22 +34,39 @@ never stop the others or raise into the caller.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
-from .models import ProactiveRule
+from .models import ONCE, ProactiveRule
 from .store import ProactivityStore
 from .triggers import parse_iso, should_fire
 
 # No single tick may propose more than this, whatever the rules say.
 MAX_PROPOSALS_PER_TICK = 10
 
+logger = logging.getLogger(__name__)
+
+# A one-shot found this long past its instant is announced as late (the machine
+# was asleep, the server was down) rather than passed off as on time.
+LATE_AFTER_SECONDS = 120
+
 
 class ProactivityEngine:
     """Evaluates standing rules and proposes work. Executes nothing, ever."""
 
-    def __init__(self, store: ProactivityStore, queue: Any | None = None) -> None:
+    def __init__(
+        self,
+        store: ProactivityStore,
+        queue: Any | None = None,
+        notifier: Callable[[str, str], Any] | None = None,
+    ) -> None:
         self.store = store
+        # Phase 126: optional ``notifier(title, body)`` for out-of-app delivery
+        # (a Windows toast). Default None so a bare engine in a test never pops
+        # a real notification. Used ONLY by one-shots; it carries text, nothing
+        # executable.
+        self.notifier = notifier
         # The Phase 45 DurableTaskQueue. Without one the engine still evaluates
         # and notifies, but has nowhere to propose work to.
         self.queue = queue
@@ -67,6 +84,60 @@ class ProactivityEngine:
             return False  # counter belongs to another day; today is fresh
         return rule.fires_today >= rule.max_fires_per_day
 
+    def _fire_once(self, rule: ProactiveRule, moment: datetime, day: str) -> dict[str, Any] | None:
+        """Fire a one-shot timer/reminder: NOTIFY, never enqueue, exactly once.
+
+        The claim is atomic in the store, so a rule that two ticks both see as
+        due is announced by only one of them. Claim first, notify second: if the
+        process dies in between, the reminder is lost rather than doubled.
+        """
+        if not self.store.claim_once(rule.id, fired_at=moment.isoformat(), day=day):
+            return None
+        what = str(rule.spec.get("what") or "reminder")
+        text = str(rule.spec.get("text") or "").strip()
+        if what == "timer":
+            title, body = "N.O.V.A timer", (f"Your timer for {text} is up." if text else "Your timer is up.")
+        else:
+            title, body = "N.O.V.A reminder", text or "Your reminder is due."
+        due = None
+        try:
+            from .triggers import parse_iso as _p, _local_tz
+
+            due = _p(rule.spec.get("at_utc"))
+            if due is not None and (moment - due).total_seconds() > LATE_AFTER_SECONDS:
+                body += f" (it was due at {due.astimezone(_local_tz()).strftime('%I:%M %p').lstrip('0')})"
+        except Exception:
+            pass
+        message = body if what == "timer" else f"Reminder: {body}"
+        try:
+            self.store.add_notification(rule.id, message)
+        except Exception:
+            pass
+        if self.notifier is not None:
+            try:
+                self.notifier(title, body)
+            except Exception as exc:  # delivery is best-effort; the in-app note is already recorded
+                logger.warning("one-shot notifier failed: %s", exc)
+        return {"rule": rule.name, "rule_id": rule.id, "message": message}
+
+    def tick_once_rules(self, now: datetime | None = None) -> list[dict[str, Any]]:
+        """Fast path for the timer loop: evaluate ONLY one-shot rules."""
+        moment = now or datetime.now(timezone.utc)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        day = moment.date().isoformat()
+        fired: list[dict[str, Any]] = []
+        for rule in self.store.list_rules(enabled_only=True, kind=ONCE):
+            try:
+                due, _ = should_fire(rule, moment)
+                if due:
+                    result = self._fire_once(rule, moment, day)
+                    if result is not None:
+                        fired.append(result)
+            except Exception:
+                continue
+        return fired
+
     def tick(self, now: datetime | None = None) -> dict[str, Any]:
         """Evaluate every enabled rule once and propose work for those that fire.
 
@@ -83,7 +154,21 @@ class ProactivityEngine:
         suppressed: list[dict[str, str]] = []
         evaluated = 0
 
+        notified: list[dict[str, Any]] = []
         for rule in self.store.list_rules(enabled_only=True):
+            if rule.kind == ONCE:
+                # Timers/reminders notify; they are not proposals, so they skip
+                # the queue, the cooldown and the proposal cap entirely.
+                evaluated += 1
+                try:
+                    due, _ = should_fire(rule, moment)
+                    if due:
+                        result = self._fire_once(rule, moment, day)
+                        if result is not None:
+                            notified.append(result)
+                except Exception:
+                    pass
+                continue
             if len(proposed) >= MAX_PROPOSALS_PER_TICK:
                 suppressed.append({"rule": rule.name, "reason": "tick_proposal_cap"})
                 continue
@@ -125,6 +210,7 @@ class ProactivityEngine:
             "at": moment.isoformat(),
             "evaluated": evaluated,
             "proposed": proposed,
+            "notified": notified,
             "suppressed": suppressed,
             "note": "Proactive rules only propose work; every task still runs through the permission gate.",
         }
