@@ -13,7 +13,13 @@ from ._openai_compatible import OpenAICompatibleProvider
 # 2026-09-03 to answer, to return clean text in `content` (its reasoning goes to
 # `reasoning_content`, which _openai_compatible.py ignores), and -- the check that
 # actually matters for the planner -- to emit real `tool_calls`.
-DEFAULT_NIM_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
+#
+# Phase 121: measured 2026-10-01, same prompt with and without a tool --
+# nemotron-3.5-lightning took 32.6s / timed out at 40s, so every planner call
+# waited out its 12s timeout (x retries, ~35s) before falling back to Gemini, and
+# "what time is it" took 49s. nemotron-3-super-120b answered in 1.5s both ways,
+# with real tool_calls. nemotron-3-nano-30b and llama-3.3-70b now return 410.
+DEFAULT_NIM_MODEL = "nvidia/nemotron-3-super-120b-a12b"
 DEFAULT_NIM_FALLBACKS = "nvidia/nemotron-3.5-lightning-30b-a3b"
 
 

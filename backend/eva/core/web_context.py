@@ -125,25 +125,27 @@ def result_reference_from_message(message: str, results: list[dict[str, Any]]) -
     return None, [], "no_match"
 
 
+_PREVIOUS_RESULT_WORDS = re.compile(
+    r"\b(?:first|second|third|fourth|fifth|results?|that|instagram|github|linkedin|profile|one)\b"
+)
+
+
 def wants_previous_result(message: str) -> bool:
+    """"open the second one", "open that result", "open my github".
+
+    Phase 121: these were substring tests, so "one" matched inside "done" and
+    "phone" and "result" matched any errand that mentioned one. Live, "open
+    calculator and tell me the result of 9 times 9" answered "Which one do you
+    want me to open: Python (programming language) - Wikipedia, ..." from an
+    earlier search. Whole words only, and a message that carries a second
+    request is an errand for the agent, not a reference to a search result.
+    """
     text = " ".join(message.lower().strip().split())
-    return text.startswith("open ") and any(
-        phrase in text
-        for phrase in (
-            "first",
-            "second",
-            "third",
-            "fourth",
-            "fifth",
-            "result",
-            "that",
-            "instagram",
-            "github",
-            "linkedin",
-            "profile",
-            "one",
-        )
-    )
+    if not text.startswith("open ") or not _PREVIOUS_RESULT_WORDS.search(text):
+        return False
+    from ..agent.policies import split_trailing_request
+
+    return not split_trailing_request(text)[1]
 
 
 def summarize_web_result(raw: Any, *, include_prompt: bool = False) -> str:

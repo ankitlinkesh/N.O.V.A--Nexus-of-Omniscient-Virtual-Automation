@@ -302,8 +302,19 @@ async def _call_provider(
             retry_after_seconds=response.retry_after_seconds,
             count_attempt=True,
             estimated_tokens=estimate,
+            cooldown_seconds=TIMEOUT_COOLDOWN_SECONDS if _is_timeout(response) else None,
         )
     return response, _is_retryable_failure(response)
+
+
+# Phase 121: live, every request paid the primary NIM model's full timeout before
+# falling back ("what time is it" took 49s, 35s of it waiting on a model that was
+# not answering). Nothing remembered the timeout, so the next request paid it again.
+TIMEOUT_COOLDOWN_SECONDS = 180
+
+
+def _is_timeout(response: LLMResponse) -> bool:
+    return "timeout" in str(response.error or "").lower()
 
 
 async def _try_nvidia_nim_models(
@@ -343,6 +354,11 @@ async def _try_nvidia_nim_models(
 
         attempts.append(_attempt_from_response(response, purpose, fallback_used=bool(attempts)))
         if response.status_code in {401, 403}:
+            break
+        # Phase 121: every model here is served by the same NIM endpoint. When the
+        # CONNECTION failed, the next model would wait out the same 12s against the
+        # same unreachable host before the router reached the next provider.
+        if str(response.error or "").startswith(("ConnectTimeout", "ConnectError")):
             break
         # A model that is GONE is the strongest possible reason to try the NEXT
         # model in this list -- and until Phase 92 it was treated as a reason to

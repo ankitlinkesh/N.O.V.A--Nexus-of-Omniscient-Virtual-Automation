@@ -237,6 +237,7 @@ class LLMRateLimiter:
         retry_after_seconds: int | None = None,
         count_attempt: bool = True,
         estimated_tokens: int = 0,
+        cooldown_seconds: int | None = None,
     ) -> None:
         if provider == "ollama":
             return
@@ -247,6 +248,10 @@ class LLMRateLimiter:
         entry["last_error"] = error[:500]
         if rate_limited:
             entry["blocked_until"] = _now() + int(retry_after_seconds or 60)
+        elif cooldown_seconds:
+            # Phase 121: a model that timed out is skipped for a while instead of
+            # being waited on again by the very next request.
+            entry["blocked_until"] = max(int(entry.get("blocked_until") or 0), _now() + int(cooldown_seconds))
         self.save(state)
 
     def status(self) -> dict[str, Any]:
