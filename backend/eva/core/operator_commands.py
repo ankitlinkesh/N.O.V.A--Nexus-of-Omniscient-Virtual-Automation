@@ -304,10 +304,20 @@ def _power_confirmation(action: str) -> dict[str, Any]:
     )
 
 
+_OPEN_URL_REQUEST = re.compile(r"^(?:please\s+)?(?:open|visit|go to|browse to|navigate to|load)\s+(?:the\s+)?(?:link\s+|page\s+|site\s+|url\s+)?https?://\S+$", re.IGNORECASE)
+
+
 def _url_from_message(message: str) -> str | None:
     match = re.search(r"https?://\S+", message, flags=re.IGNORECASE)
     if match:
-        return match.group(0).rstrip(".,)")
+        # Phase 122: ANY message holding a link was opened in the browser. Live,
+        # "summarize the page at https://example.com" opened it and summarized
+        # nothing; "is <link> safe?" would open the very link it asked about. Only
+        # an explicit open-this-link request, or a bare link, is one.
+        stripped = message.strip().rstrip(".!")
+        if stripped == match.group(0) or _OPEN_URL_REQUEST.match(stripped):
+            return match.group(0).rstrip(".,)")
+        return None
     domain_match = re.match(r"^(?:open|visit|go to)\s+([a-z0-9-]+(?:\.[a-z0-9-]+)+[^\s]*)$", message.strip(), flags=re.IGNORECASE)
     if domain_match:
         return domain_match.group(1)

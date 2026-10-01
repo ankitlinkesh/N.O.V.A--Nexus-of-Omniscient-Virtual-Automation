@@ -15,6 +15,61 @@ DecisionType = Literal["answer", "tool_calls", "confirmation_required", "done"]
 PlannerMode = Literal["single_turn", "agent_step"]
 
 
+_ACTION_ID = re.compile(r"\bact_[0-9a-f]{12}\b")
+_APPROVAL_SHAPE = re.compile(r"What you are being asked to approve|\bconfirm(?: override)? act_[0-9a-f]{12}\b", re.IGNORECASE)
+
+
+def _mask_action_ids(history: list[dict[str, str]] | None) -> list[dict[str, str]]:
+    """Phase 122, live: asked again to write a file, the model did not call the
+    tool -- it copied the previous turn's approval prompt out of the history,
+    old action id and all. The person confirmed an action from before a restart
+    and nothing ran. Ids are the gate's to issue; the model never needs to see one.
+    """
+    masked: list[dict[str, str]] = []
+    for item in history or []:
+        content = item.get("content")
+        if item.get("role") == "assistant" and isinstance(content, str) and _ACTION_ID.search(content):
+            item = {**item, "content": _ACTION_ID.sub("[approval id withheld]", content)}
+        masked.append(item)
+    return masked
+
+
+def _refuse_imitated_approval(decision: PlannerDecision) -> PlannerDecision:
+    """Only the permission gate produces approval prompts. A plain-text answer
+    shaped like one is the model imitating an earlier prompt, and nothing would
+    run if the person approved it."""
+    if decision.type == "answer" and _APPROVAL_SHAPE.search(decision.final_response or ""):
+        return PlannerDecision(
+            type="answer",
+            reason="planner imitated an approval prompt",
+            tool_calls=[],
+            final_response=(
+                "I didn't actually start that action, so there is nothing to approve yet. "
+                "Ask me again and I'll set it up properly."
+            ),
+        )
+    return decision
+
+
+def _freshness_rule() -> str:
+    """Today's date, and what to do about a model's stale training data.
+
+    Phase 122: no planner prompt carried the date. Live, "search the web for who
+    won the 2026 FIFA World Cup" answered "it has not happened yet" in October
+    2026 without searching -- the model assumed its training cutoff was today.
+    """
+    from datetime import datetime
+
+    now = datetime.now().astimezone()
+    return (
+        f"Today is {now:%A, %d %B %Y}, local time {now:%H:%M} ({now:%Z}). Your training "
+        "data may be older than today. If the user asks you to search or look something "
+        "up, or the answer could have changed or happened after your training (news, "
+        "results, prices, releases, events, weather), call web_search instead of "
+        "answering from memory, and never say an event has not happened yet without searching."
+    )
+
+
 def _native_function_calling_enabled() -> bool:
     raw = os.environ.get("EVA_NATIVE_FUNCTION_CALLING")
     if raw is None:
@@ -163,6 +218,17 @@ class ToolCallPlanner:
         mode: PlannerMode = "single_turn",
         task_context: dict[str, Any] | None = None,
     ) -> PlannerDecision:
+        decision = await self._plan(message, _mask_action_ids(history), mode=mode, task_context=task_context)
+        return _refuse_imitated_approval(decision)
+
+    async def _plan(
+        self,
+        message: str,
+        history: list[dict[str, str]] | None = None,
+        *,
+        mode: PlannerMode = "single_turn",
+        task_context: dict[str, Any] | None = None,
+    ) -> PlannerDecision:
         forced = self._forced_decision(message, mode=mode)
         if forced is not None:
             return forced
@@ -271,13 +337,13 @@ class ToolCallPlanner:
                     "Call the single most appropriate tool to make progress. If the results "
                     "you can already see answer the goal, do NOT call a tool -- reply in "
                     "plain text with the final answer for the user. Never repeat a call "
-                    "whose result you can already see."
+                    "whose result you can already see. " + _freshness_rule()
                 )
             else:
                 system_prompt = (
                     "You are Eva's action planner. If the user wants an action performed, "
                     "call the single most appropriate tool. If it is a question you can answer "
-                    "directly, reply in plain text without calling a tool."
+                    "directly, reply in plain text without calling a tool. " + _freshness_rule()
                 )
             messages = [{"role": "system", "content": system_prompt}] + list(history or []) + [
                 {"role": "user", "content": message}
@@ -693,6 +759,7 @@ class ToolCallPlanner:
         notes, recent = _split_history(history)
         return f"""
 You are Eva's tool-calling planner. Return strict JSON only. No markdown.
+{_freshness_rule()}
 
 User message:
 {message}
@@ -730,7 +797,7 @@ Rules:
 - For shutdown, restart, sleep, sign out, or log out, do not call a tool unless the user explicitly confirms in this same message. If not confirmed, use type "confirmation_required" and final_response should ask for confirmation.
 - Use analyze_screen when the user asks Eva to understand, check, inspect, analyze, or identify an error on the screen. Use capture_screen only for a raw screenshot/capture request.
 - Use system_time for the current time, date, day of the week, or timezone. Never guess the time and never open a website to read a clock.
-- Use file.list_dir to list a folder's contents (for the user's own Desktop, Documents or Downloads folder pass just that name, e.g. path="Downloads"; never invent a full path to a user's home folder), and system_status for laptop runtime status. Use window_focus (not app.focus, which does not exist in your tool list) to bring a visible window to the foreground when the user asks to switch to or focus an app.
+- Use file.list_dir to list a folder's contents (for the user's own Desktop, Documents or Downloads folder pass just that name, e.g. path="Downloads"; never invent a full path to a user's home folder), and system_status for laptop status: battery percent, whether it is plugged in, and memory use. Use window_focus (not app.focus, which does not exist in your tool list) to bring a visible window to the foreground when the user asks to switch to or focus an app.
 - Use file.write_text, file.copy, or file.move only when the user explicitly asks to create/write, copy, or move a specific local file. Always pass the exact path(s) the user gave; never guess a path. These will ask the user to confirm before anything happens -- that is expected, not an error. There is no file.delete tool; if the user asks to delete a file, say that deleting is console-only and cannot be done from chat.
 - If screen.click is available you have been given the list of on-screen controls. Click a label EXACTLY as it appears there. Control names are words, not symbols -- a calculator's 7 key is named "Seven" -- so a guessed label finds nothing and wastes the attempt. The app is already open and focused: do not open it again.
 - If screen.click is NOT in your tool list, you cannot click or type on the desktop in this turn, and no other tool substitutes -- web.click and web.type drive a BROWSER page, never a desktop app, so never reach for them to press a button in Notepad, a calculator or any other application. Say plainly that you cannot, and tell the user that starting the message with `gui:` (for example `gui: type hello into Notepad`) is what grants desktop clicking and typing for one errand.
@@ -759,6 +826,7 @@ Rules:
             compact_context["situation"] = task_context.get("situation")
         return f"""
 You are Eva's bounded agent-step planner. Return strict JSON only. No markdown. Do not reveal hidden chain-of-thought.
+{_freshness_rule()}
 
 User goal:
 {message}
@@ -795,7 +863,7 @@ Rules:
 - Use open_app/open_folder/open_url only for explicit desktop/navigation goals.
 - Use analyze_screen when the user explicitly asks to inspect/look/check/analyze the screen or identify a visible error. Use capture_screen only for raw screenshot capture.
 - Use system_time for the current time, date, day of the week, or timezone. Never guess the time and never open a website to read a clock.
-- Use file.list_dir to list a folder's contents (for the user's own Desktop, Documents or Downloads folder pass just that name, e.g. path="Downloads"; never invent a full path to a user's home folder), and system_status for laptop runtime status. Use window_focus (not app.focus, which does not exist in your tool list) to bring a visible window to the foreground when the goal requires switching to or focusing an app.
+- Use file.list_dir to list a folder's contents (for the user's own Desktop, Documents or Downloads folder pass just that name, e.g. path="Downloads"; never invent a full path to a user's home folder), and system_status for laptop status: battery percent, whether it is plugged in, and memory use. Use window_focus (not app.focus, which does not exist in your tool list) to bring a visible window to the foreground when the goal requires switching to or focusing an app.
 - Use file.write_text, file.copy, or file.move only when the goal explicitly requires creating/writing, copying, or moving a specific local file. Always pass the exact path(s) given in the goal; never guess a path. These will ask the user to confirm before anything happens -- that is expected, not an error. There is no file.delete tool; if the goal requires deleting a file, stop and report that deleting is console-only.
 - If screen.click is available you have been given the list of on-screen controls. Click a label EXACTLY as it appears there. Control names are words, not symbols -- a calculator's 7 key is named "Seven" -- so a guessed label finds nothing and wastes the attempt. The app is already open and focused: do not open it again.
 - If screen.click is NOT in your tool list, you cannot click or type on the desktop in this turn, and no other tool substitutes -- web.click and web.type drive a BROWSER page, never a desktop app, so never reach for them to press a button in Notepad, a calculator or any other application. Say plainly that you cannot, and tell the user that starting the message with `gui:` (for example `gui: type hello into Notepad`) is what grants desktop clicking and typing for one errand.

@@ -91,6 +91,12 @@ def synthesize_piper_wav(text: str) -> bytes:
             input=cleaned,
             capture_output=True,
             text=True,
+            # Phase 122: Piper reads UTF-8. Without this Python wrote cp1252, so any
+            # reply holding a character outside it -- Hindi, a symbol like "◑" from
+            # a window title, an emoji -- raised before Piper ran, and NOVA went
+            # silent for that reply (HTTP 500 from /api/tts/piper).
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
             cwd=str(exe.parent),
         )

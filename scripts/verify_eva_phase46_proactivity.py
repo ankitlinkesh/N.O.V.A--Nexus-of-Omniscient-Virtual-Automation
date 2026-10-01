@@ -97,10 +97,18 @@ def main() -> int:
         dstore = ProactivityStore(scratch / "d.sqlite3")
         dengine = ProactivityEngine(dstore, DurableTaskQueue(scratch / "d_q.sqlite3"))
         dstore.add_rule("brief", "daily", {"at": "08:30"}, "morning brief", cooldown_seconds=0)
-        check(len(dengine.tick(datetime(2026, 7, 15, 8, 0, tzinfo=timezone.utc))["proposed"]) == 0, "a daily rule must not fire before its time")
-        check(len(dengine.tick(datetime(2026, 7, 15, 8, 31, tzinfo=timezone.utc))["proposed"]) == 1, "a daily rule must fire at/after its time")
-        check(len(dengine.tick(datetime(2026, 7, 15, 18, 0, tzinfo=timezone.utc))["proposed"]) == 0, "a daily rule must fire only once a day")
-        check(len(dengine.tick(datetime(2026, 7, 16, 8, 31, tzinfo=timezone.utc))["proposed"]) == 1, "a daily rule must fire again the next day")
+        # "at" is LOCAL time since Phase 122; pin the zone so these UTC instants mean what they say.
+        from backend.eva.proactivity import triggers as _triggers
+
+        _saved_tz = _triggers._local_tz
+        _triggers._local_tz = lambda: timezone.utc
+        try:
+            check(len(dengine.tick(datetime(2026, 7, 15, 8, 0, tzinfo=timezone.utc))["proposed"]) == 0, "a daily rule must not fire before its time")
+            check(len(dengine.tick(datetime(2026, 7, 15, 8, 31, tzinfo=timezone.utc))["proposed"]) == 1, "a daily rule must fire at/after its time")
+            check(len(dengine.tick(datetime(2026, 7, 15, 18, 0, tzinfo=timezone.utc))["proposed"]) == 0, "a daily rule must fire only once a day")
+            check(len(dengine.tick(datetime(2026, 7, 16, 8, 31, tzinfo=timezone.utc))["proposed"]) == 1, "a daily rule must fire again the next day")
+        finally:
+            _triggers._local_tz = _saved_tz
 
         # 2b + 3b. File watcher baseline/change + cooldown floor.
         watched = scratch / "w.txt"

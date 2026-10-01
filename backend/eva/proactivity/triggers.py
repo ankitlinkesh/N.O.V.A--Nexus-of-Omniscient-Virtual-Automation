@@ -54,6 +54,11 @@ def _interval_should_fire(rule: ProactiveRule, now: datetime) -> bool:
     return (now - last) >= timedelta(seconds=seconds)
 
 
+def _local_tz():
+    """The machine's local timezone. A function so tests can pin it."""
+    return datetime.now().astimezone().tzinfo
+
+
 def _daily_should_fire(rule: ProactiveRule, now: datetime) -> bool:
     """Fire once per day, the first time we look at/after the target time."""
     raw = str(rule.spec.get("at") or "").strip()
@@ -64,8 +69,14 @@ def _daily_should_fire(rule: ProactiveRule, now: datetime) -> bool:
         return False
     if not (0 <= hour <= 23 and 0 <= minute <= 59):
         return False
-    target_today = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if now < target_today:
+    # Phase 122: "at 09:00" is the person's LOCAL 9 o'clock (models.py says so,
+    # and the reply "Every day at 09:00" reads that way). It was applied to the
+    # UTC `now`, so "remind me every morning at 9" fired at 04:36 Pacific, the
+    # moment it was created, because 09:00 UTC had already passed. Aware
+    # datetimes compare correctly across zones, so only the target moves.
+    local_now = now.astimezone(_local_tz())
+    target_today = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if local_now < target_today:
         return False  # not time yet today
     last = parse_iso(rule.last_fired_at)
     if last is None:

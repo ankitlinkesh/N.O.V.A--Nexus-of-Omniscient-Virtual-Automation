@@ -42,15 +42,48 @@ def handle_confirmation_command(text: str, *, session_id: Any = None) -> str:
         return format_pending_action_result(cancel_pending_action(cancel_id))
     override_id = parse_override_action_id(clean)
     if override_id:
+        stale = _stale_gate_action(override_id)
+        if stale:
+            return stale
         result = confirm_pending_action(override_id, override=True)
         return _with_execution(override_id, result, session_id)
     confirm_id = parse_confirmation_action_id(clean)
     if confirm_id:
+        stale = _stale_gate_action(confirm_id)
+        if stale:
+            return stale
         result = confirm_pending_action(confirm_id, override=False)
         return _with_execution(confirm_id, result, session_id)
     if clean in {"yes", "yes send", "send it", "do it", "confirm", "approve", "confirm send", "open and send it", "open and send the message"}:
         return "I need a specific pending action ID. Use `pending actions` to see active actions, then say `confirm <id>`. I did not send or execute anything."
     return ""
+
+
+def _stale_gate_action(action_id: str) -> str | None:
+    """A gate action whose exact call is no longer held cannot be run.
+
+    Phase 122, live: the ledger is durable but the call it approves lives in
+    memory (`tool_gate._PENDING_CALLS`), so after a restart `confirm override
+    <id>` answered "Confirmed ... Ready to execute" and ran nothing -- the person
+    was told it was approved and left believing the file would be written.
+    Cancel it and say so before anything is marked confirmed.
+    """
+    from ..security import tool_gate
+    from .ledger import get_pending_action
+
+    action = get_pending_action(action_id)
+    if action is None or getattr(action, "source", None) != "tool_gate":
+        return None
+    if getattr(action, "status", "") not in {"pending", "pending_override", "pending_confirmation"}:
+        return None
+    if tool_gate.get_pending_call(action_id) is not None:
+        return None
+    cancel_pending_action(action_id)
+    return (
+        f"I can't run `{action_id}` any more: it was requested before NOVA restarted, and the exact "
+        "action it approved is no longer held. Nothing was run, and I've cancelled it. Ask again "
+        "and you'll get a fresh approval."
+    )
 
 
 def _with_execution(action_id: str, result: Any, session_id: Any = None) -> str:

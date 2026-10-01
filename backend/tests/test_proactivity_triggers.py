@@ -11,6 +11,7 @@ import pytest
 
 from eva.proactivity.models import MAX_FIRES_PER_DAY_CEILING, ProactiveRule
 from eva.proactivity.store import ProactivityStore
+from eva.proactivity import triggers
 from eva.proactivity.triggers import should_fire
 
 T0 = datetime(2026, 7, 15, 9, 0, tzinfo=timezone.utc)
@@ -43,19 +44,34 @@ def test_interval_with_bad_spec_never_fires():
 
 # -- daily -----------------------------------------------------------------
 
-def test_daily_fires_only_at_or_after_target():
+def test_daily_fires_only_at_or_after_target(monkeypatch):
+    # "at" is local time (Phase 122); pin the zone so these UTC instants mean what they say.
+    monkeypatch.setattr(triggers, "_local_tz", lambda: timezone.utc)
     rule = _rule(kind="daily", spec={"at": "08:30"})
     assert should_fire(rule, datetime(2026, 7, 15, 8, 0, tzinfo=timezone.utc))[0] is False
     assert should_fire(rule, datetime(2026, 7, 15, 8, 31, tzinfo=timezone.utc))[0] is True
 
 
-def test_daily_fires_once_per_day():
+def test_daily_fires_once_per_day(monkeypatch):
+    monkeypatch.setattr(triggers, "_local_tz", lambda: timezone.utc)
     fired_at = datetime(2026, 7, 15, 8, 31, tzinfo=timezone.utc)
     rule = _rule(kind="daily", spec={"at": "08:30"}, last_fired_at=fired_at.isoformat())
     # later the same day -> no
     assert should_fire(rule, datetime(2026, 7, 15, 18, 0, tzinfo=timezone.utc))[0] is False
     # next day at target -> yes
     assert should_fire(rule, datetime(2026, 7, 16, 8, 30, tzinfo=timezone.utc))[0] is True
+
+
+def test_daily_time_is_the_local_time_not_utc(monkeypatch):
+    # Phase 122, live: "remind me every morning at 9" fired at 04:36 Pacific,
+    # because 09:00 was compared against UTC.
+    pacific = timezone(timedelta(hours=-7))
+    monkeypatch.setattr(triggers, "_local_tz", lambda: pacific)
+    rule = _rule(kind="daily", spec={"at": "09:00"})
+    four_thirty_six_pacific = datetime(2026, 10, 1, 11, 36, tzinfo=timezone.utc)
+    nine_oh_one_pacific = datetime(2026, 10, 1, 16, 1, tzinfo=timezone.utc)
+    assert should_fire(rule, four_thirty_six_pacific)[0] is False
+    assert should_fire(rule, nine_oh_one_pacific)[0] is True
 
 
 def test_daily_with_bad_spec_never_fires():

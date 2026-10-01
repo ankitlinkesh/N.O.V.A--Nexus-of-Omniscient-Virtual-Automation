@@ -218,7 +218,9 @@ def _web_target(
 
 
 def _status() -> dict[str, Any]:
-    return asdict(system_status())
+    from .power_info import power_and_memory
+
+    return {**asdict(system_status()), **power_and_memory()}
 
 
 def _system_time() -> dict[str, Any]:
@@ -433,14 +435,14 @@ class ToolRegistry:
         self._tools: dict[str, ToolSpec] = {
             "status": ToolSpec(
                 name="status",
-                description="Return basic laptop runtime status.",
+                description="Return laptop runtime status: OS, battery percent and whether it is plugged in, and memory use.",
                 args_schema=_schema({}),
                 safety_level="safe",
                 handler=_status,
             ),
             "system_status": ToolSpec(
                 name="system_status",
-                description="Alias for status used by deterministic commands.",
+                description="Laptop status: OS, battery percent and whether it is plugged in, and memory use.",
                 args_schema=_schema({}),
                 safety_level="safe",
                 handler=_status,

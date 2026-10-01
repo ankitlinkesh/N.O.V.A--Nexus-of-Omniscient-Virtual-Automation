@@ -3062,7 +3062,14 @@ def maybe_handle_fast_command(
     if enqueue_text:
         return _durable_queue_enqueue(enqueue_text), "fast-command"
 
-    if normalized in {"proactivity status", "rules", "rules list", "list rules", "proactive rules"}:
+    # Phase 122: the rule-creation reply tells people to "say 'rules'", and they
+    # say "list my rules" -- which took 26.7s through the planner. Same exact-
+    # match discipline, just the phrasings people actually use.
+    if normalized.rstrip("?.! ") in {
+        "proactivity status", "rules", "rules list", "list rules", "proactive rules",
+        "my rules", "list my rules", "show my rules", "show rules", "what are my rules",
+        "my reminders", "list my reminders", "show my reminders", "what are my reminders",
+    }:
         return _proactivity_rules(), "fast-command"
 
     if normalized in {"check triggers", "proactivity tick", "run rules", "check rules"}:
