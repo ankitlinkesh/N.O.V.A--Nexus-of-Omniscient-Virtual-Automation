@@ -284,8 +284,12 @@ def type_text_visible(text: str, reason: str, action_id: str = "screen.type_text
 
 
 def press_key_bounded(key: str, reason: str, action_id: str = "screen.press") -> AgentObservation:
-    allowed = {"enter", "tab", "escape", "space", "backspace", "delete", "up", "down", "left", "right"}
-    clean = str(key or "").strip().lower()
+    allowed = {"enter", "tab", "escape", "space", "backspace", "delete", "up", "down", "left", "right",
+               "home", "end", "pageup", "pagedown", *(f"f{n}" for n in range(1, 13))}
+    # Phase 129: pyautogui spells a few keys differently from the way people say them.
+    clean = {"return": "enter", "esc": "escape", "del": "delete", "pgup": "pageup", "pgdn": "pagedown"}.get(
+        str(key or "").strip().lower(), str(key or "").strip().lower()
+    )
     if clean not in allowed:
         return _obs(action_id, False, f"Key {key} is not in the bounded visible-control allowlist.", error="unsupported_key")
     return press(clean, reason, action_id=action_id)
@@ -302,6 +306,16 @@ def hotkey_bounded(keys: list[str], reason: str, action_id: str = "screen.hotkey
         ("alt", "left"),
         ("alt", "right"),
     }
-    if tuple(clean) not in allowed:
+    # Phase 129: beyond the original seven, any well-formed modifier+key combo
+    # may be SENT -- the gate (confirm, or the key grant for a combo the user
+    # named) decides whether it runs; this only refuses what no one may send:
+    # window-closing/switching and system combos (key_grant.is_dangerous). The
+    # original allowlist is kept as-is, so ctrl+w still works after approval.
+    from .key_grant import is_dangerous, normalize_combo
+
+    combo = normalize_combo(clean)
+    sendable = bool(combo) and "+" in combo and not is_dangerous(combo)
+    if tuple(clean) not in allowed and not sendable:
         return _obs(action_id, False, "Hotkey is not in the bounded visible-control allowlist.", {"keys": clean}, "unsupported_hotkey")
-    return hotkey(clean, reason, action_id=action_id)
+    # Send pyautogui's key names, not the planner's spelling ("control" -> "ctrl").
+    return hotkey(combo.split("+") if sendable else clean, reason, action_id=action_id)

@@ -1901,6 +1901,17 @@ class ToolRegistry:
         if click_offered() and CLICK_TOOL in self._tools and all(spec["name"] != CLICK_TOOL for spec in specs):
             specs.append(self._public_spec(self._tools[CLICK_TOOL]))
 
+        # Phase 129: same shape for screen.press / screen.hotkey, offered only
+        # when the user's own goal names a key combo. Visibility only -- a call
+        # is still confirm-class unless the runner opens a key grant for that
+        # exact combo (screen/key_grant.py).
+        from ..screen.key_grant import KEY_TOOLS, keys_offered
+
+        if keys_offered():
+            for key_tool in sorted(KEY_TOOLS):
+                if key_tool in self._tools and all(spec["name"] != key_tool for spec in specs):
+                    specs.append(self._public_spec(self._tools[key_tool]))
+
         return specs
 
     def get(self, name: str) -> ToolSpec | None:
@@ -2119,6 +2130,17 @@ class ToolRegistry:
             if type_grant.consume(name, call_args):
                 decision = "allow"
                 trace_gate_decision(name, "user_words_type_grant", spec)
+
+        # Phase 129: pressing the key combo the user named, in the app the task
+        # opened. Single-use grant bound to the exact normalised combo (covers
+        # screen.press and screen.hotkey); never a dangerous combo (consume
+        # re-checks). Same placement and dominance as the type grant above.
+        if decision == "confirm" and not friction.escalated:
+            from ..screen import key_grant
+
+            if key_grant.consume(name, call_args):
+                decision = "allow"
+                trace_gate_decision(name, "user_named_key_grant", spec)
 
         # Phase 120: clicking a UI control from an ordinary chat task, on a
         # label the user named themselves. screen.click's static class is

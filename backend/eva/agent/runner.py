@@ -39,6 +39,16 @@ from ..screen.click_grant import (
     user_asked_to_click,
     user_named_label,
 )
+from ..screen.key_grant import (
+    DEFAULT_MAX_KEYS_PER_TASK,
+    KEY_TOOLS,
+    is_dangerous as key_is_dangerous,
+    keys_of_call,
+    open_key_grant,
+    open_key_offer,
+    user_asked_to_press,
+    user_named_keys,
+)
 from ..screen.target_app import open_target_app_scope
 from ..screen.type_grant import (
     DEFAULT_MAX_TYPES_PER_TASK,
@@ -441,7 +451,10 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
     from_user = context.get("goal_from_user") is True
     typing_offer_ctx = open_typing_offer(goal) if (from_user and user_asked_to_type(goal)) else nullcontext()
     click_offer_ctx = open_click_offer(goal) if (from_user and user_asked_to_click(goal)) else nullcontext()
-    with typing_offer_ctx, click_offer_ctx:
+    # Phase 129: same shape for screen.press / screen.hotkey, opened only when
+    # the user's own goal names a key combo.
+    key_offer_ctx = open_key_offer(goal) if (from_user and user_asked_to_press(goal)) else nullcontext()
+    with typing_offer_ctx, click_offer_ctx, key_offer_ctx:
         return await _run_agentic_task(user_message, context)
 
 
@@ -883,7 +896,13 @@ async def _run_step(
             step.status = "failed"
             step.error = "screen_capture_not_explicit"
             task.status = "failed"
-            task.final_response = "I did not capture the screen because you did not explicitly ask me to inspect it."
+            # Phase 129 review: live, "open calculator, type 7*6 and press enter"
+            # did all three, the display read 42, and the reply was ONLY this
+            # refusal -- the planner reached for a screenshot to check its work.
+            # Report what was done, then why it was not checked visually.
+            task.final_response = summarize_progress(
+                task, "I didn't take a screenshot to check the result, because you didn't ask me to look at the screen."
+            )
             safety_stops.append("screen_capture_not_explicit")
             return _return_task(task, session_context, ok=False, events=events, safety_stops=safety_stops)
         if state.screen_captures >= task.max_screen_captures:
@@ -1079,6 +1098,24 @@ async def _run_step(
             loop_vars["clicks_used"] += 1
             with open_click_grant(str(call.args.get("label") or "")):
                 result = executor.execute(call)
+        elif (
+            call.tool in KEY_TOOLS
+            and context.get("goal_from_user") is True
+            and keys_of_call(call.args)
+            and user_named_keys(keys_of_call(call.args), goal)
+            and not key_is_dangerous(keys_of_call(call.args))
+            and not state.injection_flagged
+            and loop_vars["keys_used"] < DEFAULT_MAX_KEYS_PER_TASK
+            and loop_vars["typing_target"] is not None
+            and _target_in_front(loop_vars["typing_target"])
+        ):
+            # Phase 129: a key combo the user's own words named, pressed in the
+            # app this task opened, with that app verified in front immediately
+            # before pressing. Dangerous combos never get here (they stay
+            # confirm-class even when named).
+            loop_vars["keys_used"] += 1
+            with open_key_grant(keys_of_call(call.args)):
+                result = executor.execute(call)
         else:
             result = executor.execute(call)
     if result.ok and call.tool in {"open_app", "window_focus"}:
@@ -1258,7 +1295,7 @@ async def _run_agentic_task(user_message: str, context: dict[str, Any]) -> dict[
         # window a type grant may type into -- and how many grants were spent.
         # Phase 117: moved into a dict (`loop_vars`) rather than two locals so a
         # resumed run can restore them onto a fresh `_RunEnv`.
-        loop_vars: dict[str, Any] = {"typing_target": None, "types_used": 0, "clicks_used": 0}
+        loop_vars: dict[str, Any] = {"typing_target": None, "types_used": 0, "clicks_used": 0, "keys_used": 0}
         events: list[dict[str, Any]] = [
             {"type": "agent_task", "task_id": task.id, "message": "Agent task started"},
             {"type": "agent_plan", "task_id": task.id, "plan": list(task.plan), "message": "Plan ready"},

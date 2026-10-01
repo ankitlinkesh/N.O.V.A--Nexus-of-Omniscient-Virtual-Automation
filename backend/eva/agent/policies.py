@@ -263,10 +263,21 @@ def asks_for_more_than_one_thing(message: str) -> bool:
     return False
 
 
+_KEY_PRESS_REQUEST = re.compile(r"^(?:please\s+)?(?:press|hit|tap|push)\b")
+
+
 def is_agentic_intent(message: str) -> bool:
     text = " ".join(message.lower().strip().split())
     if any(text.startswith(prefix) for prefix in AGENTIC_PREFIXES):
         return True
+    # Phase 129: "press enter in calculator" / "hit ctrl+shift+t in chrome" name a
+    # key combo; only the agent loop can open the app, verify it and press (and
+    # ask when it may not). Without this the chat planner answered "I can't".
+    if _KEY_PRESS_REQUEST.match(text):
+        from ..screen.key_grant import user_asked_to_press
+
+        if user_asked_to_press(text):
+            return True
     # A message asking for two things needs a loop that can take two steps.
     if asks_for_more_than_one_thing(text):
         return True
