@@ -181,3 +181,33 @@ def _no_real_clipboard(monkeypatch):
             monkeypatch.setattr(ct, name, _make(name))
     yield
     assert not touched, f"real clipboard backend touched during a test: {touched}"
+
+
+@pytest.fixture(autouse=True)
+def _no_real_sandbox_box(monkeypatch):
+    """Phase 130: no pytest run may launch the real wsl.exe sandbox.
+
+    The only process launch in shell/sandbox_terminal.py is _default_runner. It
+    raises here unless a test injects a runner or fakes it (monkeypatch overrides
+    this), so a test that routes ``box: ls`` without a fake fails loudly instead of
+    running a command in the developer's real WSL box.
+    """
+    import importlib
+
+    touched: list[str] = []
+
+    class _RealSandboxTouched(BaseException):
+        """BaseException so the runner's own `except OSError` cannot swallow it."""
+
+    def _blocked(argv, *_a, **_k):
+        touched.append(str(list(argv)[:3]))
+        raise _RealSandboxTouched(f"a test reached the REAL wsl.exe sandbox {argv[:3]}; inject a runner")
+
+    for pkg in ("backend.eva", "eva"):
+        try:
+            mod = importlib.import_module(f"{pkg}.shell.sandbox_terminal")
+        except ImportError:
+            continue
+        monkeypatch.setattr(mod, "_default_runner", _blocked)
+    yield
+    assert not touched, f"real wsl.exe sandbox touched during a test: {touched}"

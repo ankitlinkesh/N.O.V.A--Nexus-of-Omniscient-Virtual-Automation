@@ -100,7 +100,14 @@ ROLE_POLICIES: dict[str, RolePolicy] = {
         ),
         # Writes into research memory: permitted, but always confirmed, because
         # this role's input is untrusted page content.
-        orange=frozenset({"research_save_note", "research_start_topic", "browser_save_page_to_research"}),
+        #
+        # Phase 130: sandbox_run is ORANGE here. Downloading and analysing in NOVA's
+        # isolated box is a real research job, but this role's input is untrusted web
+        # content and the box can still reach host services over the network, so a
+        # sub-task never runs a command unattended. Every other role is RED (absent):
+        # `desktop` never reaches the network or file system, `code` never executes
+        # anything by its own definition, and file/media have no use for a shell.
+        orange=frozenset({"research_save_note", "research_start_topic", "browser_save_page_to_research", "sandbox_run"}),
     ),
     "desktop": RolePolicy(
         name="desktop",

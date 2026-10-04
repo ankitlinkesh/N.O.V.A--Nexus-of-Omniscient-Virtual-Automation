@@ -74,7 +74,8 @@ def check(value: object, message: str) -> None:
 # and +1 confirm (radio_set) -> allow 87, confirm 10.
 # Phase 128: +2 allow (file.read_text, clipboard.write) and +1 confirm (clipboard.read)
 # -> allow 89, confirm 11.
-EXPECTED_CLASS_COUNTS = {"allow": 89, "override": 10, "confirm": 11}
+# Phase 130: +1 allow (sandbox_run, SANDBOX_COMMAND) -> allow 90.
+EXPECTED_CLASS_COUNTS = {"allow": 90, "override": 10, "confirm": 11}
 
 SCREEN_CAPTURE_TOOLS = ("capture_screen", "analyze_screen", "screen.observe")
 

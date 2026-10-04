@@ -263,6 +263,16 @@ def asks_for_more_than_one_thing(message: str) -> bool:
     return False
 
 
+# Phase 130: "in your terminal, make a folder", "use your sandbox to run ...". Whole
+# words, and a possessive ("your"/"nova's") is required, so "put it in the box" or
+# "check my inbox" never match. These go to the agent loop, where the planner picks
+# sandbox_run; the typed `box:` form is handled earlier by fast_command_sandbox.
+_SANDBOX_REQUEST = re.compile(
+    r"\b(?:in|on|inside|using|use|via|with|through)\s+(?:your|nova'?s)\s+(?:own\s+)?"
+    r"(?:sandbox|terminal|linux\s+(?:box|terminal|shell)|box)\b"
+)
+
+
 _KEY_PRESS_REQUEST = re.compile(r"^(?:please\s+)?(?:press|hit|tap|push)\b")
 
 
@@ -278,6 +288,8 @@ def is_agentic_intent(message: str) -> bool:
 
         if user_asked_to_press(text):
             return True
+    if _SANDBOX_REQUEST.search(text):
+        return True
     # A message asking for two things needs a loop that can take two steps.
     if asks_for_more_than_one_thing(text):
         return True
@@ -342,7 +354,7 @@ def tool_signature(call: PlannedToolCall) -> str:
 # the native planner shows per step (agent/planner.py). It is also untrusted data,
 # so it is ALWAYS fenced here -- not only when an injection detector fires.
 READ_OBSERVATION_CHARS = 8000
-OBSERVATION_WINDOW = {"file.read_text": READ_OBSERVATION_CHARS + 600, "clipboard.read": 4600}
+OBSERVATION_WINDOW = {"file.read_text": READ_OBSERVATION_CHARS + 600, "clipboard.read": 4600, "sandbox_run": 4600}
 
 
 def _fenced_content(label: str, header: str, text: str, limit: int, source_type: str) -> str:
@@ -372,6 +384,25 @@ def _describe_clipboard_read(result: dict) -> str:
         return str(result.get("message") or "clipboard.read: the clipboard is empty.")
     header = "clipboard.read returned the clipboard text" + (" (masked: it looks like a secret)." if result.get("masked") else ".")
     return _fenced_content("clipboard", header, text, 4000, "clipboard")
+
+
+def _describe_sandbox_run(result: dict) -> str:
+    """Phase 130. The output came out of a command NOVA ran in its own box, but a
+    command can print downloaded or file text, so it is fenced as untrusted data."""
+    if result.get("error") and result.get("exit_code") is None and not result.get("stdout") and not result.get("stderr"):
+        return f"sandbox_run did not run: {result['error']}"
+    head = "sandbox_run ran in NOVA's sandbox (not on the user's PC)"
+    if result.get("timed_out"):
+        head += ", TIMED OUT"
+    else:
+        head += f", exit code {result.get('exit_code')}"
+    head += ", TRUNCATED to the last part of the output." if result.get("truncated") else "."
+    stdout = str(result.get("stdout") or "")
+    stderr = str(result.get("stderr") or "")
+    body = stdout + (("\n[stderr]\n" + stderr) if stderr else "")
+    if not body.strip():
+        return head + " It printed nothing."
+    return _fenced_content("sandbox", head, body, 4000, "sandbox_output")
 
 
 def describe_tool_observation(tool: str, result: Any) -> str:
@@ -431,6 +462,8 @@ def describe_tool_observation(tool: str, result: Any) -> str:
             return "\n".join(lines)
         if tool == "file.read_text":
             return _describe_read_text(result)
+        if tool == "sandbox_run":
+            return _describe_sandbox_run(result)
         if tool == "clipboard.read":
             return _describe_clipboard_read(result)
         if tool == "clipboard.write":

@@ -57,6 +57,7 @@ _ACTION_TYPE_PLAIN: dict[str, str] = {
     "POWER_ACTION": "changes the power state of the machine",
     "NETWORK_ACTION": "reaches out over the network",
     "SHELL_ACTION": "runs an arbitrary shell command",
+    "SANDBOX_COMMAND": "runs a command inside NOVA's own isolated sandbox, not on your PC",
     "CREDENTIAL_ACCESS": "touches stored credentials",
     "THIRD_PARTY_SPYING": "observes someone without their knowledge",
     "MALWARE_LIKE": "behaves like malware",

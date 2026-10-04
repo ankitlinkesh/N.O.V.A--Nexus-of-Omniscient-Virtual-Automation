@@ -274,6 +274,17 @@ def _run_bounded_command(command: str, args: list[str] | tuple[str, ...] | None 
     }
 
 
+def _sandbox_run(command: str = "", timeout_s: int | None = None) -> dict[str, Any]:
+    """Phase 130. Runs ONLY inside NOVA's isolated WSL box (shell/sandbox_terminal.py);
+    there is no host-execution path behind this seam."""
+    from ..shell.sandbox_terminal import DEFAULT_TIMEOUT_S, format_result, run_in_sandbox
+
+    result = run_in_sandbox(str(command or ""), DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s)
+    result["untrusted"] = True
+    result["text"] = format_result(str(command or ""), result)
+    return result
+
+
 def _media_control(action: str) -> str:
     normalized = action.strip().lower().replace(" ", "_")
     if normalized not in MEDIA_ACTIONS:
@@ -464,6 +475,30 @@ class ToolRegistry:
                 action_type="SYSTEM_CHANGE",
                 risk_categories=("SYSTEM_CHANGE",),
                 category="system",
+            ),
+            # Phase 130: NOVA's own isolated Linux box (WSL2 distro `nova`). Allow-class
+            # on purpose: the box cannot see C:/D: (only D:\nova-share as /mnt/share),
+            # cannot launch Windows programs and has no sudo, so there is nothing on the
+            # user's PC for a prompt to protect. Its own action type, NOT SHELL_ACTION
+            # (still hard-blocked) and NOT the Phase 74 bounded runner. `command` is a
+            # content arg: a Linux path in it is not a Windows target for Phase 55. A
+            # tainted agent task escalates it anyway (runner._PRIVILEGED_WHEN_TAINTED),
+            # because the box can still reach host services over the network.
+            "sandbox_run": ToolSpec(
+                name="sandbox_run",
+                description=(
+                    "Run a Linux shell command in NOVA's own isolated sandbox box (WSL Ubuntu): scripts, Python, downloads, "
+                    "file work in /home/nova/workspace. It cannot see the user's files except /mnt/share (the nova-share folder on D:), "
+                    "and nothing it does changes the user's PC. Returns exit code, stdout and stderr."
+                ),
+                args_schema=_schema({"command": {"type": "string"}, "timeout_s": {"type": "integer"}}, ["command"]),
+                safety_level="safe",
+                handler=_sandbox_run,
+                category="system",
+                risk="low",
+                action_type="SANDBOX_COMMAND",
+                risk_categories=("SANDBOX_COMMAND",),
+                content_args=("command",),
             ),
             "open_app": ToolSpec(
                 name="open_app",
@@ -1843,6 +1878,8 @@ class ToolRegistry:
             "file.read_text",
             "clipboard.write",
             "clipboard.read",
+            # Phase 130: NOVA's own sandbox terminal (never the Windows host).
+            "sandbox_run",
             "system_status",
             "file.write_text",
             "file.copy",

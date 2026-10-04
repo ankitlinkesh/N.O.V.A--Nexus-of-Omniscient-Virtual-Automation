@@ -16,6 +16,9 @@ class ActionType(StrEnum):
     POWER_ACTION = "POWER_ACTION"
     NETWORK_ACTION = "NETWORK_ACTION"
     SHELL_ACTION = "SHELL_ACTION"
+    # Phase 130: a command inside NOVA's isolated WSL box. NOT SHELL_ACTION (which
+    # stays hard-blocked): this never runs on the Windows host.
+    SANDBOX_COMMAND = "SANDBOX_COMMAND"
     CREDENTIAL_ACCESS = "CREDENTIAL_ACCESS"
     THIRD_PARTY_SPYING = "THIRD_PARTY_SPYING"
     MALWARE_LIKE = "MALWARE_LIKE"

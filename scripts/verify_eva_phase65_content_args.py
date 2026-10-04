@@ -64,6 +64,7 @@ EXPECTED_CONTENT_ARGS = {
     "clipboard.write": ("text",),  # Phase 128: stored on the clipboard, never opened as a path
     "message.prepare": ("message",),
     "research_save_note": ("note", "tags"),
+    "sandbox_run": ("command",),  # Phase 130: a Linux command run inside the WSL box; never a Windows path
     "screen.click": ("reason",),
     "screen.scroll": ("reason",),
     "screen.wait": ("reason",),

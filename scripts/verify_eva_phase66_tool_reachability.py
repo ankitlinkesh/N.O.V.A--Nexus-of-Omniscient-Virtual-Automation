@@ -231,7 +231,8 @@ EXCLUDED_FILES = (REGISTRY_FILE, CATALOG_FILE)
 # radio_set (102 -> 107); all five are planner-visible.
 # Phase 128 added file.read_text, clipboard.write and clipboard.read (107 -> 110);
 # all three are planner-visible.
-EXPECTED_TOOL_COUNT = 110
+# Phase 130: +1 (sandbox_run): 110 -> 111, planner-visible.
+EXPECTED_TOOL_COUNT = 111
 # Phase 91 made `system_time` planner-visible (72 -> 73 default, 79 -> 80 with
 # Playwright). It had to be: registered + audited + referenced from production
 # source satisfied the reachability check above while the model still could not
@@ -250,8 +251,9 @@ EXPECTED_TOOL_COUNT = 110
 # Phase 127: +5 settings tools (78 -> 83 default, 85 -> 90 with Playwright).
 # Phase 128: +3 (file.read_text, clipboard.write, clipboard.read): 83 -> 86 default,
 # 90 -> 93 with Playwright.
-EXPECTED_DEFAULT_PLANNER_VISIBLE_COUNT = 86
-EXPECTED_PLAYWRIGHT_PLANNER_VISIBLE_COUNT = 93
+# Phase 130: +1 (sandbox_run): 86 -> 87 default, 93 -> 94 with Playwright.
+EXPECTED_DEFAULT_PLANNER_VISIBLE_COUNT = 87
+EXPECTED_PLAYWRIGHT_PLANNER_VISIBLE_COUNT = 94
 
 # The reviewed set of intentionally-exempt tools: name -> justification.
 # Growing this list is a deliberate act with a real reason, not a place to

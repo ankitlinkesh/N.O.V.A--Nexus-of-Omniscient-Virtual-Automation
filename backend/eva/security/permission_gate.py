@@ -37,7 +37,7 @@ OVERRIDE = {
     ActionType.SYSTEM_CHANGE.value,
 }
 CONFIRM = {ActionType.EXTERNAL_MESSAGE_SEND.value, ActionType.EXTERNAL_POST.value, ActionType.POWER_ACTION.value}
-ALLOW = {ActionType.SAFE_LOCAL_READ.value, ActionType.SAFE_LOCAL_UI.value, ActionType.NETWORK_ACTION.value}
+ALLOW = {ActionType.SAFE_LOCAL_READ.value, ActionType.SAFE_LOCAL_UI.value, ActionType.NETWORK_ACTION.value, ActionType.SANDBOX_COMMAND.value}
 
 
 def evaluate_action(action, context: PermissionContext) -> PermissionDecision:

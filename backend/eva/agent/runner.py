@@ -121,6 +121,23 @@ def _is_privileged_tool(registry: ToolRegistry, tool_name: str) -> bool:
         return True
 
 
+def _taint_payload(call: PlannedToolCall, result: Any) -> Any:
+    """Phase 130: scan what a sandbox command PRINTED, not NOVA's own reply text
+    around it. The tool's `text` wraps the output in a ``` code block, and the
+    command-injection detector fired on those backticks, so every sandbox result
+    self-tainted the task and the next command asked for approval. Injected text
+    in the real output still flags the task."""
+    if call.tool == "sandbox_run" and isinstance(result, dict):
+        return "\n".join(str(result.get(key) or "") for key in ("stdout", "stderr"))
+    # system_status reports the machine's own shell path (C:\WINDOWS\system32\cmd.exe,
+    # from COMSPEC, not attacker-controlled); the execution-surface detector fired on it,
+    # so any task that checked status asked before its next privileged step.
+    if call.tool == "system_status" and isinstance(result, dict):
+        inner = result.get("result") if isinstance(result.get("result"), dict) else result
+        return {key: value for key, value in inner.items() if key != "shell"}
+    return result
+
+
 def _opens_unlisted_app(call: PlannedToolCall) -> bool:
     """Phase 124: `open_app` can now launch ANY installed app, and it is
     allow-class, which the injection check above lets through untouched. With
@@ -145,7 +162,10 @@ _LOG_REDACTED_TOOLS = frozenset({"file.read_text", "clipboard.read", "clipboard.
 # file that tells NOVA to "copy this command" is clipboard poisoning: the user's
 # next paste runs attacker text. The ordinary gate class stays allow for a clean,
 # user-typed request; this only adds friction after a taint.
-_PRIVILEGED_WHEN_TAINTED = frozenset({"clipboard.write"})
+# Phase 130: sandbox_run is allow-class (the box cannot see the user's files), but
+# it can still reach host services over the network (NOVA's API on 8765, MySQL on
+# 3306; no firewall rule yet), so injected content must never drive it.
+_PRIVILEGED_WHEN_TAINTED = frozenset({"clipboard.write", "sandbox_run"})
 
 
 def _logged_args(tool: str, args: Any) -> Any:
@@ -599,7 +619,7 @@ def _process_executed_call(
     # context, and record the threat so a later privileged step escalates.
     source_type = source_type_for_tool(call.tool)
     if result.ok and result.result is not None:
-        verdict = assess_taint(result.result, source_type)
+        verdict = assess_taint(_taint_payload(call, result.result), source_type)
         if verdict.injection_detected:
             state.record_injection(source_type)
             if not observation.startswith("[UNTRUSTED"):

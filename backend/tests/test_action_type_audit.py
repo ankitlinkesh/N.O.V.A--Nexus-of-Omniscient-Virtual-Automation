@@ -117,4 +117,5 @@ def test_relabelling_is_gate_preserving(registry):
     # Phase 91: `system_time` added, allow 82 -> 83. A clock read is
     # non-sensitive local state with no pixels, no mutation and no network --
     # the claim AUDITED_SAFE_LOCAL_READ's docstring says listing a tool makes.
-    assert counts == {"allow": 89, "override": 10, "confirm": 11}, f"gate class counts drifted: {counts}"
+    # Phase 130: +1 allow (sandbox_run, SANDBOX_COMMAND) -> allow 90.
+    assert counts == {"allow": 90, "override": 10, "confirm": 11}, f"gate class counts drifted: {counts}"

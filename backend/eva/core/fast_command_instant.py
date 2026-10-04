@@ -354,6 +354,12 @@ def synthesize_single_result(message: str, results: list[Any]) -> str | None:
         if isinstance(data, dict) and data.get("ok") and isinstance(data.get("message"), str):
             return data["message"] or None
         return None
+    if tool == "sandbox_run":
+        # Phase 130: the tool already wrote the reply (says it ran in NOVA's sandbox,
+        # exit code, output in a code block). A non-zero exit still shows its output.
+        if isinstance(data, dict) and isinstance(data.get("text"), str) and data["text"].strip():
+            return data["text"]
+        return None
     if tool == "file.list_dir":
         # A listing answers "how many / what's in"; it does not answer "is X in there".
         if not _LISTING_ASK.search(str(message or "")):
