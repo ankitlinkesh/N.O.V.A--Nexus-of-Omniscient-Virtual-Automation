@@ -118,4 +118,5 @@ def test_relabelling_is_gate_preserving(registry):
     # non-sensitive local state with no pixels, no mutation and no network --
     # the claim AUDITED_SAFE_LOCAL_READ's docstring says listing a tool makes.
     # Phase 130: +1 allow (sandbox_run, SANDBOX_COMMAND) -> allow 90.
-    assert counts == {"allow": 90, "override": 10, "confirm": 11}, f"gate class counts drifted: {counts}"
+    # Phase 134: +2 confirm (share.to_box, share.from_box, SANDBOX_TRANSFER) -> confirm 13.
+    assert counts == {"allow": 90, "override": 10, "confirm": 13}, f"gate class counts drifted: {counts}"

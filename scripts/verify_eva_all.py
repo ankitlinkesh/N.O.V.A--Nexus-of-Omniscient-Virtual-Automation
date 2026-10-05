@@ -163,6 +163,8 @@ FULL_VERIFIERS = [
     "verify_eva_phase131_sandbox_hardening.py",
     "verify_eva_phase132_read_documents.py",
     "verify_eva_phase133_sandbox_focus.py",
+    "verify_eva_phase134_share_bridge.py",
+    "verify_eva_phase135_sandbox_resume_check.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -302,6 +304,8 @@ QUICK_VERIFIERS = [
     "verify_eva_phase131_sandbox_hardening.py",
     "verify_eva_phase132_read_documents.py",
     "verify_eva_phase133_sandbox_focus.py",
+    "verify_eva_phase134_share_bridge.py",
+    "verify_eva_phase135_sandbox_resume_check.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -405,6 +409,8 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase131_sandbox_hardening.py": ("phase131", "sandbox", "firewall", "taint"),
     "verify_eva_phase132_read_documents.py": ("phase132", "files", "pdf", "docx"),
     "verify_eva_phase133_sandbox_focus.py": ("phase133", "sandbox", "terminal", "scope"),
+    "verify_eva_phase134_share_bridge.py": ("phase134", "share", "sandbox", "bridge"),
+    "verify_eva_phase135_sandbox_resume_check.py": ("phase135", "sandbox", "resume", "check"),
     "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 

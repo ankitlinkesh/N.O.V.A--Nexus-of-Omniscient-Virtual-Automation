@@ -268,7 +268,10 @@ def asks_for_more_than_one_thing(message: str) -> bool:
 # "check my inbox" never match. These go to the agent loop, where the planner picks
 # sandbox_run; the typed `box:` form is handled earlier by fast_command_sandbox.
 _SANDBOX_REQUEST = re.compile(
-    r"\b(?:in|on|inside|using|use|via|with|through)\s+(?:your|nova'?s)\s+(?:own\s+)?"
+    # Phase 134: + into/to/from ("put report.pdf into your box", "copy it from your
+    # sandbox"). Without them the request missed the agent loop, so the single-turn
+    # planner handled it and an approved copy never resumed to the next step.
+    r"\b(?:in|into|to|from|on|inside|using|use|via|with|through)\s+(?:your|nova'?s)\s+(?:own\s+)?"
     r"(?:sandbox|terminal|linux\s+(?:box|terminal|shell)|box)\b"
 )
 
@@ -397,6 +400,18 @@ def _describe_clipboard_read(result: dict) -> str:
     return _fenced_content("clipboard", header, text, 4000, "clipboard")
 
 
+def _describe_share(tool: str, result: dict) -> str:
+    """Phase 134. One honest line; the in-box path is what the planner needs next."""
+    if not result.get("ok"):
+        return f"{tool} did not copy anything: {result.get('message') or result.get('error') or 'unknown error'}"
+    if tool == "share.to_box":
+        return f"share.to_box copied {result.get('name')} into your sandbox at {result.get('box_path')}"
+    return (
+        f"share.from_box copied {result.get('name')} from the sandbox into your {result.get('folder')} folder "
+        f"({result.get('dst')}). It was made in the box, so treat it as untrusted."
+    )
+
+
 def _describe_sandbox_run(result: dict) -> str:
     """Phase 130. The output came out of a command NOVA ran in its own box, but a
     command can print downloaded or file text, so it is fenced as untrusted data."""
@@ -490,6 +505,8 @@ def describe_tool_observation(tool: str, result: Any) -> str:
             return _describe_read_text(result)
         if tool == "sandbox_run":
             return _describe_sandbox_run(result)
+        if tool in {"share.to_box", "share.from_box"}:
+            return _describe_share(tool, result)
         if tool == "clipboard.read":
             return _describe_clipboard_read(result)
         if tool == "clipboard.write":

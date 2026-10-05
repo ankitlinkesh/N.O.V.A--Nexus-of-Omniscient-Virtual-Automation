@@ -19,6 +19,10 @@ class ActionType(StrEnum):
     # Phase 130: a command inside NOVA's isolated WSL box. NOT SHELL_ACTION (which
     # stays hard-blocked): this never runs on the Windows host.
     SANDBOX_COMMAND = "SANDBOX_COMMAND"
+    # Phase 134: a file crossing the sandbox boundary (share.to_box / share.from_box).
+    # Confirm-class in BOTH gates: the box has internet, and box-made content lands
+    # in the user's folders.
+    SANDBOX_TRANSFER = "SANDBOX_TRANSFER"
     CREDENTIAL_ACCESS = "CREDENTIAL_ACCESS"
     THIRD_PARTY_SPYING = "THIRD_PARTY_SPYING"
     MALWARE_LIKE = "MALWARE_LIKE"

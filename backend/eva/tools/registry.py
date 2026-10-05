@@ -74,6 +74,7 @@ from .app_control_tools import app_focus, browser_open_url_tool, browser_search_
 from . import clipboard_tools, system_settings
 from .desktop import close_app, media_key, open_app, open_folder, open_url, system_power, system_status, web_search
 from .message_tools import message_confirm_send, message_prepare, message_send_via_ui
+from .share_bridge import share_from_box, share_to_box
 from .safe_file_tools import file_copy, file_delete, file_list_dir, file_move, file_read_text, file_write_text
 from ..browser_automation import playwright_driver
 from ..security import tool_gate
@@ -714,6 +715,42 @@ class ToolRegistry:
                 requires_confirmation=True,
                 supports_rollback=True,
                 verification_method="file_contains",
+            ),
+            # Phase 134: the file bridge to NOVA's sandbox share (the nova-share folder on D: = /mnt/share).
+            # Confirm-class via its own SANDBOX_TRANSFER action type in BOTH gates; host-side
+            # copies only (tools/share_bridge.py), never through sandbox_run or wsl.exe.
+            "share.to_box": ToolSpec(
+                name="share.to_box",
+                description=(
+                    "Copy ONE file from the user's Documents, Desktop or Downloads folder into NOVA's sandbox share and return its "
+                    "in-box path (/mnt/share/<name>) for use with sandbox_run. Asks the user first (the box has internet). "
+                    "Refuses folders, key/credential files and files over 100 MB; never overwrites."
+                ),
+                args_schema=_schema({"path": {"type": "string"}}, ["path"]),
+                safety_level="sensitive",
+                handler=lambda path: share_to_box(str(path)),
+                category="file",
+                risk="medium",
+                action_type="SANDBOX_TRANSFER",
+                risk_categories=("SANDBOX_TRANSFER",),
+                requires_confirmation=True,
+                verification_method="command_result_success",
+            ),
+            "share.from_box": ToolSpec(
+                name="share.from_box",
+                description=(
+                    "Copy ONE file that was made in NOVA's sandbox share (/mnt/share) into the user's Downloads (or Documents/Desktop). "
+                    "`name` is a plain file name inside the share. Asks the user first. The file is untrusted (made in the box); never overwrites."
+                ),
+                args_schema=_schema({"name": {"type": "string"}, "folder": {"type": "string"}}, ["name"]),
+                safety_level="sensitive",
+                handler=lambda name, folder="Downloads": share_from_box(str(name), str(folder or "Downloads")),
+                category="file",
+                risk="medium",
+                action_type="SANDBOX_TRANSFER",
+                risk_categories=("SANDBOX_TRANSFER",),
+                requires_confirmation=True,
+                verification_method="command_result_success",
             ),
             "file.copy": ToolSpec(
                 name="file.copy",
@@ -1880,6 +1917,9 @@ class ToolRegistry:
             "clipboard.read",
             # Phase 130: NOVA's own sandbox terminal (never the Windows host).
             "sandbox_run",
+            # Phase 134: the confirm-class file bridge to the box.
+            "share.to_box",
+            "share.from_box",
             "system_status",
             "file.write_text",
             "file.copy",

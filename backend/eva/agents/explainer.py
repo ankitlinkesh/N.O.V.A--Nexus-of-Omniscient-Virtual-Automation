@@ -58,6 +58,7 @@ _ACTION_TYPE_PLAIN: dict[str, str] = {
     "NETWORK_ACTION": "reaches out over the network",
     "SHELL_ACTION": "runs an arbitrary shell command",
     "SANDBOX_COMMAND": "runs a command inside NOVA's own isolated sandbox, not on your PC",
+    "SANDBOX_TRANSFER": "copies a file between your folders and NOVA's sandbox share",
     "CREDENTIAL_ACCESS": "touches stored credentials",
     "THIRD_PARTY_SPYING": "observes someone without their knowledge",
     "MALWARE_LIKE": "behaves like malware",

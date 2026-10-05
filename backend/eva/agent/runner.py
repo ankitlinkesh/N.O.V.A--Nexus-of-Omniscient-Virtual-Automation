@@ -531,6 +531,12 @@ class _RunEnv:
 # pause, that `result.action` really is a pending id and not one of the other
 # strings this loop puts in that field (a tool name, a power-action name) --
 # see `_pause_and_return`.
+# Phase 135: what the planner is told when it finishes a sandbox task without checking the box.
+SANDBOX_CHECK_FEEDBACK = (
+    "You haven't checked your sandbox yet. Run a command with sandbox_run "
+    "(e.g. `cat /etc/os-release`, `df -h`) and answer from its output."
+)
+
 _PENDING_ID_RE = re.compile(r"^act_[a-zA-Z0-9_-]+$")
 
 
@@ -864,6 +870,23 @@ async def _run_step(
     )
 
     if decision.type in {"answer", "done"}:
+        # Phase 135: live, "what OS is your sandbox running" was answered from general
+        # knowledge without running a single command. In a sandbox-focused task, a
+        # finish with no sandbox_run attempted is sent back ONCE to check the box. The
+        # flag is set before the send-back, so the second finish is always accepted
+        # and this can never loop. Mirrors the critic -> revise return below.
+        if (
+            sandbox_focus_open()
+            and not loop_vars.get("sandbox_check_sent")
+            and not any(prior.tool_name == "sandbox_run" for prior in task.steps)
+        ):
+            loop_vars["sandbox_check_sent"] = True
+            feedback = SANDBOX_CHECK_FEEDBACK
+            task.add_observation(feedback)
+            events.append({"type": "agent_sandbox_check", "task_id": task.id, "step": index, "message": feedback})
+            _safe_log(memory, session_id, "agent_sandbox_check_sent_back", {"task_id": task.id, "step": index})
+            state.last_step_progress = False
+            return None
         # Phase 41: the critic reviews the planner's "done" against the
         # contract BEFORE accepting it. If an enforcing contract isn't
         # satisfied yet and the revision budget allows, send the task
@@ -1308,7 +1331,16 @@ async def resume_agentic_task(snapshot: PausedTask, executed_result: Any) -> dic
     env: _RunEnv = snapshot.env
     result = env.executor.execute_approved(snapshot.call.tool, snapshot.call.args, executed_result)
     forced = (snapshot.call, snapshot.step, result, snapshot.continue_after_tools)
-    with role_stack_scope(snapshot.role_stack):
+    # Phase 135: a paused sandbox task keeps its focus scope after the approval. The scope
+    # lives in a ContextVar and closed when the pause RETURNED, so a resumed task could be
+    # offered system_status again. Reopened here under the same condition as
+    # `run_agentic_task` (the user's own goal), on this executing coroutine.
+    sandbox_ctx = (
+        open_sandbox_focus()
+        if (env.context.get("goal_from_user") is True and wants_sandbox_focus(env.goal))
+        else nullcontext()
+    )
+    with role_stack_scope(snapshot.role_stack), sandbox_ctx:
         return await _drive_loop(env, start_index=snapshot.index, forced=forced)
 
 

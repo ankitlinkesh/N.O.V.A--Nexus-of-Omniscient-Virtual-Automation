@@ -36,7 +36,7 @@ OVERRIDE = {
     ActionType.DESTRUCTIVE_FILE_ACTION.value,
     ActionType.SYSTEM_CHANGE.value,
 }
-CONFIRM = {ActionType.EXTERNAL_MESSAGE_SEND.value, ActionType.EXTERNAL_POST.value, ActionType.POWER_ACTION.value}
+CONFIRM = {ActionType.EXTERNAL_MESSAGE_SEND.value, ActionType.EXTERNAL_POST.value, ActionType.POWER_ACTION.value, ActionType.SANDBOX_TRANSFER.value}
 ALLOW = {ActionType.SAFE_LOCAL_READ.value, ActionType.SAFE_LOCAL_UI.value, ActionType.NETWORK_ACTION.value, ActionType.SANDBOX_COMMAND.value}
 
 

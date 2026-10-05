@@ -75,7 +75,8 @@ def check(value: object, message: str) -> None:
 # Phase 128: +2 allow (file.read_text, clipboard.write) and +1 confirm (clipboard.read)
 # -> allow 89, confirm 11.
 # Phase 130: +1 allow (sandbox_run, SANDBOX_COMMAND) -> allow 90.
-EXPECTED_CLASS_COUNTS = {"allow": 90, "override": 10, "confirm": 11}
+# Phase 134: +2 confirm (share.to_box, share.from_box; SANDBOX_TRANSFER) -> confirm 13.
+EXPECTED_CLASS_COUNTS = {"allow": 90, "override": 10, "confirm": 13}
 
 SCREEN_CAPTURE_TOOLS = ("capture_screen", "analyze_screen", "screen.observe")
 
