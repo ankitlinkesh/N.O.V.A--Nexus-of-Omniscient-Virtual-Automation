@@ -50,6 +50,13 @@ from ..screen.key_grant import (
     user_named_keys,
 )
 from ..screen.target_app import open_target_app_scope
+from ..shell.sandbox_focus import (
+    SANDBOX_FOCUS_HIDDEN,
+    open_sandbox_focus,
+    refusal_message,
+    sandbox_focus_open,
+    wants_sandbox_focus,
+)
 from ..screen.type_grant import (
     DEFAULT_MAX_TYPES_PER_TASK,
     TYPE_TOOL,
@@ -477,7 +484,12 @@ async def run_agentic_task(user_message: str, context: dict[str, Any] | None = N
     # Phase 129: same shape for screen.press / screen.hotkey, opened only when
     # the user's own goal names a key combo.
     key_offer_ctx = open_key_offer(goal) if (from_user and user_asked_to_press(goal)) else nullcontext()
-    with typing_offer_ctx, click_offer_ctx, key_offer_ctx:
+    # Phase 133: "use your terminal ..." hides the host-status tools for this task.
+    # Opened here with the other scopes, on the coroutine that plans AND runs the
+    # steps (the refusal below reads it on this same coroutine, before any thread
+    # hop), never around run_async -- Phase 103.
+    sandbox_focus_ctx = open_sandbox_focus() if (from_user and wants_sandbox_focus(goal)) else nullcontext()
+    with typing_offer_ctx, click_offer_ctx, key_offer_ctx, sandbox_focus_ctx:
         return await _run_agentic_task(user_message, context)
 
 
@@ -878,10 +890,16 @@ async def _run_step(
                 # progress from an earlier real step.
                 state.last_step_progress = False
                 return None
-        step = AgentStep(index=index, thought_summary=decision.reason, planned_action=decision.type, observation=decision.final_response, status="done")
+        final = decision.final_response
+        if not str(final or "").strip():
+            # Phase 133: live, a refused step followed by a "done" with no text
+            # reached the chat as the literal reply "None". Never finish silently:
+            # say so and report what the steps actually found.
+            final = summarize_progress(task, "I finished without writing an answer.")
+        step = AgentStep(index=index, thought_summary=decision.reason, planned_action=decision.type, observation=final, status="done")
         task.add_step(step)
         task.status = "done"
-        task.final_response = decision.final_response
+        task.final_response = final
         events.append({"type": "agent_step", "task_id": task.id, "step": index, "message": f"Step {index}: done"})
         _safe_log(memory, session_id, "agent_task_done", {"task_id": task.id, "final_response": task.final_response})
         return _finalize_success(task, state, contract, session_context, events=events, safety_stops=safety_stops, memory=memory, session_id=session_id)
@@ -970,6 +988,20 @@ async def _run_step(
         events.append({"type": "agent_observation", "task_id": task.id, "step": index, "message": step.observation})
         _safe_log(memory, session_id, "agent_tool_dry_run", {"task_id": task.id, "step": index, "tool": call.tool, "args": _logged_args(call.tool, call.args)})
         return _return_task(task, session_context, ok=True, events=events, safety_stops=safety_stops)
+
+    # Phase 133: a task about NOVA's own terminal must not run the host-status
+    # tools even if the planner emits one (it can emit any name). Tell it why and
+    # let it try again; nothing ran, and the call still counted against the budget.
+    if sandbox_focus_open() and call.tool in SANDBOX_FOCUS_HIDDEN:
+        refusal = refusal_message(call.tool)
+        step.status = "skipped"
+        step.error = "sandbox_focus_host_tool"
+        step.observation = refusal
+        task.add_observation(refusal)
+        events.append({"type": "agent_observation", "task_id": task.id, "step": index, "message": refusal})
+        _safe_log(memory, session_id, "agent_sandbox_focus_refused", {"task_id": task.id, "step": index, "tool": call.tool})
+        state.last_step_progress = False
+        return None
 
     # Phase 40c least-privilege: if this task was handed a tool scope, a
     # planned tool outside it is denied before it runs — no matter what

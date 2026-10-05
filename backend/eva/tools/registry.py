@@ -1919,6 +1919,13 @@ class ToolRegistry:
             # strictly narrower than no scope on this axis.
             specs = [spec for spec in specs if spec["name"] not in GUI_SCOPE_HIDDEN]
 
+        # Phase 133: a task about NOVA's own terminal/sandbox must not be offered
+        # the host-status tools (they describe the user's PC). Removal, not advice.
+        from ..shell.sandbox_focus import SANDBOX_FOCUS_HIDDEN, sandbox_focus_open
+
+        if sandbox_focus_open():
+            specs = [spec for spec in specs if spec["name"] not in SANDBOX_FOCUS_HIDDEN]
+
         # Phase 110: inside an agent task whose user-typed goal asks to type, the
         # planner may SEE screen.type_text. Visibility only -- a call is still
         # confirm-class unless the runner opens a type grant for that exact text

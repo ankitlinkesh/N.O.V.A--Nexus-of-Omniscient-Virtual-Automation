@@ -273,6 +273,17 @@ _SANDBOX_REQUEST = re.compile(
 )
 
 
+# Phase 133: "what OS is your sandbox running" has no leading preposition. Only the
+# unambiguous nouns qualify without one ("your box"/"your terminal" alone are too
+# loose), and the possessive is still required.
+_SANDBOX_POSSESSIVE = re.compile(r"\b(?:your|nova'?s)\s+(?:own\s+)?(?:sandbox|linux\s+(?:box|terminal|shell))\b")
+
+
+def is_sandbox_request(text: str) -> bool:
+    """True when `text` (already lower-cased) asks to use NOVA's own sandbox/terminal."""
+    return bool(_SANDBOX_REQUEST.search(text) or _SANDBOX_POSSESSIVE.search(text))
+
+
 _KEY_PRESS_REQUEST = re.compile(r"^(?:please\s+)?(?:press|hit|tap|push)\b")
 
 
@@ -288,7 +299,7 @@ def is_agentic_intent(message: str) -> bool:
 
         if user_asked_to_press(text):
             return True
-    if _SANDBOX_REQUEST.search(text):
+    if is_sandbox_request(text):
         return True
     # A message asking for two things needs a loop that can take two steps.
     if asks_for_more_than_one_thing(text):
