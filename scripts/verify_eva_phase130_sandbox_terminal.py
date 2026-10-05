@@ -70,9 +70,11 @@ class FakeWsl:
 
 
 def decode_b64(argv):
-    script = argv[-1]
-    m = re.match(r"^echo ([A-Za-z0-9+/=]+) \| base64 -d \| timeout -k 5 \d+ bash -l$", script)
-    return base64.b64decode(m.group(1)).decode("utf-8") if m else None
+    # Phase 131 changed the in-box wrapper (script from a file, stdin closed);
+    # the module's own decoder reads its encoding.
+    import backend.eva.shell.sandbox_terminal as st
+
+    return st.decode_command(argv)
 
 
 try:
@@ -108,9 +110,9 @@ try:
         command = 'echo "$HOME" && echo \'x\' 日本'
         result = st.run_in_sandbox(command)
         argv = fake.execs()[0][0]
-        expected = ["wsl.exe", "-d", "nova", "-u", "nova", "--cd", "/home/nova/workspace", "--exec", "bash", "-c",
-                    "echo " + base64.b64encode(command.encode("utf-8")).decode() + " | base64 -d | timeout -k 5 60 bash -l"]
-        failures += emit("exact argv with base64 command", argv == expected and decode_b64(argv) == command, argv=argv)
+        expected_head = ["wsl.exe", "-d", "nova", "-u", "nova", "--cd", "/home/nova/workspace", "--exec", "bash", "-c"]
+        encoded = base64.b64encode(command.encode("utf-8")).decode()
+        failures += emit("exact argv with base64 command", argv[:10] == expected_head and len(argv) == 11 and f"echo {encoded} | base64 -d > $f;" in argv[10] and '"' not in argv[10] and decode_b64(argv) == command, argv=argv)
         failures += emit("WSL_UTF8 env and result shape", fake.execs()[0][2].get("WSL_UTF8") == "1" and result["ok"] and result["exit_code"] == 0 and result["cwd"] == "/home/nova/workspace")
         failures += emit("every launch is wsl.exe", all(c[0][0] == "wsl.exe" for c in fake.calls))
 
@@ -131,10 +133,10 @@ try:
             st.run_in_sandbox("true", asked)
             clamps[str(asked)] = re.search(r"timeout -k 5 (\d+) bash", f.execs()[-1][0][-1]).group(1)
         failures += emit("timeout clamp (enforced inside the box)", clamps == {"0": "1", "5": "5", "99999": "300", "bad": "60"}, clamps=clamps)
-        f = FakeWsl(exec_result=SimpleNamespace(returncode=124, stdout=b"so far", stderr=b""))
+        f = FakeWsl(exec_result=SimpleNamespace(returncode=124, stdout=b"so far", stderr=(st._TIMEOUT_MARK + "\n").encode()))
         use_runner(f)
         r = st.run_in_sandbox("sleep 99", 2)
-        failures += emit("in-box timeout exit 124 reported as timed out", r["timed_out"] and not r["ok"] and r["stdout"] == "so far")
+        failures += emit("in-box timeout (marked) reported as timed out", r["timed_out"] and not r["ok"] and r["stdout"] == "so far")
         f = FakeWsl(exec_result=SimpleNamespace(returncode=0, stdout=("HEAD" + "x" * 20000 + "TAIL").encode(), stderr=b""))
         use_runner(f)
         r = st.run_in_sandbox("yes")
@@ -225,7 +227,8 @@ try:
 
         # ---- 7. README
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        failures += emit("README records Phase 130 and the firewall gap", "| 130 |" in readme and "Firewall: block NOVA's WSL box" in readme)
+        # The firewall gap recorded here was closed in Phase 131 (nova-firewall.nft).
+        failures += emit("README records Phase 130 and the box firewall", "| 130 |" in readme and "nova-firewall.nft" in readme)
     finally:
         st._default_runner = real_runner
         Path.home = real_home  # type: ignore[method-assign]

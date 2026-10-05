@@ -399,10 +399,25 @@ def _describe_sandbox_run(result: dict) -> str:
     head += ", TRUNCATED to the last part of the output." if result.get("truncated") else "."
     stdout = str(result.get("stdout") or "")
     stderr = str(result.get("stderr") or "")
-    body = stdout + (("\n[stderr]\n" + stderr) if stderr else "")
-    if not body.strip():
+    if not (stdout + stderr).strip():
         return head + " It printed nothing."
-    return _fenced_content("sandbox", head, body, 4000, "sandbox_output")
+    # Phase 131: stderr is where a failure explains itself, and the END of stdout is
+    # what matters (the runner already kept the tail), so stderr gets its budget
+    # first and stdout shows its last part. The old head-slice of stdout+stderr hid
+    # stderr behind any long stdout.
+    budget = 4000
+    err_part = stderr[-min(len(stderr), 1500):] if stderr else ""
+    out_part = stdout[-(budget - len(err_part)):] if stdout else ""
+    body = ""
+    if out_part:
+        if len(out_part) < len(stdout):
+            body += f"[last {len(out_part)} of {len(stdout)} characters of stdout]\n"
+        body += out_part
+    if err_part:
+        body += ("\n" if body and not body.endswith("\n") else "") + "[stderr"
+        body += f", last {len(err_part)} of {len(stderr)} characters]\n" if len(err_part) < len(stderr) else "]\n"
+        body += err_part
+    return _fenced_content("sandbox", head, body, budget + 200, "sandbox_output")
 
 
 def describe_tool_observation(tool: str, result: Any) -> str:

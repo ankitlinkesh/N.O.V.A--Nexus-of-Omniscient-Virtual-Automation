@@ -22,7 +22,10 @@ from typing import Any
 
 from .fast_command_instant import _run
 
-_PREFIX = re.compile(r"^\s*(?:box|sandbox)\s*:\s*(?P<command>.*)$", re.I | re.S)
+# Phase 131: only spaces/tabs between the word and the colon ("box\n: x" was a
+# match). A typed message that STARTS "Box: ..." still runs as a command, by
+# design: it is the user's own text and the box is isolated.
+_PREFIX = re.compile(r"^\s*(?:box|sandbox)[ \t]*:\s*(?P<command>.*)$", re.I | re.S)
 
 _USAGE = (
     "Usage: box: <linux command>\n\n"

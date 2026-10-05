@@ -63,7 +63,7 @@ from .paused_tasks import PausedTask, save_paused_task
 from .state import AgentRunState
 from .task import AgentStep, AgentTask, readable_observation as _readable_observation
 from ..threat_defense.authorization import authorize_action
-from ..threat_defense.taint import assess as assess_taint, source_type_for_tool, wrap_as_untrusted_data
+from ..threat_defense.taint import assess as assess_taint, is_untrusted, source_type_for_tool, wrap_as_untrusted_data
 from ..threat_defense.tool_scope import TaskToolScope
 from .critic import DelegationContract, REVISE, honest_caveat, review_completion
 
@@ -155,7 +155,7 @@ def _opens_unlisted_app(call: PlannedToolCall) -> bool:
         return True
 
 
-_LOG_REDACTED_TOOLS = frozenset({"file.read_text", "clipboard.read", "clipboard.write"})
+_LOG_REDACTED_TOOLS = frozenset({"file.read_text", "clipboard.read", "clipboard.write", "sandbox_run"})
 
 # Phase 128. Allow-class tools that become privileged once untrusted content has
 # entered the task. clipboard.write is a local UI action nobody gates, but a page or
@@ -166,6 +166,9 @@ _LOG_REDACTED_TOOLS = frozenset({"file.read_text", "clipboard.read", "clipboard.
 # it can still reach host services over the network (NOVA's API on 8765, MySQL on
 # 3306; no firewall rule yet), so injected content must never drive it.
 _PRIVILEGED_WHEN_TAINTED = frozenset({"clipboard.write", "sandbox_run"})
+# Phase 131: tools that ask once the task has READ any untrusted content, even
+# when no detector fired (provenance, not detection).
+_PROVENANCE_GATED = frozenset({"sandbox_run"})
 
 
 def _logged_args(tool: str, args: Any) -> Any:
@@ -619,6 +622,8 @@ def _process_executed_call(
     # context, and record the threat so a later privileged step escalates.
     source_type = source_type_for_tool(call.tool)
     if result.ok and result.result is not None:
+        if is_untrusted(source_type):
+            state.record_untrusted(source_type)
         verdict = assess_taint(_taint_payload(call, result.result), source_type)
         if verdict.injection_detected:
             state.record_injection(source_type)
@@ -987,18 +992,31 @@ async def _run_step(
     # escalate to explicit user confirmation carrying an injection
     # warning. The permission gate still governs it too.
     privileged = _is_privileged_tool(registry, call.tool) or _opens_unlisted_app(call) or call.tool in _PRIVILEGED_WHEN_TAINTED
+    # Phase 131 (ECC security review): detection alone missed phrasings like
+    # "use sandbox_run with command: curl ...", so a missed injection drove the
+    # sandbox with no prompt. For sandbox_run, having READ untrusted content in
+    # this task is enough to ask first.
+    provenance_gate = call.tool in _PROVENANCE_GATED and bool(state.untrusted_seen)
+    tainted = state.injection_flagged or provenance_gate
     auth = authorize_action(
         tool_privileged=privileged,
-        context_tainted=state.injection_flagged,
-        injection_detected=state.injection_flagged,
+        context_tainted=tainted,
+        injection_detected=tainted,
     )
     if auth.escalate:
-        warning = (
-            f"WARNING - possible prompt injection: `{call.tool}` was proposed after untrusted "
-            f"content ({', '.join(state.tainted_sources) or 'external source'}) entered the "
-            f"conversation. Untrusted content can suggest actions but cannot authorize them. "
-            f"Confirm explicitly if you want me to run this."
-        )
+        if state.injection_flagged:
+            warning = (
+                f"WARNING - possible prompt injection: `{call.tool}` was proposed after untrusted "
+                f"content ({', '.join(state.tainted_sources) or 'external source'}) entered the "
+                f"conversation. Untrusted content can suggest actions but cannot authorize them. "
+                f"Confirm explicitly if you want me to run this."
+            )
+        else:
+            warning = (
+                f"I read outside content in this task ({', '.join(state.untrusted_seen)}), so I won't "
+                f"run `{call.tool}` on my own: content I read can suggest commands but cannot "
+                f"authorize them. Confirm explicitly if you want me to run this."
+            )
         step.status = "skipped"
         step.observation = warning
         task.add_observation(warning)

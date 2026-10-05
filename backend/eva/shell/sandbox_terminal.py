@@ -13,16 +13,22 @@ host executables) and does not touch the hard-blocked ``SHELL_ACTION``.
 
 Invocation, measured on this machine (other forms break):
 
-    wsl.exe -d nova -u nova --cd /home/nova/workspace --exec bash -c "echo <B64> | base64 -d | timeout -k 5 <S> bash -l"
+    wsl.exe -d nova -u nova --cd /home/nova/workspace --exec bash -c "<WRAPPER>"
 
 ``wsl -- bash -c CMD`` re-parses CMD through the login shell and ate ``$var``
 expansions, and Windows argument quoting mangles embedded double quotes, so the
-command always travels as base64 (UTF-8 first).
+command always travels as base64 (UTF-8 first) and the wrapper has no double quotes.
 
-The time limit is enforced INSIDE the box by coreutils ``timeout`` (SIGTERM, then
-SIGKILL 5s later): killing only the Windows-side wsl.exe client leaves the command
-running in the distro, so a runaway loop would pile up. The host-side subprocess
-timeout is a backstop a little longer than that.
+The wrapper (``_wrapper``), all inside the box:
+- decodes the command into a temp FILE and runs ``bash -l FILE </dev/null``. Phase 131:
+  piping the script into ``bash -l`` made it bash's stdin, so ``head -1`` or ``read``
+  ate the script's next line and that line never ran (measured live).
+- enforces the time limit with coreutils ``timeout`` (SIGTERM, SIGKILL 5s later):
+  killing only the Windows-side wsl.exe client left the command running.
+- keeps only the last ``_CAP_BYTES`` of each stream (``tail -c``) so ``yes`` cannot
+  stream gigabytes into NOVA's process; ``pipefail`` keeps the command's exit code.
+- prints ``_TIMEOUT_MARK`` on stderr only when ``timeout`` really fired (exit 124/137
+  AND the limit elapsed), so a command that itself exits 124 is not called a timeout.
 
 Every OS touch sits behind ``_default_runner`` so tests inject a fake and never need
 a real WSL (conftest fails any test that reaches the real one).
@@ -32,6 +38,7 @@ from __future__ import annotations
 
 import base64
 import os
+import re
 import subprocess
 from typing import Any, Callable
 
@@ -47,8 +54,10 @@ MAX_TIMEOUT_S = 300
 DEFAULT_TIMEOUT_S = 60
 MAX_OUTPUT_CHARS = 8000
 KILL_GRACE_S = 5  # timeout -k: SIGKILL this long after SIGTERM
-HOST_BACKSTOP_S = 10  # host-side wait beyond the in-box limit
-_TIMEOUT_EXIT_CODES = (124, 137)  # coreutils timeout: TERM-ed / KILL-ed
+HOST_BACKSTOP_S = 30  # host-side wait beyond the in-box limit (covers a WSL cold start)
+_CAP_BYTES = 32000  # per stream, kept inside the box; MAX_OUTPUT_CHARS trims after decoding
+_TIMEOUT_MARK = "__NOVA_SANDBOX_TIMEOUT__"
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
 _WSL = "wsl.exe"
 _NOT_SET_UP = "My sandbox isn't set up yet. Run D:\\wsl\\setup_nova_box.ps1 and try again."
@@ -75,23 +84,20 @@ def _env() -> dict[str, str]:
 
 
 def _decode(data: Any) -> str:
-    if data is None:
-        return ""
-    if isinstance(data, str):
-        return data
-    return bytes(data).decode("utf-8", errors="replace")
-
-
-def _decode_listing(data: Any) -> str:
-    """``wsl --list`` is UTF-16LE on some builds: strip NULs and BOMs, then decode."""
+    """UTF-8, except wsl.exe's OWN messages, which are UTF-16LE when it ignores
+    WSL_UTF8 (a NUL in the bytes gives that away; a Linux program almost never
+    prints NULs)."""
     if data is None:
         return ""
     if isinstance(data, str):
         return data.replace("\x00", "").replace("\ufeff", "")
     raw = bytes(data)
-    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
-        raw = raw[2:]
-    return raw.replace(b"\x00", b"").decode("utf-8", errors="replace").replace("\ufeff", "")
+    if raw.startswith(b"\xff\xfe") or b"\x00" in raw:
+        return raw.decode("utf-16-le", errors="replace").replace("\ufeff", "")
+    return raw.decode("utf-8", errors="replace")
+
+
+_decode_listing = _decode  # ``wsl --list`` is UTF-16LE on some builds
 
 
 def _tail(text: str) -> tuple[str, bool]:
@@ -103,14 +109,28 @@ def _tail(text: str) -> tuple[str, bool]:
 def clamp_timeout(timeout_s: Any) -> int:
     try:
         value = int(timeout_s)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # OverflowError: JSON Infinity
         value = DEFAULT_TIMEOUT_S
     return max(MIN_TIMEOUT_S, min(value, MAX_TIMEOUT_S))
 
 
+def _wrapper(encoded: str, seconds: int) -> str:
+    """The in-box script (see the module docstring). No double quotes on purpose."""
+    s = clamp_timeout(seconds)
+    return (
+        "f=$(mktemp); e=$(mktemp); trap 'rm -f $f $e' EXIT; "
+        f"echo {encoded} | base64 -d > $f; "
+        "set -o pipefail; s=$SECONDS; "
+        f"timeout -k {KILL_GRACE_S} {s} bash -l $f </dev/null 2> >(tail -c {_CAP_BYTES} > $e) | tail -c {_CAP_BYTES}; "
+        "rc=$?; wait; cat $e >&2; "
+        f"if [ $rc -eq 124 -o $rc -eq 137 ] && [ $((SECONDS-s)) -ge {s} ]; then echo {_TIMEOUT_MARK} >&2; fi; "
+        "exit $rc"
+    )
+
+
 def build_argv(command: str, seconds: int = DEFAULT_TIMEOUT_S) -> list[str]:
     """The exact argv. The command is base64 so no quoting layer can touch it; the
-    time limit is enforced by ``timeout`` inside the box."""
+    wrapper runs it from a file with stdin closed, bounded in time and output."""
     encoded = base64.b64encode(command.encode("utf-8")).decode("ascii")
     return [
         _WSL,
@@ -118,8 +138,14 @@ def build_argv(command: str, seconds: int = DEFAULT_TIMEOUT_S) -> list[str]:
         "-u", SANDBOX_USER,
         "--cd", SANDBOX_CWD,
         "--exec", "bash", "-c",
-        f"echo {encoded} | base64 -d | timeout -k {KILL_GRACE_S} {clamp_timeout(seconds)} bash -l",
+        _wrapper(encoded, seconds),
     ]
+
+
+def decode_command(argv: list[str]) -> str | None:
+    """Inverse of build_argv's encoding (tests and the verifier use it)."""
+    match = re.search(r"echo ([A-Za-z0-9+/=]+) \| base64 -d > \$f", argv[-1] if argv else "")
+    return base64.b64decode(match.group(1)).decode("utf-8") if match else None
 
 
 def _result(ok: bool, **extra: Any) -> dict[str, Any]:
@@ -186,10 +212,17 @@ def run_in_sandbox(command: str, timeout_s: int = DEFAULT_TIMEOUT_S, runner: Run
     except OSError as exc:
         return _result(False, error=f"My sandbox could not start ({type(exc).__name__}: {exc}).")
 
-    out, cut_out = _tail(_decode(getattr(completed, "stdout", None)))
-    err, cut_err = _tail(_decode(getattr(completed, "stderr", None)))
+    raw_out = getattr(completed, "stdout", None) or b""
+    raw_err = getattr(completed, "stderr", None) or b""
+    out, cut_out = _tail(_decode(raw_out))
+    err, cut_err = _tail(_decode(raw_err))
+    # The box keeps only the last _CAP_BYTES of a stream, so a full one was cut there.
+    cut_out = cut_out or len(raw_out) >= _CAP_BYTES
+    cut_err = cut_err or len(raw_err) >= _CAP_BYTES
+    timed_out = _TIMEOUT_MARK in err
+    err = err.replace(_TIMEOUT_MARK + "\n", "").replace(_TIMEOUT_MARK, "")
     code = getattr(completed, "returncode", None)
-    if code in _TIMEOUT_EXIT_CODES:
+    if timed_out:
         return _result(
             False,
             error=f"Timed out after {seconds}s in my sandbox.",
@@ -214,15 +247,20 @@ def format_result(command: str, result: dict[str, Any]) -> str:
         return str(result["error"])
     lines = []
     if result.get("timed_out"):
-        lines.append(f"Ran in my sandbox (not on your PC): `{command}` timed out.")
+        lines.append("Ran in my sandbox (not on your PC): it timed out, so I stopped it.")
     else:
         lines.append(f"Ran in my sandbox (not on your PC), exit code {result.get('exit_code')}:")
     body = str(result.get("stdout") or "")
     err = str(result.get("stderr") or "")
     if err:
         body = (body + ("\n" if body and not body.endswith("\n") else "") + "[stderr]\n" + err)
-    body = body.rstrip("\n")
-    lines.append("```\n" + (body if body else "(no output)") + "\n```")
+    # Terminal colour codes and carriage-return progress bars are noise in a chat reply.
+    body = _ANSI.sub("", body).replace("\r\n", "\n")
+    body = "\n".join(line.rsplit("\r", 1)[-1] for line in body.split("\n")).rstrip("\n")
+    # A fence longer than any backtick run in the output, so `cat README.md` can't close it.
+    longest = max((len(run) for run in re.findall(r"`+", body)), default=0)
+    fence = "`" * max(3, longest + 1)
+    lines.append(f"{fence}\n" + (body if body else "(no output)") + f"\n{fence}")
     if result.get("truncated"):
         lines.append(f"(Output was long, so this is only the last {MAX_OUTPUT_CHARS} characters.)")
     return "\n".join(lines)

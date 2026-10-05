@@ -25,6 +25,9 @@ class AgentRunState:
     # auto-authorized on the untrusted content's say-so).
     injection_flagged: bool = False
     tainted_sources: list[str] = field(default_factory=list)
+    # Phase 131: every untrusted-source result seen (web, file, clipboard, screen),
+    # detector hit or not. Provenance, not detection: see runner._PROVENANCE_GATED.
+    untrusted_seen: list[str] = field(default_factory=list)
     # Phase 41: how many times the critic has sent the task back for revision.
     critic_revisions: int = 0
     # Phase 42: confidence of the most recent reflection (for confidence-aware
@@ -101,6 +104,11 @@ class AgentRunState:
         self.injection_flagged = True
         if source_type and source_type not in self.tainted_sources:
             self.tainted_sources.append(source_type)
+
+    def record_untrusted(self, source_type: str) -> None:
+        """Untrusted content entered the task, whether or not a detector fired."""
+        if source_type and source_type not in self.untrusted_seen:
+            self.untrusted_seen.append(source_type)
 
     def failure_budget_exceeded(self, limit: int) -> bool:
         return self.consecutive_failures >= limit

@@ -167,6 +167,17 @@ def redact_for_log(tool: str, args: Any = None, result: Any = None) -> tuple[Any
         text = str(args.get("text") or "")
         if looks_secret_like(text):
             args = {**args, "text": mask(text)}
+    # Phase 131: a sandbox command can carry a token (curl -H "Authorization: ...")
+    # and its output can be a /mnt/share file. Keep the command unless it looks
+    # secret; never keep the output.
+    if tool == "sandbox_run":
+        if isinstance(args, dict) and "command" in args and looks_secret_like(str(args.get("command") or "")):
+            args = {**args, "command": mask(str(args.get("command") or ""))}
+        if isinstance(result, dict):
+            result = {
+                **result,
+                **{key: f"[{len(str(result.get(key) or ''))} characters not logged]" for key in ("stdout", "stderr", "text") if key in result},
+            }
     return args, result
 
 

@@ -160,6 +160,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase128_read_files_clipboard.py",
     "verify_eva_phase129_key_grant.py",
     "verify_eva_phase130_sandbox_terminal.py",
+    "verify_eva_phase131_sandbox_hardening.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -296,6 +297,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase128_read_files_clipboard.py",
     "verify_eva_phase129_key_grant.py",
     "verify_eva_phase130_sandbox_terminal.py",
+    "verify_eva_phase131_sandbox_hardening.py",
     "verify_chrome_execution_skills.py",
 ]
 
@@ -396,6 +398,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase128_read_files_clipboard.py": ("phase128", "files", "clipboard", "taint"),
     "verify_eva_phase129_key_grant.py": ("phase129", "screen", "keys", "grant"),
     "verify_eva_phase130_sandbox_terminal.py": ("phase130", "sandbox", "terminal", "wsl"),
+    "verify_eva_phase131_sandbox_hardening.py": ("phase131", "sandbox", "firewall", "taint"),
     "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 
