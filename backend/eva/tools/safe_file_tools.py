@@ -132,26 +132,63 @@ def _refuse(error: str, message: str, **extra: Any) -> dict[str, Any]:
     return {"ok": False, "error": error, "message": message, **extra}
 
 
+_PDF_MAX_PAGES = 200  # Phase 132: a 5000-page scan with no text must not loop forever
+
+
+class DocumentUnreadable(Exception):
+    """A document that opened but has nothing NOVA can honestly call its text."""
+
+
 def _extract_pdf(target: Path) -> str:
-    """PDF text via pypdf, only if it is already installed. NOT a dependency."""
+    """PDF text via pypdf (a dependency since Phase 132; ImportError still refuses)."""
     from pypdf import PdfReader  # type: ignore[import-not-found]  # ImportError -> caller refuses
 
     reader = PdfReader(str(target))
+    if reader.is_encrypted:
+        try:
+            unlocked = reader.decrypt("")  # many "protected" PDFs only restrict printing
+        except Exception:
+            unlocked = 0
+        if not unlocked:
+            raise DocumentUnreadable("it is password-protected")
+    page_count = len(reader.pages)
     parts: list[str] = []
     total = 0
-    for page in reader.pages:
+    for page in reader.pages[:_PDF_MAX_PAGES]:
         parts.append(page.extract_text() or "")
         total += len(parts[-1])
         if total > READ_MAX_CHARS * 2:
             break
-    return "\n".join(parts)
+    text = "\n".join(parts)
+    if not text.strip():
+        # Scanned pages are pictures: there is no text layer to read.
+        raise DocumentUnreadable(f"its {page_count} page(s) have no text layer, so it is probably scanned images")
+    return text
 
 
 def _extract_docx(target: Path) -> str:
-    """DOCX text via python-docx, only if it is already installed."""
+    """DOCX text via python-docx: body paragraphs AND tables, in document order
+    (Phase 132: tables were skipped, so a table-only memo read as empty)."""
     import docx  # type: ignore[import-not-found]  # ImportError -> caller refuses
+    from docx.table import Table  # type: ignore[import-not-found]
+    from docx.text.paragraph import Paragraph  # type: ignore[import-not-found]
 
-    return "\n".join(paragraph.text for paragraph in docx.Document(str(target)).paragraphs)
+    document = docx.Document(str(target))
+    parts: list[str] = []
+    for block in document.element.body.iterchildren():
+        tag = block.tag.rsplit("}", 1)[-1]
+        if tag == "p":
+            parts.append(Paragraph(block, document).text)
+        elif tag == "tbl":
+            for row in Table(block, document).rows:
+                # A merged cell repeats across the row; keep it once.
+                cells: list[str] = []
+                for cell in row.cells:
+                    value = cell.text.strip()
+                    if not cells or cells[-1] != value:
+                        cells.append(value)
+                parts.append(" | ".join(cells))
+    return "\n".join(parts)
 
 
 def _decode_text(raw: bytes, byte_cut: bool = False) -> str | None:
@@ -234,6 +271,8 @@ def file_read_text(path: str) -> dict[str, Any]:
                 f"I can't read PDFs yet: no PDF text extractor is installed on this machine, so I did not read {target.name}.",
                 path=str(target),
             )
+        except DocumentUnreadable as exc:
+            return _refuse("no_text", f"I opened {target.name} but can't read it: {exc}.", path=str(target))
         except Exception as exc:
             return _refuse("read_failed", f"I couldn't extract text from {target.name}: {type(exc).__name__}.", path=str(target))
         byte_cut = False
@@ -247,6 +286,8 @@ def file_read_text(path: str) -> dict[str, Any]:
                 f"I can't read Word documents yet: no DOCX reader is installed on this machine, so I did not read {target.name}.",
                 path=str(target),
             )
+        except DocumentUnreadable as exc:
+            return _refuse("no_text", f"I opened {target.name} but can't read it: {exc}.", path=str(target))
         except Exception as exc:
             return _refuse("read_failed", f"I couldn't extract text from {target.name}: {type(exc).__name__}.", path=str(target))
         byte_cut = False

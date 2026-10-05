@@ -58,3 +58,10 @@ openwakeword==0.6.0
 pycaw==20260927
 comtypes==1.4.16
 psutil==7.2.2
+
+# Reading documents (Phase 132): file.read_text extracts PDF text (pypdf, pure
+# Python) and Word .docx paragraphs + tables (python-docx, over lxml). Without them
+# file.read_text still refuses honestly ("unsupported_format"), never dumps bytes.
+pypdf==6.19.0
+python-docx==1.2.0
+lxml==6.1.3
