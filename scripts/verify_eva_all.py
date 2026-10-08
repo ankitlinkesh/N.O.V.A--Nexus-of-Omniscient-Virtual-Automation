@@ -10,6 +10,43 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Where an edit made DURING a run can change a verifier's result.
+_WATCHED = (("backend/eva", "*.py"), ("scripts", "*.py"), ("docs", "*.md"), (".", "README.md"))
+
+
+def changed_sources(since: float, root: Path = ROOT) -> list[str]:
+    """Source/doc files modified after `since` (wall-clock seconds), newest first.
+
+    2026-10-05: a full run failed verify_eva_memory_v3 in 2.8s (a normal run takes
+    11-13s); it passed alone 15/15 and after the 38 verifiers before it, twice. A
+    simulated half-written registry.py fails it in 1.9s -- the run overlapped a
+    builder's edits. With no note, that read as a flaky verifier. Now a failure
+    says when the code changed under it."""
+    changed: list[tuple[float, str]] = []
+    for folder, pattern in _WATCHED:
+        base = root / folder
+        files = base.glob(pattern) if folder == "." else base.rglob(pattern)
+        for path in files:
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            if mtime > since:
+                changed.append((mtime, path.relative_to(root).as_posix()))
+    return [name for _, name in sorted(changed, reverse=True)]
+
+
+def _mid_run_note(since: float, root: Path = ROOT) -> str:
+    changed = changed_sources(since, root)
+    if not changed:
+        return ""
+    shown = ", ".join(changed[:5]) + (f" (+{len(changed) - 5} more)" if len(changed) > 5 else "")
+    return (
+        f"NOTE: {len(changed)} source file(s) changed after this suite started: {shown}. "
+        "A failure here may come from a half-written file, not the code under test; rerun before trusting it."
+    )
+
+
 FULL_VERIFIERS = [
     "verify_eva_smoke.py",
     "verify_eva_phase12_stabilization.py",
@@ -469,6 +506,7 @@ def main(argv: list[str] | None = None) -> int:
 
     results: list[tuple[str, int, float]] = []
     skipped = 0
+    suite_started = time.time()
     child_env = os.environ.copy()
     child_env["EVA_VERIFY_SKIP_NESTED"] = "1"
     for script in verifiers:
@@ -490,6 +528,9 @@ def main(argv: list[str] | None = None) -> int:
                 tail = "\n".join(((exc.stdout or "") + (exc.stderr or "")).splitlines()[-40:])
                 if tail:
                     print(tail)
+            note = _mid_run_note(suite_started)
+            if note:
+                print(note)
             results.append((script, 1, elapsed))
             if not args.continue_on_fail:
                 break
@@ -501,6 +542,9 @@ def main(argv: list[str] | None = None) -> int:
             tail = "\n".join((completed.stdout + completed.stderr).splitlines()[-40:])
             if tail:
                 print(tail)
+            note = _mid_run_note(suite_started)
+            if note:
+                print(note)
         results.append((script, completed.returncode, elapsed))
         if completed.returncode != 0 and not args.continue_on_fail:
             break
@@ -515,6 +559,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Failed: {len(failures)}")
     print(f"Skipped: {len(verifiers) - len(results) + skipped}")
     print(f"Elapsed: {sum(item[2] for item in results):.1f}s")
+    # A green run over code that changed mid-way did not test the final code either.
+    note = _mid_run_note(suite_started)
+    if note:
+        print(note)
     if failures:
         print(f"Failed script: {failures[0][0]}")
         print("Suggested next command: rerun the failed verifier directly, then rerun this profile.")
