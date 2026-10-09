@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib
 import json
 import os
-import subprocess
 import sys
 from types import SimpleNamespace
 from pathlib import Path
@@ -47,11 +46,12 @@ def command_text(command: str) -> str:
     return str(result[0])
 
 
+from _nested import run_nested as _shared_run_nested  # noqa: E402
+
+
 def run_verifier(script_name: str) -> tuple[bool, str]:
-    cmd = [sys.executable, str(ROOT / script_name)]
-    proc = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=360)
-    tail = (proc.stdout + proc.stderr)[-2500:]
-    return proc.returncode == 0, tail
+    # Shared runner: UTF-8 output, one level deep, one timeout (scripts/_nested.py).
+    return _shared_run_nested(script_name)
 
 
 def main() -> int:

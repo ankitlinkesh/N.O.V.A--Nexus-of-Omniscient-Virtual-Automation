@@ -108,7 +108,7 @@ def main() -> int:
         agent_status is not None
         and agent_status[1] == "fast-command"
         and "Agentic v2" in agent_status[0]
-        and "whitelisted" in agent_status[0],
+        and "arbitrary shell is blocked" in agent_status[0],
         {"result": agent_status},
     )
 

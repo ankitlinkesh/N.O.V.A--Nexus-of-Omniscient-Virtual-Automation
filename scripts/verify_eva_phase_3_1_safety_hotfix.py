@@ -168,7 +168,13 @@ def main() -> int:
         for path in ([root] if root.is_file() else root.rglob("*.py"))
     )
     failures += emit("no_env_local_read", "open('.env.local" not in source_text and 'open(".env.local' not in source_text)
-    failures += emit("no_package_install_attempt", "pip install" not in source_text and "subprocess" not in source_text)
+    from _source_guard import TOAST_EXCEPTION, no_package_install, no_shell
+
+    # Real imports/calls only. The runtime's single shell use is the reviewed Phase 126
+    # toast, exempted by name with its reason, so any other subprocess still fails.
+    install = no_package_install(source_paths)[0]
+    shell, allowed = no_shell(source_paths, allow=TOAST_EXCEPTION)
+    failures += emit("no_package_install_attempt", not install and not shell, found=[str(f) for f in install + shell], allowed=allowed)
     failures += emit("no_mcp_execution", "run_mcp" not in source_text and "mcp.execute" not in source_text)
     failures += emit("no_playwright_pyautogui_execution", "playwright_driver.open_url" not in source_text and "pyautogui_driver.click" not in source_text)
 

@@ -9,6 +9,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_EXCLUDE_DIRS = ".git,.venv,venv,__pycache__,node_modules,backend/eva/data,data"
 DEFAULT_EXCLUDE_FILES = ".env,*.key,*.pem,*.sqlite3,*.log,llm_usage_state.json,vision_usage_state.json"
+# Secret files are refused whatever EVA_WORKSPACE_EXCLUDE_FILES says. The default
+# used to name only ".env", so .env.local (the file that holds the API keys) and
+# every .env.* backup were listable, searchable and readable by workspace tools.
+_ALWAYS_EXCLUDED_FILES = (".env", ".env.*", "*.key", "*.pem")
+_SECRET_FILE_EXCEPTIONS = {".env.example"}
 
 
 @dataclass(frozen=True)
@@ -95,9 +100,11 @@ def resolve_workspace_path(relative_path: str | None = "") -> Path:
     return target
 
 
-def relative_to_root(path: Path) -> str:
-    config = load_workspace_config()
-    return path.resolve().relative_to(config.root.resolve()).as_posix()
+def relative_to_root(path: Path, config: WorkspaceConfig | None = None) -> str:
+    # ``config`` lets a directory walk load (and resolve) the config once rather
+    # than twice per file, which made listing the repo take ~6s.
+    config = config or load_workspace_config()
+    return path.resolve().relative_to(config.root).as_posix()
 
 
 def _matches_dir_pattern(rel: str, pattern: str) -> bool:
@@ -106,9 +113,9 @@ def _matches_dir_pattern(rel: str, pattern: str) -> bool:
     return normalized == pattern or normalized.startswith(pattern + "/") or fnmatch(normalized, pattern)
 
 
-def is_excluded_dir(path: Path) -> bool:
-    config = load_workspace_config()
-    rel = relative_to_root(path)
+def is_excluded_dir(path: Path, config: WorkspaceConfig | None = None) -> bool:
+    config = config or load_workspace_config()
+    rel = relative_to_root(path, config)
     parts = rel.split("/")
     for pattern in config.exclude_dirs:
         if any(part == pattern for part in parts) or _matches_dir_pattern(rel, pattern):
@@ -116,10 +123,13 @@ def is_excluded_dir(path: Path) -> bool:
     return False
 
 
-def is_excluded_file(path: Path) -> bool:
-    config = load_workspace_config()
-    rel = relative_to_root(path)
+def is_excluded_file(path: Path, config: WorkspaceConfig | None = None) -> bool:
+    config = config or load_workspace_config()
+    rel = relative_to_root(path, config)
     name = path.name
+    lowered = name.lower()
+    if lowered not in _SECRET_FILE_EXCEPTIONS and any(fnmatch(lowered, pattern) for pattern in _ALWAYS_EXCLUDED_FILES):
+        return True
     if any(_matches_dir_pattern(rel, pattern) for pattern in config.exclude_dirs):
         return True
     return any(fnmatch(name, pattern) or fnmatch(rel, pattern) for pattern in config.exclude_files)

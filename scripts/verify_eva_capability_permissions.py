@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -36,17 +35,12 @@ def clean_output(text: str) -> bool:
     return bool(text and not any(marker in text for marker in blocked))
 
 
+from _nested import run_nested as _shared_run_nested  # noqa: E402
+
+
 def run_nested(script_name: str) -> tuple[bool, str]:
-    script = ROOT / "scripts" / script_name
-    result = subprocess.run(
-        [sys.executable, str(script)],
-        cwd=ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        timeout=120,
-    )
-    return result.returncode == 0, result.stdout[-2000:]
+    # Shared runner: UTF-8 output, one level deep, one timeout (scripts/_nested.py).
+    return _shared_run_nested(script_name)
 
 
 def main() -> int:
@@ -235,22 +229,13 @@ def main() -> int:
         ROOT / "backend" / "eva" / "capabilities",
         ROOT / "backend" / "eva" / "resources",
     ]
-    source_text = "\n".join(
-        path.read_text(encoding="utf-8", errors="replace").lower()
-        for root in source_paths
-        for path in root.rglob("*.py")
-    )
-    forbidden_source_patterns = [
-        "open('.env.local",
-        'open(".env.local',
-        "pip install",
-        "sync_playwright",
-        "async_playwright",
-        "pyautogui.",
-        "localstorage",
-        "document.cookie",
-    ]
-    failures += emit("no_forbidden_enablement_added", not any(pattern in source_text for pattern in forbidden_source_patterns))
+    from _source_guard import no_browser_drivers, no_browser_secret_reads, no_env_local_read, no_package_install
+
+    # Real imports/calls only; "no ... cookie, localStorage" in a tool description is not a cookie read.
+    enablement = []
+    for check in (no_env_local_read, no_package_install, no_browser_drivers, no_browser_secret_reads):
+        enablement += check(source_paths)[0]
+    failures += emit("no_forbidden_enablement_added", not enablement, found=[str(f) for f in enablement])
 
     nested_scripts = [
         "verify_eva_capabilities.py",

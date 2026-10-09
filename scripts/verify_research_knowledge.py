@@ -99,17 +99,31 @@ def main() -> int:
     }
     failures += emit("registry_has_research_tools", required_tools.issubset(tools), missing=sorted(required_tools - tools))
 
-    command = maybe_handle_fast_command("research status", registry)
-    failures += emit("fast_command_research_status", command is not None and "topic_count" in command[0] and "API_KEY" not in command[0], response=command)
+    # The fast commands build their store from DEFAULT_RESEARCH_DB, so point it at a
+    # temp file: these cases used to write a "test commands" topic into the user's DB.
+    import backend.eva.research.store as research_store_module
 
-    command = maybe_handle_fast_command("start research topic test commands", registry)
-    failures += emit("fast_command_start_topic", command is not None and "test commands" in command[0].lower(), response=command)
+    original_default = research_store_module.DEFAULT_RESEARCH_DB
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as fast_tmp:
+        research_store_module.DEFAULT_RESEARCH_DB = Path(fast_tmp) / "research_knowledge.sqlite3"
+        try:
+            command = maybe_handle_fast_command("research status", registry)
+            failures += emit(
+                "fast_command_research_status",
+                command is not None and "Research status" in command[0] and "Topics: 0" in command[0] and "API_KEY" not in command[0],
+                response=command,
+            )
 
-    command = maybe_handle_fast_command("save research note test commands: NIM uses one key and many model IDs.", registry)
-    failures += emit("fast_command_save_note", command is not None and "saved" in command[0].lower(), response=command)
+            command = maybe_handle_fast_command("start research topic test commands", registry)
+            failures += emit("fast_command_start_topic", command is not None and "test commands" in command[0].lower(), response=command)
 
-    command = maybe_handle_fast_command("what do we know about test commands", registry)
-    failures += emit("fast_command_recall_topic", command is not None and "test commands" in command[0].lower(), response=command)
+            command = maybe_handle_fast_command("save research note test commands: NIM uses one key and many model IDs.", registry)
+            failures += emit("fast_command_save_note", command is not None and "saved" in command[0].lower(), response=command)
+
+            command = maybe_handle_fast_command("what do we know about test commands", registry)
+            failures += emit("fast_command_recall_topic", command is not None and "test commands" in command[0].lower(), response=command)
+        finally:
+            research_store_module.DEFAULT_RESEARCH_DB = original_default
 
     env_read_guard = ".env" not in (ROOT / "backend" / "eva" / "research" / "store.py").read_text(encoding="utf-8")
     failures += emit("research_store_does_not_read_env", env_read_guard)

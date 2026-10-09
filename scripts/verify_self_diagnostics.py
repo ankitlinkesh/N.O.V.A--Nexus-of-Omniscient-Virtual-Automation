@@ -194,8 +194,17 @@ def main() -> int:
         and safe_provider_error_summary("RESOURCE_EXHAUSTED 429") == "quota/rate limit",
     )
 
+    # Read a fresh limiter state, not the live one: a real NIM timeout minutes earlier
+    # left it cooling_down and failed this case for reasons outside the code.
+    import tempfile
+
+    from backend.eva.llm import rate_limiter
+
     old_nim = os.environ.get("NVIDIA_NIM_API_KEY")
+    old_defaults = rate_limiter.LLMRateLimiter.__init__.__defaults__
+    state_dir = tempfile.mkdtemp(prefix="eva_selfdiag_")
     try:
+        rate_limiter.LLMRateLimiter.__init__.__defaults__ = (Path(state_dir) / "llm_usage_state.json",)
         os.environ["NVIDIA_NIM_API_KEY"] = "configured-placeholder"
         nim_health = get_eva_health_summary(settings.models)["providers"].get("nvidia_nim", {})
         failures += emit(
@@ -204,6 +213,7 @@ def main() -> int:
             nim_health=nim_health,
         )
     finally:
+        rate_limiter.LLMRateLimiter.__init__.__defaults__ = old_defaults
         if old_nim is None:
             os.environ.pop("NVIDIA_NIM_API_KEY", None)
         else:

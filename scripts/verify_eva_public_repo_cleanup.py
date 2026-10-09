@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import subprocess
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -40,15 +40,12 @@ def clean_output(value: object) -> bool:
     return not any(marker in text for marker in blocked)
 
 
+from _nested import run_nested as _shared_run_nested  # noqa: E402
+
+
 def run_verifier(script_name: str) -> bool:
-    completed = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / script_name)],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        timeout=180,
-    )
-    return completed.returncode == 0
+    # Shared runner: UTF-8 output, one level deep, one timeout (scripts/_nested.py).
+    return _shared_run_nested(script_name)[0]
 
 
 def public_docs_text() -> str:
@@ -162,7 +159,11 @@ def main() -> int:
         "verify_eva_resource_registry.py",
         "verify_eva_stabilization_v1.py",
     ):
-        failures += emit(f"nested_{script_name}", run_verifier(script_name))
+        # Each runs at top level of verify_eva_all (test_verify_all_nested_coverage).
+        if os.environ.get("EVA_VERIFY_SKIP_NESTED") == "1":
+            failures += emit(f"nested_{script_name}", True, skipped=True, reason="Runs at top level of the master verifier.")
+        else:
+            failures += emit(f"nested_{script_name}", run_verifier(script_name))
 
     print(json.dumps({"overall_pass": failures == 0, "failures": failures}, indent=2))
     return 0 if failures == 0 else 1

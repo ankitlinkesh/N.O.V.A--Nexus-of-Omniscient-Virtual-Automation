@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -45,15 +44,12 @@ def fast(command: str) -> str:
     return str(result[0]) if result else ""
 
 
+from _nested import run_nested as _shared_run_nested  # noqa: E402
+
+
 def run_verifier(script_name: str) -> bool:
-    completed = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / script_name)],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        timeout=180,
-    )
-    return completed.returncode == 0
+    # Shared runner: UTF-8 output, one level deep, one timeout (scripts/_nested.py).
+    return _shared_run_nested(script_name)[0]
 
 
 def main() -> int:
@@ -199,8 +195,14 @@ def main() -> int:
         for path in ([root] if root.is_file() else root.rglob("*.py"))
     )
     failures += emit("no_env_local_read", "open('.env.local" not in source_text and 'open(".env.local' not in source_text)
-    failures += emit("no_package_install_attempt", "pip install" not in source_text and "subprocess.run" not in source_text)
-    failures += emit("no_network_call_attempt", "requests." not in source_text and "urllib.request" not in source_text and "httpx." not in source_text)
+    from _source_guard import no_network, no_package_install, no_shell
+
+    # Real imports/calls only; the old substring scan matched help text and "ordinary requests." in a comment.
+    present = [root for root in source_roots if root.exists()]
+    install = no_package_install(present)[0] + no_shell(present)[0]
+    failures += emit("no_package_install_attempt", not install, found=[str(f) for f in install])
+    network = no_network(present)[0]
+    failures += emit("no_network_call_attempt", not network, found=[str(f) for f in network])
 
     for script_name in (
         "verify_eva_v2_dry_run.py",
@@ -208,7 +210,11 @@ def main() -> int:
         "verify_eva_research_memory_help.py",
         "verify_eva_stabilization_v1.py",
     ):
-        failures += emit(f"nested_{script_name}", run_verifier(script_name))
+        # Each runs at top level of verify_eva_all (test_verify_all_nested_coverage).
+        if os.environ.get("EVA_VERIFY_SKIP_NESTED") == "1":
+            failures += emit(f"nested_{script_name}", True, skipped=True, reason="Runs at top level of the master verifier.")
+        else:
+            failures += emit(f"nested_{script_name}", run_verifier(script_name))
 
     print(json.dumps({"overall_pass": failures == 0, "failures": failures}, indent=2))
     return 0 if failures == 0 else 1

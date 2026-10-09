@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -40,16 +39,12 @@ def clean(text: str) -> bool:
     return bool(str(text).strip()) and not any(marker in str(text) for marker in blocked)
 
 
+from _nested import run_nested as _shared_run_nested  # noqa: E402
+
+
 def run_nested(script_name: str) -> tuple[bool, str]:
-    result = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / script_name)],
-        cwd=ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        timeout=180,
-    )
-    return result.returncode == 0, result.stdout[-1600:]
+    # Shared runner: UTF-8 output, one level deep, one timeout (scripts/_nested.py).
+    return _shared_run_nested(script_name)
 
 
 def main() -> int:

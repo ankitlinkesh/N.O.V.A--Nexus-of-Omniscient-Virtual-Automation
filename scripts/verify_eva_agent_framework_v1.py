@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,16 +34,12 @@ def clean_output(text: str) -> bool:
     return bool(text and not any(marker in text for marker in blocked))
 
 
+from _nested import run_nested as _shared_run_nested  # noqa: E402
+
+
 def run_nested(script_name: str) -> tuple[bool, str]:
-    result = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / script_name)],
-        cwd=ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        timeout=700,
-    )
-    return result.returncode == 0, result.stdout[-1600:]
+    # Shared runner: UTF-8 output, one level deep, one timeout (scripts/_nested.py).
+    return _shared_run_nested(script_name)
 
 
 def main() -> int:
@@ -205,34 +201,31 @@ def main() -> int:
         )
 
     agent_root = ROOT / "backend" / "eva" / "agents"
-    source_text = "\n".join(path.read_text(encoding="utf-8", errors="replace").lower() for path in agent_root.rglob("*.py"))
-    forbidden = [
-        "from playwright",
-        "import playwright",
-        "sync_playwright",
-        "async_playwright",
-        "import pyautogui",
-        "pyautogui.",
-        "mcp.",
-        "subprocess",
-        "os.system",
-        "popen",
-        "open('.env.local",
-        'open(".env.local',
-        "document.cookie",
-        "localstorage",
-    ]
-    failures += emit("agent_framework_no_forbidden_execution_imports", not any(pattern in source_text for pattern in forbidden))
+    from _source_guard import (
+        BROWSER_DRIVER_MODULES, SHELL_CALLS, SHELL_MODULES, no_browser_secret_reads, no_env_local_read, scan,
+    )
 
-    for script_name in [
+    # Real imports/calls only, not words in prose.
+    found = scan([agent_root], modules=SHELL_MODULES + BROWSER_DRIVER_MODULES + ("mcp",), calls=SHELL_CALLS)[0]
+    found += no_env_local_read([agent_root])[0] + no_browser_secret_reads([agent_root])[0]
+    failures += emit("agent_framework_no_forbidden_execution_imports", not found, found=[str(f) for f in found])
+
+    nested_scripts = [
         "verify_eva_planner_v3_quality.py",
         "verify_eva_planner_v3.py",
         "verify_eva_capability_resource_mapping.py",
         "verify_eva_capability_permissions.py",
         "verify_eva_stabilization_v1.py",
-    ]:
-        ok, output = run_nested(script_name)
-        failures += emit(f"nested_{script_name}", ok, tail=output)
+    ]
+    # Inside verify_eva_all each of these runs at top level (test_verify_all_nested_coverage
+    # proves it), so re-running them here only multiplied the suite time past the timeout.
+    if os.environ.get("EVA_VERIFY_SKIP_NESTED") == "1":
+        for script_name in nested_scripts:
+            failures += emit(f"nested_{script_name}", True, skipped=True, reason="Runs at top level of the master verifier.")
+    else:
+        for script_name in nested_scripts:
+            ok, output = run_nested(script_name)
+            failures += emit(f"nested_{script_name}", ok, tail=output)
 
     print(json.dumps({"overall_pass": failures == 0, "failures": failures}, indent=2))
     return 1 if failures else 0

@@ -145,9 +145,13 @@ def main() -> int:
         for path in ([root] if root.is_file() else root.rglob("*.py"))
     )
     failures += emit("no_env_local_read", "open('.env.local" not in source_text and 'open(\".env.local' not in source_text)
-    failures += emit("no_package_install_attempt", "pip install" not in source_text and "subprocess" not in source_text)
-    network_or_control_patterns = ("import requests", "requests.get", "requests.post", "urllib.request", "httpx.", "sync_playwright", "async_playwright", "pyautogui.")
-    failures += emit("no_network_or_browser_control_attempt", not any(pattern in source_text for pattern in network_or_control_patterns))
+    from _source_guard import no_browser_drivers, no_network, no_package_install, no_shell
+
+    # Real imports/calls only; the old substring scan failed on prose like "no verifier subprocesses".
+    install = no_package_install(source_roots)[0] + no_shell(source_roots)[0]
+    failures += emit("no_package_install_attempt", not install, found=[str(f) for f in install])
+    control = no_network(source_roots)[0] + no_browser_drivers(source_roots)[0]
+    failures += emit("no_network_or_browser_control_attempt", not control, found=[str(f) for f in control])
     failures += emit("normal_chat_v2_not_enabled", "EVA_V2_RUNTIME_ENABLED=true" not in source_text)
 
     print(json.dumps({"overall_pass": failures == 0, "failures": failures}, indent=2))

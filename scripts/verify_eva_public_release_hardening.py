@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -32,15 +31,12 @@ def fast(command: str) -> str:
     return str(result[0]) if result else ""
 
 
+from _nested import run_nested as _shared_run_nested  # noqa: E402
+
+
 def run_verifier(script_name: str) -> bool:
-    completed = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / script_name)],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        timeout=180,
-    )
-    return completed.returncode == 0
+    # Shared runner: UTF-8 output, one level deep, one timeout (scripts/_nested.py).
+    return _shared_run_nested(script_name)[0]
 
 
 def main() -> int:

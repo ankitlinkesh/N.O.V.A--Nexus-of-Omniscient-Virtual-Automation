@@ -13,6 +13,11 @@ if str(ROOT) not in sys.path:
 
 # Intentional fake secret-pattern fixture for redaction tests. Not a real secret.
 
+# The gate case below creates a real pending action; keep it out of the user's ledger.
+import os
+
+os.environ.setdefault("EVA_PENDING_ACTION_LEDGER_PATH", str(Path(tempfile.mkdtemp(prefix="eva_hybrid_")) / "pending_actions.jsonl"))
+
 from backend.eva.agent.action_model import AgentAction, AgentObservation
 from backend.eva.agent.checkpoints import CheckpointStore
 from backend.eva.agent.executor import ToolExecutor
@@ -231,7 +236,8 @@ def main() -> int:
     allowed = executor.execute(PlannedToolCall(tool="screen.wait", args={"seconds": 0.01, "reason": "verifier"}))
     failures += emit(
         "executor_permission_gate_blocks_unconfirmed_tools",
-        denied.requires_confirmation and denied.action == "message.send_via_ui" and allowed.ok,
+        # ``action`` now carries the pending id (act_...); the tool name is ``tool``.
+        denied.requires_confirmation and not denied.ok and denied.tool == "message.send_via_ui" and allowed.ok,
         denied=denied.as_dict(),
         allowed=allowed.as_dict(),
     )

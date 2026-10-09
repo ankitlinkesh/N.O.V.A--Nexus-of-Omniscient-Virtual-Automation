@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -39,16 +38,12 @@ def clean_output(text: str) -> bool:
     return bool(text and not any(marker in text for marker in blocked))
 
 
+from _nested import run_nested as _shared_run_nested  # noqa: E402
+
+
 def run_nested(script_name: str) -> tuple[bool, str]:
-    result = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / script_name)],
-        cwd=ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        timeout=NESTED_TIMEOUT_SECONDS,
-    )
-    return result.returncode == 0, result.stdout[-1600:]
+    # Shared runner: UTF-8 output, one level deep, one timeout (scripts/_nested.py).
+    return _shared_run_nested(script_name)
 
 
 def has_step(plan: Any, *needles: str) -> bool:

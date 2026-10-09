@@ -30,9 +30,12 @@ def main() -> int:
     capability = get_capability("media_music_control")
     failures += emit(
         "media_music_capability_declared",
+        # The capability now names the desktop-verified Spotify tools; what matters is
+        # that every tool it names is real and it covers play, search and media keys.
         capability is not None
-        and "spotify_play_query" in capability.related_tools
-        and "spotify_search" in capability.related_tools
+        and all(tool in by_name for tool in capability.related_tools)
+        and any(tool.startswith("spotify_play") for tool in capability.related_tools)
+        and any(tool.startswith("spotify_search") for tool in capability.related_tools)
         and "media_control" in capability.related_tools,
         capability=capability.__dict__ if capability else None,
     )

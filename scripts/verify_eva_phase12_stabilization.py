@@ -60,9 +60,15 @@ def main() -> int:
         if os.environ.get("EVA_VERIFY_SKIP_NESTED") == "1":
             assert_true(len(verify_all.PROFILES["quick"]) >= 1, "quick profile unexpectedly empty")
         else:
-            quick = subprocess.run([sys.executable, str(ROOT / "scripts" / "verify_eva_all.py"), "--quick"], cwd=str(ROOT), text=True, capture_output=True, timeout=120)
+            # The quick profile grew to ~140 scripts, so re-running all of it here under
+            # 120s could never pass. The master suite runs the whole profile; this proves
+            # the runner end to end on the smoke-tagged slice.
+            quick = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "verify_eva_all.py"), "--quick", "--tag", "smoke"],
+                cwd=str(ROOT), capture_output=True, encoding="utf-8", errors="replace", timeout=300,
+            )
             assert_true(quick.returncode == 0, f"--quick failed: {quick.stdout[-1000:]} {quick.stderr[-1000:]}")
-            assert_true("Profile: quick" in quick.stdout and "Failed: 0" in quick.stdout, "quick summary incomplete")
+            assert_true("Profile: quick" in quick.stdout and "Failed: 0" in quick.stdout and "Ran: 0" not in quick.stdout, "quick summary incomplete")
 
         from backend.eva.core import ux_messages
         from backend.eva.capabilities.permissions import get_capability_permission

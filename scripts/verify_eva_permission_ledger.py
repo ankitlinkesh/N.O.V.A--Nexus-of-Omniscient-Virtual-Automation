@@ -237,20 +237,24 @@ def main() -> int:
         failures += emit("fast_pending_action_detail_command", "Pending action" in fast_detail and _clean(fast_detail), response=fast_detail)
         failures += emit("fast_cancel_command", "cancelled" in fast_cancel.lower() and _clean(fast_cancel), response=fast_cancel)
 
-        source_text = _source(
-            [
-                ROOT / "backend" / "eva" / "permissions",
-                ROOT / "backend" / "eva" / "runtime" / "execution_bridge.py",
-                ROOT / "backend" / "eva" / "runtime" / "execution_policy.py",
-                ROOT / "backend" / "eva" / "core" / "fast_commands.py",
-                ROOT / "backend" / "eva" / "api" / "routes.py",
-            ]
-        )
+        source_paths = [
+            ROOT / "backend" / "eva" / "permissions",
+            ROOT / "backend" / "eva" / "runtime" / "execution_bridge.py",
+            ROOT / "backend" / "eva" / "runtime" / "execution_policy.py",
+            ROOT / "backend" / "eva" / "core" / "fast_commands.py",
+            ROOT / "backend" / "eva" / "api" / "routes.py",
+        ]
+        source_text = _source(source_paths)
         failures += emit("no_raw_dict_repr_outputs", all("{'" not in text for text in (v2_send, v2_delete, whatsapp_reply, fast_status)))
         failures += emit("no_dataclass_repr_outputs", "EvaPendingAction(" not in v2_send + v2_delete + whatsapp_reply + fast_status)
         failures += emit("no_env_local_read", "open('.env.local" not in source_text and 'open(".env.local' not in source_text)
-        failures += emit("no_package_install", "pip install" not in source_text)
-        failures += emit("no_arbitrary_shell_subprocess", "subprocess" not in source_text and "os.system" not in source_text and "shell=true" not in source_text)
+        from _source_guard import no_package_install, no_shell
+
+        # Real imports/calls only; "`pip install uiautomation`" in a help string is not an install.
+        install = no_package_install(source_paths)[0]
+        failures += emit("no_package_install", not install, found=[str(f) for f in install])
+        shell = no_shell(source_paths)[0]
+        failures += emit("no_arbitrary_shell_subprocess", not shell, found=[str(f) for f in shell])
 
     print(json.dumps({"overall_pass": failures == 0, "failures": failures}, indent=2))
     return 1 if failures else 0

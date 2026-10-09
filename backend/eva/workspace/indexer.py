@@ -42,7 +42,9 @@ def _patterns_match(rel: str, patterns: list[str] | None) -> bool:
     return any(fnmatch(rel, pattern) or pattern.lower() in rel.lower() for pattern in patterns)
 
 
-def safe_list_files(path: str | None = "", patterns: list[str] | None = None, limit: int | None = None) -> dict[str, object]:
+def safe_list_files(
+    path: str | None = "", patterns: list[str] | None = None, limit: int | None = None, *, cap: int | None = None
+) -> dict[str, object]:
     try:
         config = assert_workspace_enabled()
         start = resolve_workspace_path(path or "")
@@ -50,23 +52,25 @@ def safe_list_files(path: str | None = "", patterns: list[str] | None = None, li
             raise WorkspaceSafetyError("Folder does not exist.")
         if start.is_file():
             start = start.parent
-        if is_excluded_dir(start):
+        if is_excluded_dir(start, config):
             raise WorkspaceSafetyError("Folder is blocked by Eva workspace safety rules.")
     except WorkspaceSafetyError as exc:
         return {"ok": False, "path": path or "", "error": str(exc), "files": []}
 
-    max_files = min(max(1, int(limit or config.max_files_per_scan)), config.max_files_per_scan)
+    # ``cap`` lets a name-only search see the whole tree; the default stays the config limit.
+    ceiling = max(config.max_files_per_scan, int(cap or 0))
+    max_files = min(max(1, int(limit or ceiling)), ceiling)
     files: list[dict[str, object]] = []
     skipped = 0
     for root, dirs, names in _walk_limited(start):
-        dirs[:] = [name for name in dirs if not is_excluded_dir(Path(root) / name)]
+        dirs[:] = [name for name in dirs if not is_excluded_dir(Path(root) / name, config)]
         for name in names:
             candidate = Path(root) / name
             try:
-                if is_excluded_file(candidate):
+                if is_excluded_file(candidate, config):
                     skipped += 1
                     continue
-                rel = relative_to_root(candidate)
+                rel = relative_to_root(candidate, config)
                 if not _patterns_match(rel, patterns):
                     continue
                 stat = candidate.stat()
@@ -96,6 +100,9 @@ def _walk_limited(start: Path):
     return os.walk(start)
 
 
+_NAME_SCAN_CAP = 5000
+
+
 def search_workspace(query: str, limit: int = 10) -> dict[str, object]:
     config = load_workspace_config()
     if not config.enabled:
@@ -108,18 +115,23 @@ def search_workspace(query: str, limit: int = 10) -> dict[str, object]:
     if not terms:
         terms = [normalized_query.lower()]
 
-    listed = safe_list_files("", limit=config.max_files_per_scan)
+    # File NAMES are matched across the whole tree (cheap); file CONTENTS are read for
+    # at most max_files_per_scan files, name matches first. Listing only the first
+    # max_files_per_scan files in walk order left most of the repo (tools/, workspace/
+    # ...) unsearchable, so "tavily" never found tavily_search.py.
+    listed = safe_list_files("", cap=_NAME_SCAN_CAP)
     if not listed.get("ok"):
         return {"ok": False, "query": normalized_query, "error": listed.get("error") or "list failed", "matches": []}
 
-    matches: list[dict[str, object]] = []
-    for item in listed.get("files", []):
-        rel = str(item.get("path") or "")
-        lower_rel = rel.lower()
-        path_score = sum(4 for term in terms if term in lower_rel)
-        if path_score:
-            matches.append({"path": rel, "line": 1, "snippet": rel, "score": path_score})
+    all_paths = [str(item.get("path") or "") for item in listed.get("files", [])]
+    path_scores = {rel: sum(4 for term in terms if term in rel.lower()) for rel in all_paths}
+    named = [rel for rel in all_paths if path_scores[rel]]
+    named_set = set(named)
+    content_paths = (named + [rel for rel in all_paths if rel not in named_set])[: config.max_files_per_scan]
 
+    matches: list[dict[str, object]] = [{"path": rel, "line": 1, "snippet": rel, "score": path_scores[rel]} for rel in named]
+    for rel in content_paths:
+        path_score = path_scores[rel]
         suffix = Path(rel).suffix.lower()
         if suffix and suffix not in TEXT_EXTENSIONS:
             continue
@@ -143,5 +155,8 @@ def search_workspace(query: str, limit: int = 10) -> dict[str, object]:
         "query": normalized_query,
         "matches": trimmed,
         "count": len(trimmed),
-        "searched_files": len(listed.get("files", [])),
+        "searched_files": len(all_paths),
+        "content_searched_files": len(content_paths),
+        "content_truncated": len(content_paths) < len(all_paths),
+        "truncated": bool(listed.get("truncated")),
     }

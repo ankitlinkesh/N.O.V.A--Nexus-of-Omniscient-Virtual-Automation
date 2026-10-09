@@ -33,7 +33,7 @@ class FakeProvider:
     def available(self) -> bool:
         return self.available_value
 
-    async def complete(self, messages, temperature=0.2, max_tokens=800):
+    async def complete(self, messages, temperature=0.2, max_tokens=800, tools=None):
         type(self).calls.append(f"{self.name}:{self.model}")
         response = self.response
         return LLMResponse(
@@ -212,7 +212,9 @@ async def main() -> int:
     with temporary_env(gemini_env_keys):
         gemini_rpm, gemini_rpd = provider_limits("gemini", FakeGemini.model)
         gemini_tpm, gemini_tpd = provider_token_limits("gemini", FakeGemini.model)
-    passed = gemini_rpm == 4 and gemini_tpm == 200000 and gemini_rpd == 18 and gemini_tpd is None
+    # b1af2c2 replaced the flat 4 RPM / 18 per day cap with Google's real per-model
+    # free tier (gemini-2.5-flash: 10 RPM, 250 per day).
+    passed = gemini_rpm == 10 and gemini_tpm == 200000 and gemini_rpd == 250 and gemini_tpd is None
     failures += 0 if passed else 1
     print_case(
         "gemini_default_caps_match_dashboard",

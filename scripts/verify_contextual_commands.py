@@ -66,6 +66,12 @@ def emit(case: str, passed: bool, **payload: Any) -> int:
     return 0 if passed else 1
 
 
+def _opened_then_verified(calls: list, url: str) -> bool:
+    # The open is followed by a verify_last_action check (honest effects); nothing
+    # else may run, and the open must be the one URL that was asked for.
+    return bool(calls) and calls[0] == ("open_url", {"url": url}) and all(name == "verify_last_action" for name, _ in calls[1:])
+
+
 def main() -> int:
     failures = 0
 
@@ -76,7 +82,7 @@ def main() -> int:
     reply = maybe_handle_fast_command("open first result", tools, context)
     failures += emit(
         "open_first_result",
-        bool(reply and tools.calls[-1] == ("open_url", {"url": "https://github.com/microsoft/autogen"})),
+        bool(reply and _opened_then_verified(tools.calls, "https://github.com/microsoft/autogen")),
         reply=reply,
         calls=tools.calls,
     )
@@ -85,7 +91,7 @@ def main() -> int:
     reply = maybe_handle_fast_command("open the instagram one", tools, context)
     failures += emit(
         "open_instagram_result",
-        bool(reply and tools.calls[-1] == ("open_url", {"url": "https://www.instagram.com/example_ankit_l/"})),
+        bool(reply and _opened_then_verified(tools.calls, "https://www.instagram.com/example_ankit_l/")),
         reply=reply,
         calls=tools.calls,
     )

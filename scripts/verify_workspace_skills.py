@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -59,7 +60,7 @@ def main() -> int:
         matches=tavily_search.get("matches", [])[:5],
     )
 
-    safe_read = safe_read_file("backend/eva/agent/runner.py", max_chars=4000)
+    safe_read = safe_read_file("backend/eva/agent/runner.py", max_chars=200_000)
     failures += emit(
         "read_safe_file",
         bool(safe_read.get("ok")) and "run_agentic_task" in str(safe_read.get("content") or ""),
@@ -73,6 +74,24 @@ def main() -> int:
         not env_read.get("ok") and bool(env_read.get("refused")),
         error=env_read.get("error"),
     )
+
+    # The rule, not the file: these must be excluded whether or not they exist here,
+    # and whatever EVA_WORKSPACE_EXCLUDE_FILES says. Only ".env" used to be blocked,
+    # so .env.local (the API keys) and every .env.* backup were readable.
+    from backend.eva.workspace.config import is_excluded_file, resolve_workspace_path
+
+    original_excludes = os.environ.get("EVA_WORKSPACE_EXCLUDE_FILES")
+    os.environ["EVA_WORKSPACE_EXCLUDE_FILES"] = "*.log"
+    try:
+        secret_names = [".env.local", ".ENV.LOCAL", ".env.local.bak-phase121", ".env.bak-20260901-072033", "deploy.pem", "id.key"]
+        readable = [name for name in secret_names if not is_excluded_file(resolve_workspace_path(name))]
+        example_blocked = is_excluded_file(resolve_workspace_path(".env.example"))
+    finally:
+        if original_excludes is None:
+            os.environ.pop("EVA_WORKSPACE_EXCLUDE_FILES", None)
+        else:
+            os.environ["EVA_WORKSPACE_EXCLUDE_FILES"] = original_excludes
+    failures += emit("secret_env_files_always_refused", not readable and not example_blocked, readable=readable, example_blocked=example_blocked)
 
     traversal = safe_read_file("../../.env")
     failures += emit(

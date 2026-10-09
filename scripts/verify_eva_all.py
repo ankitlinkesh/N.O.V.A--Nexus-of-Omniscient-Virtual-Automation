@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import tempfile
 import sys
 import time
 from pathlib import Path
@@ -204,7 +205,51 @@ FULL_VERIFIERS = [
     "verify_eva_phase135_sandbox_resume_check.py",
     "verify_eva_phase136_sandbox_download_trust.py",
     "verify_eva_phase137_bridge_prompts_and_box_routing.py",
+    "verify_eva_phase138_verifier_coverage.py",
     "verify_chrome_execution_skills.py",
+    # Never-run verifiers brought into the suite (fixed or confirmed green).
+    "verify_agent_runner.py",
+    "verify_agentic_v2.py",
+    "verify_browser_agent_core.py",
+    "verify_capability_routing.py",
+    "verify_code_intelligence.py",
+    "verify_desktop_agent_core.py",
+    "verify_eva_authority_natural_router.py",
+    "verify_eva_code_index_v2.py",
+    "verify_eva_research_memory_context.py",
+    "verify_eva_research_memory_help.py",
+    "verify_eva_research_memory_io.py",
+    "verify_eva_research_memory_quality.py",
+    "verify_eva_research_memory_retrieval.py",
+    "verify_eva_research_memory_v2.py",
+    "verify_eva_research_memory_vectors.py",
+    "verify_eva_v2_dry_run.py",
+    "verify_eva_v2_readonly_delegation.py",
+    "verify_eva_v2_safe_execution_bridge.py",
+    "verify_llm_router.py",
+    "verify_operator_commands.py",
+    "verify_planner.py",
+    "verify_self_diagnostics.py",
+    "verify_contextual_commands.py",
+    "verify_eva_capabilities.py",
+    "verify_eva_capability_permissions.py",
+    "verify_eva_agent_framework_v1.py",
+    "verify_eva_permission_ledger.py",
+    "verify_eva_phase_3_1_safety_hotfix.py",
+    "verify_eva_planner_v3.py",
+    "verify_eva_public_release.py",
+    "verify_eva_public_release_hardening.py",
+    "verify_eva_public_repo_cleanup.py",
+    "verify_eva_research_memory_ranking.py",
+    "verify_eva_resource_registry.py",
+    "verify_fast_responses.py",
+    "verify_hybrid_local_agent_mode.py",
+    "verify_rate_limits.py",
+    "verify_research_knowledge.py",
+    "verify_tool_intelligence.py",
+    "verify_workspace_skills.py",
+    "verify_spotify_skill.py",
+    "verify_screen_vision.py",
 ]
 
 QUICK_VERIFIERS = [
@@ -347,10 +392,66 @@ QUICK_VERIFIERS = [
     "verify_eva_phase135_sandbox_resume_check.py",
     "verify_eva_phase136_sandbox_download_trust.py",
     "verify_eva_phase137_bridge_prompts_and_box_routing.py",
+    "verify_eva_phase138_verifier_coverage.py",
     "verify_chrome_execution_skills.py",
+    # Never-run verifiers brought into the suite (fixed or confirmed green).
+    "verify_agent_runner.py",
+    "verify_agentic_v2.py",
+    "verify_browser_agent_core.py",
+    "verify_capability_routing.py",
+    "verify_code_intelligence.py",
+    "verify_desktop_agent_core.py",
+    "verify_eva_authority_natural_router.py",
+    "verify_eva_code_index_v2.py",
+    "verify_eva_research_memory_context.py",
+    "verify_eva_research_memory_help.py",
+    "verify_eva_research_memory_io.py",
+    "verify_eva_research_memory_quality.py",
+    "verify_eva_research_memory_retrieval.py",
+    "verify_eva_research_memory_v2.py",
+    "verify_eva_research_memory_vectors.py",
+    "verify_eva_v2_dry_run.py",
+    "verify_eva_v2_readonly_delegation.py",
+    "verify_eva_v2_safe_execution_bridge.py",
+    "verify_llm_router.py",
+    "verify_operator_commands.py",
+    "verify_planner.py",
+    "verify_self_diagnostics.py",
+    "verify_contextual_commands.py",
+    "verify_eva_capabilities.py",
+    "verify_eva_capability_permissions.py",
+    "verify_eva_agent_framework_v1.py",
+    "verify_eva_permission_ledger.py",
+    "verify_eva_phase_3_1_safety_hotfix.py",
+    "verify_eva_planner_v3.py",
+    "verify_eva_public_release.py",
+    "verify_eva_public_release_hardening.py",
+    "verify_eva_public_repo_cleanup.py",
+    "verify_eva_research_memory_ranking.py",
+    "verify_eva_resource_registry.py",
+    "verify_fast_responses.py",
+    "verify_hybrid_local_agent_mode.py",
+    "verify_rate_limits.py",
+    "verify_research_knowledge.py",
+    "verify_tool_intelligence.py",
+    "verify_workspace_skills.py",
+    "verify_spotify_skill.py",
+    "verify_screen_vision.py",
 ]
 
 VERIFIERS = FULL_VERIFIERS
+
+# Verifier scripts on disk that deliberately do not run in the suite, each with its
+# reason. test_verify_all_nested_coverage fails on any script that is neither
+# registered above nor listed here, so a new verifier cannot silently go unrun again.
+NOT_IN_SUITE = {
+    "verify_ui_redesign.py": "retired: asserts the pre-redesign page (video background, command deck) that the UI no longer has",
+    "verify_stitch_ui_merge.py": "retired: asserts the Stitch-era page markup that later UI phases replaced",
+    "verify_nvidia_nim_provider.py": "retired: pins NIM model ids that now return 410; NIM is covered by phases 48, 92 and 121",
+    "verify_visual_desktop_control.py": "excluded: drives the real click path expecting a refusal, so a regression would click the live desktop",
+    "verify_eva_v2_runtime_skeleton.py": "excluded: calls the real pyautogui driver expecting a refusal, so a regression would click the live desktop",
+    "verify_tavily_search.py": "excluded: makes a real Tavily web API call (network, spends quota)",
+}
 PROFILES = {
     "quick": QUICK_VERIFIERS,
     "full": FULL_VERIFIERS,
@@ -454,6 +555,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase135_sandbox_resume_check.py": ("phase135", "sandbox", "resume", "check"),
     "verify_eva_phase136_sandbox_download_trust.py": ("phase136", "sandbox", "taint", "provenance"),
     "verify_eva_phase137_bridge_prompts_and_box_routing.py": ("phase137", "sandbox", "approval", "routing"),
+    "verify_eva_phase138_verifier_coverage.py": ("phase138", "verifiers", "coverage", "workspace", "secrets"),
     "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 
@@ -515,6 +617,10 @@ def main(argv: list[str] | None = None) -> int:
     suite_started = time.time()
     child_env = os.environ.copy()
     child_env["EVA_VERIFY_SKIP_NESTED"] = "1"
+    # A verifier that trips a gate creates a real pending action; keep those out of
+    # the user's approval ledger unless the verifier chose its own path.
+    child_env.setdefault("EVA_PENDING_ACTION_LEDGER_PATH", str(Path(tempfile.mkdtemp(prefix="eva_verify_all_")) / "pending_actions.jsonl"))
+    nested_skipped = 0
     for script in verifiers:
         path = ROOT / "scripts" / script
         started = time.perf_counter()
@@ -551,6 +657,7 @@ def main(argv: list[str] | None = None) -> int:
             note = _mid_run_note(suite_started)
             if note:
                 print(note)
+        nested_skipped += completed.stdout.count('"skipped": true')
         results.append((script, completed.returncode, elapsed))
         if completed.returncode != 0 and not args.continue_on_fail:
             break
@@ -565,6 +672,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Failed: {len(failures)}")
     print(f"Skipped: {len(verifiers) - len(results) + skipped}")
     print(f"Elapsed: {sum(item[2] for item in results):.1f}s")
+    # Not passes: each skipped nested check is a script that also runs at top level here.
+    print(f"Nested checks skipped (each runs at top level): {nested_skipped}")
     # A green run over code that changed mid-way did not test the final code either.
     note = _mid_run_note(suite_started)
     if note:

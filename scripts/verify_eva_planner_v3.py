@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -39,16 +38,12 @@ def clean_output(text: str) -> bool:
     return bool(text and not any(marker in text for marker in blocked))
 
 
+from _nested import run_nested as _shared_run_nested  # noqa: E402
+
+
 def run_nested(script_name: str) -> tuple[bool, str]:
-    result = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / script_name)],
-        cwd=ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        timeout=NESTED_TIMEOUT_SECONDS,
-    )
-    return result.returncode == 0, result.stdout[-1600:]
+    # Shared runner: UTF-8 output, one level deep, one timeout (scripts/_nested.py).
+    return _shared_run_nested(script_name)
 
 
 def main() -> int:
@@ -181,24 +176,14 @@ def main() -> int:
         )
 
     planner_root = ROOT / "backend" / "eva" / "planner"
-    source_text = "\n".join(path.read_text(encoding="utf-8", errors="replace").lower() for path in planner_root.rglob("*.py"))
-    forbidden = [
-        "from playwright",
-        "import playwright",
-        "sync_playwright",
-        "async_playwright",
-        "import pyautogui",
-        "pyautogui.",
-        "mcp.",
-        "subprocess",
-        "os.system",
-        "popen",
-        "open('.env.local",
-        'open(".env.local',
-        "document.cookie",
-        "localstorage",
-    ]
-    failures += emit("planner_no_forbidden_execution_imports", not any(pattern in source_text for pattern in forbidden))
+    from _source_guard import (
+        BROWSER_DRIVER_MODULES, SHELL_CALLS, SHELL_MODULES, no_browser_secret_reads, no_env_local_read, scan,
+    )
+
+    # Real imports/calls only; the old substring scan matched "ai_os.system_map" as os.system.
+    found = scan([planner_root], modules=SHELL_MODULES + BROWSER_DRIVER_MODULES + ("mcp",), calls=SHELL_CALLS)[0]
+    found += no_env_local_read([planner_root])[0] + no_browser_secret_reads([planner_root])[0]
+    failures += emit("planner_no_forbidden_execution_imports", not found, found=[str(f) for f in found])
 
     nested_scripts = [
         "verify_eva_capability_resource_mapping.py",

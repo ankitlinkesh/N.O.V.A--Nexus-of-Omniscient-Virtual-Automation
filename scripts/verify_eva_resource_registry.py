@@ -191,8 +191,13 @@ def main() -> int:
         for path in ([root] if root.is_file() else root.rglob("*.py"))
     )
     failures += emit("no_env_local_read", "open('.env.local" not in source_text and 'open(".env.local' not in source_text)
-    failures += emit("no_package_install_attempt", "pip install" not in source_text and "subprocess" not in source_text)
-    failures += emit("no_network_call_attempt", "requests." not in source_text and "urllib.request" not in source_text and "httpx." not in source_text)
+    from _source_guard import no_network, no_package_install, no_shell
+
+    # Real imports/calls only; the old substring scan matched help text and "ordinary requests." in a comment.
+    install = no_package_install(source_roots)[0] + no_shell(source_roots)[0]
+    failures += emit("no_package_install_attempt", not install, found=[str(f) for f in install])
+    network = no_network(source_roots)[0]
+    failures += emit("no_network_call_attempt", not network, found=[str(f) for f in network])
 
     print(json.dumps({"overall_pass": failures == 0, "failures": failures}, indent=2))
     return 1 if failures else 0
