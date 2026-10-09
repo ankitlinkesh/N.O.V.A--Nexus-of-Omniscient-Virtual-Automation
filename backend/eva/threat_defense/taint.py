@@ -44,6 +44,9 @@ UNTRUSTED_SOURCE_TYPES = frozenset(
         "clipboard",
         "retrieved_context",
         "memory",
+        # Phase 136: output of a sandbox command that fetched from the network
+        # (curl, wget, git clone, pip install, a URL...). Plain sandbox output is not.
+        "sandbox_download",
     }
 )
 

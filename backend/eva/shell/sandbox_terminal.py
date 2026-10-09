@@ -241,6 +241,31 @@ def run_in_sandbox(command: str, timeout_s: int = DEFAULT_TIMEOUT_S, runner: Run
     )
 
 
+# Phase 136 (ECC security review): a command that fetches from the network brings
+# OUTSIDE content into the task, so its output counts like a web page and the next
+# sandbox command asks first (runner._PROVENANCE_GATED). Plain box work (ls, python,
+# building files) stays autonomous. Whole words, and deliberately generous: a false
+# positive costs one approval, a miss lets a downloaded page steer the box.
+# Limit: a script that downloads internally (`python fetch.py`) is invisible here.
+_FETCH_COMMAND = re.compile(
+    r"(?:^|[\s;&|(`$])(?:sudo\s+)?(?:"
+    r"curl|wget|aria2c|lynx|links|w3m|nc|ncat|netcat|telnet|ssh|scp|sftp|rsync|ftp"
+    r"|git\s+(?:clone|pull|fetch|submodule)"
+    r"|(?:pip3?|python3?\s+-m\s+pip|uv\s+pip|pipx)\s+(?:install|download)"
+    r"|(?:npm|pnpm|yarn|bun)\s+(?:install|i|add|ci)|npx"
+    r"|apt(?:-get)?\s+(?:install|download|update)"
+    r")(?=$|[\s;&|)`])",
+    re.I,
+)
+_FETCH_HINTS = re.compile(r"https?://|ftp://|\b(?:urllib|requests|httpx|aiohttp|http\.client|socket)\b", re.I)
+
+
+def fetches_external(command: str) -> bool:
+    """True when the command visibly fetches from the network."""
+    text = str(command or "")
+    return bool(_FETCH_COMMAND.search(text) or _FETCH_HINTS.search(text))
+
+
 def format_result(command: str, result: dict[str, Any]) -> str:
     """Reply text: says it ran in NOVA's sandbox, shows exit code and output."""
     if result.get("error") and result.get("exit_code") is None and not result.get("stdout") and not result.get("stderr"):

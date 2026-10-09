@@ -50,6 +50,7 @@ from ..screen.key_grant import (
     user_named_keys,
 )
 from ..screen.target_app import open_target_app_scope
+from ..shell.sandbox_terminal import fetches_external
 from ..shell.sandbox_focus import (
     SANDBOX_FOCUS_HIDDEN,
     open_sandbox_focus,
@@ -176,6 +177,14 @@ _PRIVILEGED_WHEN_TAINTED = frozenset({"clipboard.write", "sandbox_run"})
 # Phase 131: tools that ask once the task has READ any untrusted content, even
 # when no detector fired (provenance, not detection).
 _PROVENANCE_GATED = frozenset({"sandbox_run"})
+# How the provenance-gate message names a source (the raw label otherwise).
+_SOURCE_WORDS = {
+    "sandbox_download": "something a command downloaded in my sandbox",
+    "file_content": "a file",
+    "web_result": "a web page",
+    "clipboard": "the clipboard",
+    "screen_ocr": "the screen",
+}
 
 
 def _logged_args(tool: str, args: Any) -> Any:
@@ -639,6 +648,12 @@ def _process_executed_call(
     # content carrying injection markers, fence it as data, flag the task
     # context, and record the threat so a later privileged step escalates.
     source_type = source_type_for_tool(call.tool)
+    # Phase 136: a sandbox command that fetched from the network brought outside
+    # content in, so the next sandbox command asks first (_PROVENANCE_GATED). A
+    # non-zero exit still counts: the executor step is ok (the tool ran), so a curl
+    # that errors after printing part of a page is recorded below like any other.
+    if call.tool == "sandbox_run" and fetches_external(str((call.args or {}).get("command") or "")):
+        source_type = "sandbox_download"
     if result.ok and result.result is not None:
         if is_untrusted(source_type):
             state.record_untrusted(source_type)
@@ -1068,7 +1083,7 @@ async def _run_step(
             )
         else:
             warning = (
-                f"I read outside content in this task ({', '.join(state.untrusted_seen)}), so I won't "
+                f"I read outside content in this task ({', '.join(_SOURCE_WORDS.get(s, s) for s in state.untrusted_seen)}), so I won't "
                 f"run `{call.tool}` on my own: content I read can suggest commands but cannot "
                 f"authorize them. Confirm explicitly if you want me to run this."
             )
