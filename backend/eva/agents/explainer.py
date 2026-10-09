@@ -41,6 +41,7 @@ accurate, deterministic description of exactly what will run.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import PureWindowsPath
 
 # Plain-language meaning of each declared action type. Source of truth is
 # security/action_types.py; this is only the wording shown to a person.
@@ -160,6 +161,27 @@ def explain_action(
             what += " THIS CALL turns Wi-Fi on."
         elif kind == "bluetooth":
             what += f" THIS CALL turns Bluetooth {state or 'on/off'}; connected Bluetooth devices will disconnect if it goes off."
+    # Phase 137: the bridge prompts showed only the raw call and the tool's generic
+    # description. Name the file and where it goes. Derived from the args alone (no
+    # disk access), so a taken name is described as a possibility, not looked up.
+    if tool == "share.to_box" and isinstance(args, dict):
+        src = PureWindowsPath(str(args.get("path") or ""))
+        name = src.name or "the file"
+        where = f"your {src.parent.name} folder" if src.parent.name else "your folders"
+        what += (
+            f" THIS CALL copies `{name}` from {where} into NOVA's sandbox share (D:\\nova-share), where his"
+            f" Linux box sees it as /mnt/share/{name} (or a numbered name like `{PureWindowsPath(name).stem} (2)` if"
+            f" that one is taken). The box has internet access, so approve it only if you are fine with NOVA having"
+            f" this file. Your original stays where it is."
+        )
+    if tool == "share.from_box" and isinstance(args, dict):
+        name = PureWindowsPath(str(args.get("name") or "").replace("/", "\\")).name or "the file"
+        folder = str(args.get("folder") or "Downloads").strip() or "Downloads"
+        what += (
+            f" THIS CALL copies `{name}` from NOVA's sandbox share into your {folder.capitalize()} folder (as a numbered"
+            f" name if that one is taken; nothing is overwritten). The file was made inside his box, so open it with"
+            f" the same care as a download."
+        )
 
     return ActionExplanation(
         tool=tool,

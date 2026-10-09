@@ -272,7 +272,9 @@ _SANDBOX_REQUEST = re.compile(
     # sandbox"). Without them the request missed the agent loop, so the single-turn
     # planner handled it and an approved copy never resumed to the next step.
     r"\b(?:in|into|to|from|on|inside|using|use|via|with|through)\s+(?:your|nova'?s)\s+(?:own\s+)?"
-    r"(?:sandbox|terminal|linux\s+(?:box|terminal|shell)|box)\b"
+    # Phase 137: a bare "box" followed by "of" ("add it to your box of tools") is a
+    # container, not NOVA's box. Only the bare noun: "your sandbox of course" still counts.
+    r"(?:sandbox|terminal|linux\s+(?:box|terminal|shell)|box(?!\s+of\b))\b"
 )
 
 
