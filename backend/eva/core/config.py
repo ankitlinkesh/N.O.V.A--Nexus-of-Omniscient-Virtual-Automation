@@ -46,6 +46,35 @@ class Settings:
     features: FeatureSettings
 
 
+# Flags that let NOVA act on the real machine. .env.local overrides the process
+# environment (it must beat stale shell exports), which also meant nothing could
+# force these OFF from outside: a verifier run with EVA_ENABLE_REAL_INPUT=0 still got
+# real input from the operator's .env.local. A process that explicitly turns one of
+# these off now wins -- only in the off direction, so it can only add friction.
+CAPABILITY_FLAGS = (
+    "EVA_ENABLE_REAL_INPUT",
+    "EVA_GUI_GROUNDING_ENABLED",
+    "EVA_MCP_ENABLED",
+    "EVA_V2_PLAYWRIGHT_ENABLED",
+    "EVA_V2_PYAUTOGUI_ENABLED",
+    "EVA_V2_RUNTIME_ENABLED",
+    "EVA_VOICE_ENABLED",
+    "EVA_VOICE_INPUT_ENABLED",
+    "EVA_PERCEPTION_ENABLED",
+    "EVA_PROACTIVITY_ENABLED",
+    "EVA_BACKGROUND_WORKER_ENABLED",
+    "EVA_DURABLE_QUEUE_ENABLED",
+    "EVA_SELF_IMPROVEMENT_ENABLED",
+)
+_EXPLICIT_OFF = {"0", "false", "no", "off"}
+# Captured once, from the environment this process was started with.
+_PROCESS_DENIED = frozenset(flag for flag in CAPABILITY_FLAGS if os.environ.get(flag, "").strip().lower() in _EXPLICIT_OFF)
+
+
+def process_denied_flags() -> frozenset[str]:
+    return _PROCESS_DENIED
+
+
 def load_local_env(path: Path, *, override: bool = False) -> None:
     if not path.exists():
         return
@@ -56,6 +85,8 @@ def load_local_env(path: Path, *, override: bool = False) -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
+        if key in _PROCESS_DENIED and value.strip().lower() not in _EXPLICIT_OFF:
+            continue  # the launching process turned this capability off; a file cannot turn it back on
         if key and (override or key not in os.environ):
             os.environ[key] = value
 

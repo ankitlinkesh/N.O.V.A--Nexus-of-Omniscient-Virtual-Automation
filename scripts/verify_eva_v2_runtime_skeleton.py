@@ -214,7 +214,16 @@ def main() -> int:
         for path in root.rglob("*.py")
     )
     failures += emit("no_env_local_read", ".env.local" not in source_text)
-    failures += emit("no_arbitrary_shell_added", "shell=true" not in source_text and "invoke-expression" not in source_text and "subprocess." not in source_text)
+    from _source_guard import TOAST_EXCEPTION, no_shell
+
+    # Real imports/calls only; the runtime's one reviewed shell use is the Phase 126 toast.
+    shell, allowed = no_shell([root for root in source_paths if root.exists()], allow=TOAST_EXCEPTION)
+    failures += emit(
+        "no_arbitrary_shell_added",
+        not shell and "invoke-expression" not in source_text,
+        found=[str(f) for f in shell],
+        allowed=allowed,
+    )
 
     disabled_run = run_eva_v2_request("open ChatGPT on Chrome")
     failures += emit(

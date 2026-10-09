@@ -220,6 +220,9 @@ FULL_VERIFIERS = [
     "verify_eva_phase137_bridge_prompts_and_box_routing.py",
     "verify_eva_phase138_verifier_coverage.py",
     "verify_eva_phase139_data_isolation.py",
+    "verify_visual_desktop_control.py",
+    "verify_eva_v2_runtime_skeleton.py",
+    "verify_eva_phase140_capability_off_wins.py",
     "verify_chrome_execution_skills.py",
     # Never-run verifiers brought into the suite (fixed or confirmed green).
     "verify_agent_runner.py",
@@ -408,6 +411,9 @@ QUICK_VERIFIERS = [
     "verify_eva_phase137_bridge_prompts_and_box_routing.py",
     "verify_eva_phase138_verifier_coverage.py",
     "verify_eva_phase139_data_isolation.py",
+    "verify_visual_desktop_control.py",
+    "verify_eva_v2_runtime_skeleton.py",
+    "verify_eva_phase140_capability_off_wins.py",
     "verify_chrome_execution_skills.py",
     # Never-run verifiers brought into the suite (fixed or confirmed green).
     "verify_agent_runner.py",
@@ -463,8 +469,6 @@ NOT_IN_SUITE = {
     "verify_ui_redesign.py": "retired: asserts the pre-redesign page (video background, command deck) that the UI no longer has",
     "verify_stitch_ui_merge.py": "retired: asserts the Stitch-era page markup that later UI phases replaced",
     "verify_nvidia_nim_provider.py": "retired: pins NIM model ids that now return 410; NIM is covered by phases 48, 92 and 121",
-    "verify_visual_desktop_control.py": "excluded: drives the real click path expecting a refusal, so a regression would click the live desktop",
-    "verify_eva_v2_runtime_skeleton.py": "excluded: calls the real pyautogui driver expecting a refusal, so a regression would click the live desktop",
     "verify_tavily_search.py": "excluded: makes a real Tavily web API call (network, spends quota)",
 }
 PROFILES = {
@@ -572,6 +576,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase137_bridge_prompts_and_box_routing.py": ("phase137", "sandbox", "approval", "routing"),
     "verify_eva_phase138_verifier_coverage.py": ("phase138", "verifiers", "coverage", "workspace", "secrets"),
     "verify_eva_phase139_data_isolation.py": ("phase139", "verifiers", "data", "isolation"),
+    "verify_eva_phase140_capability_off_wins.py": ("phase140", "config", "capabilities", "safety"),
     "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 
@@ -639,6 +644,15 @@ def main(argv: list[str] | None = None) -> int:
     # Every store resolves through backend.eva.core.data_paths, so one temp root keeps
     # verifiers out of the user's chat memory, beliefs, traces and usage counters.
     child_env.setdefault("EVA_DATA_DIR", tempfile.mkdtemp(prefix="eva_verify_all_data_"))
+    # Run against the shipped defaults, not the operator's .env.local, which turns on
+    # real input, pyautogui, MCP and voice: a refusal regression in any verifier could
+    # otherwise act on the live desktop. An explicit "0" from the process beats
+    # .env.local (core/config.py); a verifier that needs a capability opts in itself.
+    sys.path.insert(0, str(ROOT))
+    from backend.eva.core.config import CAPABILITY_FLAGS
+
+    for flag in CAPABILITY_FLAGS:
+        child_env[flag] = "0"
     live_before = _live_snapshot()
     nested_skipped = 0
     for script in verifiers:
