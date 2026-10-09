@@ -8,6 +8,7 @@ from typing import Any
 from ..privacy.redaction import redact_secrets
 from ..observability.traces import log_tool_call
 from .state import EvaRuntimeState
+from ..core.data_paths import data_path
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -515,7 +516,7 @@ def _trace_research_memory(state: EvaRuntimeState, event: str, args: dict[str, o
 
 
 def _memory_status_summary() -> str:
-    if not MEMORY_DB.exists():
+    if not data_path(MEMORY_DB).exists():
         return "Memory status: local SQLite memory store unavailable; no raw database was dumped."
     try:
         with _connect_memory() as conn:
@@ -534,7 +535,7 @@ def _memory_status_summary() -> str:
 
 def _memory_recall_summary(query: str) -> str:
     clean_query = query or "Eva"
-    if not MEMORY_DB.exists():
+    if not data_path(MEMORY_DB).exists():
         return "Memory store unavailable: local SQLite memory database was not found."
     try:
         with _connect_memory() as conn:
@@ -560,7 +561,7 @@ def _memory_recall_summary(query: str) -> str:
 
 
 def _connect_memory() -> sqlite3.Connection:
-    uri = MEMORY_DB.resolve().as_uri() + "?mode=ro"
+    uri = data_path(MEMORY_DB).resolve().as_uri() + "?mode=ro"
     return sqlite3.connect(uri, uri=True)
 
 

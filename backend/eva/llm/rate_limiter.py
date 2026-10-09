@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+from ..core.data_paths import data_path
 
 STATE_PATH = Path(__file__).resolve().parents[1] / "data" / "llm_usage_state.json"
 DEFAULT_RPM = {
@@ -132,8 +133,8 @@ def provider_token_limits(provider: str, model: str | None = None) -> tuple[int 
 
 
 class LLMRateLimiter:
-    def __init__(self, path: Path = STATE_PATH) -> None:
-        self.path = path
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = path or data_path(STATE_PATH)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def load(self) -> dict[str, Any]:

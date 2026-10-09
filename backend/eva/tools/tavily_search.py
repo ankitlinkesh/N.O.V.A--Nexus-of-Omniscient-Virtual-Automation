@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from ..core.data_paths import data_path
 
 TAVILY_ENDPOINT = "https://api.tavily.com/search"
 STATE_PATH = Path(__file__).resolve().parents[1] / "data" / "tavily_usage_state.json"
@@ -40,17 +41,17 @@ def _day_bucket() -> str:
 
 
 def _load_state() -> dict[str, Any]:
-    if not STATE_PATH.exists():
+    if not data_path(STATE_PATH).exists():
         return {}
     try:
-        return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        return json.loads(data_path(STATE_PATH).read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return {}
 
 
 def _save_state(state: dict[str, Any]) -> None:
-    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    STATE_PATH.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+    data_path(STATE_PATH).parent.mkdir(parents=True, exist_ok=True)
+    data_path(STATE_PATH).write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _usage_entry(state: dict[str, Any]) -> dict[str, Any]:

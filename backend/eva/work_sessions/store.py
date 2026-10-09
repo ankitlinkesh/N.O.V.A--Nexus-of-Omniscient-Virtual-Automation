@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import WORK_SESSION_EVENT_TYPES, WorkSession, WorkSessionEvent
+from ..core.data_paths import data_path
 
 
 _WINDOWS_PATH_RE = re.compile(r"[A-Za-z]:\\(?:[^\\\s]+\\)*[^\\\s]*")
@@ -214,7 +215,7 @@ def _db_path() -> Path:
     override = os.environ.get("EVA_WORK_SESSIONS_DB_PATH")
     if override:
         return Path(override)
-    return Path(__file__).resolve().parents[1] / "data" / "work_sessions" / "work_sessions.sqlite3"
+    return data_path(Path(__file__).resolve().parents[1] / "data" / "work_sessions" / "work_sessions.sqlite3")
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:

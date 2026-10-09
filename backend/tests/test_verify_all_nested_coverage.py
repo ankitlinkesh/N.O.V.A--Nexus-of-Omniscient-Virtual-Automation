@@ -28,13 +28,35 @@ def _on_disk() -> set[str]:
     return {path.name for path in SCRIPTS.glob("verify_*.py")} - {"verify_eva_all.py"}
 
 
+def _runner_names(tree: ast.AST) -> set[str]:
+    """Functions that start another Python process (``subprocess.*(... sys.executable ...)``),
+    whatever they are called. research_memory_help's ``_run_verifier`` escaped a
+    name list and kept re-running seven verifiers under the master profile."""
+    names = set(_RUNNER_CALLS)
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        spawns = any(
+            isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and getattr(call.func.value, "id", None) == "subprocess"
+            for call in ast.walk(fn)
+        )
+        python = any(isinstance(n, ast.Attribute) and n.attr == "executable" and getattr(n.value, "id", None) == "sys" for n in ast.walk(fn))
+        if spawns and python:
+            names.add(fn.name)
+    return names
+
+
 def _runs_nested(tree: ast.AST, source: str) -> bool:
-    calls = any(isinstance(n, ast.Call) and getattr(n.func, "id", None) in _RUNNER_CALLS for n in ast.walk(tree))
+    runners = _runner_names(tree)
+    calls = any(isinstance(n, ast.Call) and getattr(n.func, "id", None) in runners for n in ast.walk(tree))
     return calls or "EVA_VERIFY_SKIP_NESTED" in source
 
 
+_ACTIVE_RUNNERS: set[str] = set(_RUNNER_CALLS)
+
+
 def _is_runner_call(node: ast.AST) -> bool:
-    return isinstance(node, ast.Call) and getattr(node.func, "id", None) in _RUNNER_CALLS
+    return isinstance(node, ast.Call) and getattr(node.func, "id", None) in _ACTIVE_RUNNERS
 
 
 def _names_in(node: ast.AST) -> set[str]:
@@ -55,6 +77,8 @@ def nested_targets(path: Path) -> set[str]:
     tree = ast.parse(source)
     if not _runs_nested(tree, source):
         return set()
+    _ACTIVE_RUNNERS.clear()
+    _ACTIVE_RUNNERS.update(_runner_names(tree))
     assigned = {
         target.id: node.value
         for node in ast.walk(tree)
@@ -125,7 +149,7 @@ def test_nested_runners_use_the_shared_utf8_runner():
     for script in nesting_scripts():
         tree = ast.parse((SCRIPTS / script).read_text(encoding="utf-8-sig"))
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef) and node.name in {"run_nested", "run_verifier"}:
+            if isinstance(node, ast.FunctionDef) and node.name in _runner_names(tree) - {"_shared_run_nested"}:
                 if not any(isinstance(n, ast.Name) and n.id == "_shared_run_nested" for n in ast.walk(node)):
                     private.append(script)
     assert not private

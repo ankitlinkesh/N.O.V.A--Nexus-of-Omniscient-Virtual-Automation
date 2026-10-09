@@ -10,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from .action_model import AgentAction, RollbackResult
+from ..core.data_paths import data_path
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class Checkpoint:
 
 class CheckpointStore:
     def __init__(self, path: Path | None = None, *, root: Path | None = None, max_file_bytes: int = 2_000_000) -> None:
-        data_root = Path(__file__).resolve().parents[3] / "data"
+        data_root = data_path(Path(__file__).resolve().parents[3] / "data")
         self.path = path or (data_root / "agent_checkpoints.sqlite3")
         self.root = root or (data_root / "checkpoints")
         self.max_file_bytes = max_file_bytes

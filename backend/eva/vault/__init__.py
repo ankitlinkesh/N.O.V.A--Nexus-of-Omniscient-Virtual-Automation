@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .store import Vault, VaultEntry
+from ..core.data_paths import data_path
 
 _ABSENT = {"", "0", "false", "no", "off"}
 
@@ -34,7 +35,7 @@ def vault_path(environ: Mapping[str, str] | None = None) -> Path:
     """The vault file path: ``EVA_VAULT_PATH`` override, else the repo default."""
     env = environ if environ is not None else os.environ
     override = env.get("EVA_VAULT_PATH", "").strip()
-    return Path(override) if override else _DEFAULT_VAULT_PATH
+    return Path(override) if override else data_path(_DEFAULT_VAULT_PATH)
 
 
 def open_default_vault(environ: Mapping[str, str] | None = None) -> Vault | None:

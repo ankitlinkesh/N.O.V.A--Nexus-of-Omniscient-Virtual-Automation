@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from ..core.data_paths import data_path
 
 
 def _now() -> datetime:
@@ -29,7 +30,7 @@ class OverrideGrant:
 
 class OverrideStore:
     def __init__(self, path: Path | None = None, *, expires_after_seconds: int = 120) -> None:
-        root = Path(__file__).resolve().parents[3] / "data"
+        root = data_path(Path(__file__).resolve().parents[3] / "data")
         self.path = path or (root / "override_events.sqlite3")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.expires_after_seconds = expires_after_seconds

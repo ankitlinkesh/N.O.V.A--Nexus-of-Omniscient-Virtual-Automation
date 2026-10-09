@@ -6,6 +6,7 @@ from typing import Any
 
 from ..runtime.feature_flags import get_v2_feature_flags
 from .base import VectorMemoryItem, VectorSearchResult
+from ..core.data_paths import data_path
 
 
 _DEFAULT_CHROMA_PATH = Path(__file__).resolve().parents[1] / "data" / "vector" / "chroma"
@@ -13,7 +14,7 @@ CHROMA_PATH = Path(os.environ.get("EVA_CHROMA_PATH") or _DEFAULT_CHROMA_PATH)
 
 
 def _chroma_path() -> Path:
-    return Path(os.environ.get("EVA_CHROMA_PATH") or _DEFAULT_CHROMA_PATH)
+    return Path(os.environ.get("EVA_CHROMA_PATH") or data_path(_DEFAULT_CHROMA_PATH))
 
 
 def is_chroma_available() -> bool:

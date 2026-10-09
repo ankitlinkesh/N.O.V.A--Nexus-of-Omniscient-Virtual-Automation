@@ -10,6 +10,7 @@ from .api.routes import router
 from .control_center.routes import get_control_center_routes
 from .core.config import load_project_env, load_settings
 from .memory.store import MemoryStore
+from .core.data_paths import data_path
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -185,7 +186,7 @@ def create_app() -> FastAPI:
             return JSONResponse(status_code=403, content={"detail": "Missing X-Eva-Client header."})
         return await call_next(request)
 
-    app.state.memory = MemoryStore(ROOT / "data" / "eva.sqlite3")
+    app.state.memory = MemoryStore(data_path(ROOT / "data" / "eva.sqlite3"))
     _recover_durable_tasks_if_enabled(app)
     _run_proactivity_catchup_if_enabled(app)
     _start_background_scheduler_if_enabled(app)

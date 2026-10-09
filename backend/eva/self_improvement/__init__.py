@@ -26,6 +26,7 @@ from .models import (
 )
 from .store import SkillStore
 from .synthesis import NEVER_LEARN_TOOLS, propose_skills_from_traces, validate_steps
+from ..core.data_paths import data_path
 
 _ABSENT = {"", "0", "false", "no", "off"}
 
@@ -45,7 +46,7 @@ def default_skills_path(environ: dict[str, str] | None = None) -> Path:
     does not write into the real store (Phase 83)."""
     env = environ if environ is not None else os.environ
     override = env.get("EVA_SKILLS_PATH", "").strip()
-    return Path(override) if override else _DEFAULT_SKILLS_PATH
+    return Path(override) if override else data_path(_DEFAULT_SKILLS_PATH)
 
 
 def open_default_store(environ: dict[str, str] | None = None) -> SkillStore | None:

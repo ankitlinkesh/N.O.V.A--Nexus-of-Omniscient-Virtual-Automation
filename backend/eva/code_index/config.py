@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from fnmatch import fnmatch
 from pathlib import Path
+from ..core.data_paths import data_path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -92,7 +93,7 @@ def project_root() -> Path:
 
 def data_dir() -> Path:
     raw = os.environ.get("EVA_CODE_INDEX_DATA_DIR")
-    return Path(raw).expanduser().resolve() if raw else DEFAULT_DATA_DIR.resolve()
+    return Path(raw).expanduser().resolve() if raw else data_path(DEFAULT_DATA_DIR).resolve()
 
 
 def index_path() -> Path:

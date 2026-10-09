@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from .models import ResearchItem, ResearchNote, ResearchTopic
+from ..core.data_paths import data_path
 
 DEFAULT_RESEARCH_DB = Path(__file__).resolve().parents[1] / "data" / "research_knowledge.sqlite3"
 MAX_RAW_CONTENT_CHARS = 12000
@@ -31,7 +32,7 @@ def _tokens(text: str) -> set[str]:
 
 class ResearchStore:
     def __init__(self, path: str | Path | None = None) -> None:
-        self.path = Path(path) if path is not None else DEFAULT_RESEARCH_DB
+        self.path = Path(path) if path is not None else data_path(DEFAULT_RESEARCH_DB)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.ensure_schema()
 

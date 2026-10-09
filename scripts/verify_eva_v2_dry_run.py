@@ -13,6 +13,8 @@ if str(ROOT) not in sys.path:
 # Intentional fake secret-pattern fixture for trace-redaction tests. Not a real secret.
 
 
+from backend.eva.core.data_paths import eva_data_dir  # noqa: E402  (traces live wherever the store wrote them)
+
 def emit(case: str, passed: bool, **payload: Any) -> int:
     ok = bool(passed)
     print(json.dumps({"case": case, "pass": ok, **payload}, indent=2, ensure_ascii=False))
@@ -156,11 +158,11 @@ def main() -> int:
     failures += emit("dry_run_does_not_call_optional_adapters", not called, called=called)
 
     trace_id = dry_chatgpt_dict.get("trace_id")
-    trace_path = ROOT / "backend" / "eva" / "data" / "traces" / f"{trace_id}.jsonl"
+    trace_path = eva_data_dir("traces") / f"{trace_id}.jsonl"
     trace_text = trace_path.read_text(encoding="utf-8") if trace_id and trace_path.exists() else ""
     redacted_trace = _state_dict(_run_state("eva v2 dry run use token ghp_abcdefghijklmnopqrstuvwxyz1234567890"))
     redacted_trace_id = redacted_trace.get("trace_id")
-    redacted_trace_path = ROOT / "backend" / "eva" / "data" / "traces" / f"{redacted_trace_id}.jsonl"
+    redacted_trace_path = eva_data_dir("traces") / f"{redacted_trace_id}.jsonl"
     redacted_text = redacted_trace_path.read_text(encoding="utf-8") if redacted_trace_id and redacted_trace_path.exists() else ""
     failures += emit(
         "local_trace_written_and_redacted",

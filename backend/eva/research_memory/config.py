@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from ..core.data_paths import data_path
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -15,7 +16,7 @@ def _data_dir() -> Path:
     db_override = os.environ.get("EVA_RESEARCH_MEMORY_DB_PATH", "").strip()
     if db_override:
         return Path(db_override).parent
-    return DEFAULT_RESEARCH_MEMORY_DATA_DIR
+    return data_path(DEFAULT_RESEARCH_MEMORY_DATA_DIR)
 
 
 def _db_path() -> Path:

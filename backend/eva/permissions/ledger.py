@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .pending_actions import EvaPendingAction, EvaPendingActionResult, now_iso
+from ..core.data_paths import data_path
 
 
 DEFAULT_LEDGER_PATH = Path(__file__).resolve().parents[1] / "data" / "permissions" / "pending_actions.jsonl"
@@ -14,7 +15,7 @@ DEFAULT_LEDGER_PATH = Path(__file__).resolve().parents[1] / "data" / "permission
 
 def ledger_path() -> Path:
     override = os.environ.get("EVA_PENDING_ACTION_LEDGER_PATH", "").strip()
-    return Path(override) if override else DEFAULT_LEDGER_PATH
+    return Path(override) if override else data_path(DEFAULT_LEDGER_PATH)
 
 
 def _append(action: EvaPendingAction, note: str | None = None) -> None:

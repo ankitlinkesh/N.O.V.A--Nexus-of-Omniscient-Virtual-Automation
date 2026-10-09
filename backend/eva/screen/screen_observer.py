@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from ..desktop.windows import get_active_window
+from ..core.data_paths import data_path
 
 
 PRIVATE_WINDOW_MARKERS = ("whatsapp", "gmail", "mail", "bank", "password", "signin", "login", "account", "checkout")
@@ -90,7 +91,7 @@ def capture_screen(reason: str) -> ScreenFrame:
     # this image, so no origin is recorded here -- but a screenshot that silently
     # omits a monitor is a false picture of the desktop whoever reads it.
     image = ImageGrab.grab(all_screens=True)
-    root = Path(__file__).resolve().parents[3] / "data" / "screen_frames"
+    root = data_path(Path(__file__).resolve().parents[3] / "data" / "screen_frames")
     root.mkdir(parents=True, exist_ok=True)
     frame_id = uuid4().hex
     path = root / f"{frame_id}.png"

@@ -11,6 +11,7 @@ from pathlib import Path
 from .authority import evaluate_file_authority_for_approval
 from .draft_preview import DraftPreview
 from .write_safety import WriteSafetyPlan, build_write_safety_plan
+from ..core.data_paths import data_path
 
 
 APPROVAL_STATUSES = {
@@ -372,7 +373,7 @@ def _ledger_path() -> Path:
     override = os.environ.get("EVA_FILE_AGENT_APPROVAL_LEDGER_PATH")
     if override:
         return Path(override)
-    return Path(__file__).resolve().parents[1] / "data" / "file_agent" / "approval_ledger.json"
+    return data_path(Path(__file__).resolve().parents[1] / "data" / "file_agent" / "approval_ledger.json")
 
 
 def _new_approval_id(display_path: str, created_at: str) -> str:

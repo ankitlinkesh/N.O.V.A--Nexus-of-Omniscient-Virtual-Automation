@@ -24,6 +24,7 @@ from .durable_queue import (
     DurableTaskQueue,
 )
 from .worker import DurableTaskWorker
+from ..core.data_paths import data_path
 
 _ABSENT = {"", "0", "false", "no", "off"}
 
@@ -44,7 +45,7 @@ def default_queue_path(environ: dict[str, str] | None = None) -> Path:
     the real queue (Phase 83)."""
     env = environ if environ is not None else os.environ
     override = env.get("EVA_TASKS_PATH", "").strip()
-    return Path(override) if override else _DEFAULT_QUEUE_PATH
+    return Path(override) if override else data_path(_DEFAULT_QUEUE_PATH)
 
 
 def open_default_queue(environ: dict[str, str] | None = None) -> DurableTaskQueue | None:

@@ -12,6 +12,7 @@ from typing import Any
 from .approval_ledger import FileApprovalRequest, get_file_approval_request, record_file_approval_event
 from .authority import evaluate_file_authority_for_sandbox_apply, file_authority_to_global_decision
 from ..authority.formatter import format_authority_decision
+from ..core.data_paths import data_path
 
 
 SANDBOX_LINE = "Sandbox only. No real project file was created, modified, backed up, restored, or applied."
@@ -530,7 +531,7 @@ def _sandbox_root() -> Path:
     override = os.environ.get("EVA_FILE_AGENT_APPLY_SANDBOX_ROOT")
     if override:
         return Path(override)
-    return Path(__file__).resolve().parents[1] / "data" / "file_agent" / "apply_sandbox"
+    return data_path(Path(__file__).resolve().parents[1] / "data" / "file_agent" / "apply_sandbox")
 
 
 def _sandbox_label(path: str | Path) -> str:

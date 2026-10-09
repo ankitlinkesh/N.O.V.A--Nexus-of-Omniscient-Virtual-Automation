@@ -7,6 +7,7 @@ from typing import Any
 
 from ..screen.capture import capture_screen_jpeg
 from .windows import get_active_window, list_open_windows, windows_as_dicts
+from ..core.data_paths import data_path
 
 
 @dataclass
@@ -44,7 +45,7 @@ def get_desktop_snapshot(
         else:
             try:
                 image, _region = capture_screen_jpeg()
-                output_dir = Path(__file__).resolve().parents[3] / "data"
+                output_dir = data_path(Path(__file__).resolve().parents[3] / "data")
                 output_dir.mkdir(parents=True, exist_ok=True)
                 output_path = output_dir / "desktop_observation_screen.jpg"
                 output_path.write_bytes(image)

@@ -10,6 +10,7 @@ from typing import Any
 from ..workspace.config import get_workspace_root, load_workspace_config, resolve_workspace_path
 from ..workspace.indexer import safe_list_files
 from ..workspace.reader import safe_read_file
+from ..core.data_paths import data_path
 
 
 SAFE_CODE_EXTENSIONS = {".py", ".js", ".html", ".css", ".md", ".json", ".toml", ".yaml", ".yml"}
@@ -229,7 +230,7 @@ def build_code_index() -> dict[str, Any]:
     payload = {
         "ok": True,
         "root": str(config.root),
-        "index_path": str(INDEX_PATH),
+        "index_path": str(data_path(INDEX_PATH)),
         "indexed_at": _now(),
         "indexed_files": len(files),
         "skipped": skipped + list_skipped,
@@ -238,16 +239,18 @@ def build_code_index() -> dict[str, Any]:
         "files": files,
         "secrets_indexed": False,
     }
-    INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
-    INDEX_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    index_path = data_path(INDEX_PATH)
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return payload
 
 
 def load_code_index(*, auto_build: bool = True) -> dict[str, Any]:
-    if not INDEX_PATH.exists():
+    index_path = data_path(INDEX_PATH)
+    if not index_path.exists():
         return build_code_index() if auto_build else {"ok": False, "error": "Code index has not been built.", "files": []}
     try:
-        return json.loads(INDEX_PATH.read_text(encoding="utf-8"))
+        return json.loads(index_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return build_code_index() if auto_build else {"ok": False, "error": "Code index could not be read.", "files": []}
 
@@ -260,7 +263,7 @@ def code_status() -> dict[str, Any]:
             "ok": True,
             "indexed": False,
             "root": str(root),
-            "index_path": str(INDEX_PATH),
+            "index_path": str(data_path(INDEX_PATH)),
             "indexed_files": 0,
             "last_indexed_at": None,
             "safe_extensions": sorted(SAFE_CODE_EXTENSIONS),
@@ -270,7 +273,7 @@ def code_status() -> dict[str, Any]:
         "ok": True,
         "indexed": True,
         "root": str(root),
-        "index_path": str(INDEX_PATH),
+        "index_path": str(data_path(INDEX_PATH)),
         "indexed_files": int(index.get("indexed_files") or len(index.get("files") or [])),
         "last_indexed_at": index.get("indexed_at"),
         "safe_extensions": index.get("safe_extensions") or sorted(SAFE_CODE_EXTENSIONS),

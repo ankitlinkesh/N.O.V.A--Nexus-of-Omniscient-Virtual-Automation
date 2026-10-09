@@ -37,6 +37,19 @@ def changed_sources(since: float, root: Path = ROOT) -> list[str]:
     return [name for _, name in sorted(changed, reverse=True)]
 
 
+def _live_snapshot() -> dict:
+    sys.path.insert(0, str(ROOT))
+    from backend.eva.core.data_paths import live_data_snapshot
+
+    return live_data_snapshot()
+
+
+def _live_changes(before: dict) -> list[str]:
+    from backend.eva.core.data_paths import live_data_changes
+
+    return live_data_changes(before)
+
+
 def _mid_run_note(since: float, root: Path = ROOT) -> str:
     changed = changed_sources(since, root)
     if not changed:
@@ -206,6 +219,7 @@ FULL_VERIFIERS = [
     "verify_eva_phase136_sandbox_download_trust.py",
     "verify_eva_phase137_bridge_prompts_and_box_routing.py",
     "verify_eva_phase138_verifier_coverage.py",
+    "verify_eva_phase139_data_isolation.py",
     "verify_chrome_execution_skills.py",
     # Never-run verifiers brought into the suite (fixed or confirmed green).
     "verify_agent_runner.py",
@@ -393,6 +407,7 @@ QUICK_VERIFIERS = [
     "verify_eva_phase136_sandbox_download_trust.py",
     "verify_eva_phase137_bridge_prompts_and_box_routing.py",
     "verify_eva_phase138_verifier_coverage.py",
+    "verify_eva_phase139_data_isolation.py",
     "verify_chrome_execution_skills.py",
     # Never-run verifiers brought into the suite (fixed or confirmed green).
     "verify_agent_runner.py",
@@ -556,6 +571,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase136_sandbox_download_trust.py": ("phase136", "sandbox", "taint", "provenance"),
     "verify_eva_phase137_bridge_prompts_and_box_routing.py": ("phase137", "sandbox", "approval", "routing"),
     "verify_eva_phase138_verifier_coverage.py": ("phase138", "verifiers", "coverage", "workspace", "secrets"),
+    "verify_eva_phase139_data_isolation.py": ("phase139", "verifiers", "data", "isolation"),
     "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 
@@ -620,6 +636,10 @@ def main(argv: list[str] | None = None) -> int:
     # A verifier that trips a gate creates a real pending action; keep those out of
     # the user's approval ledger unless the verifier chose its own path.
     child_env.setdefault("EVA_PENDING_ACTION_LEDGER_PATH", str(Path(tempfile.mkdtemp(prefix="eva_verify_all_")) / "pending_actions.jsonl"))
+    # Every store resolves through backend.eva.core.data_paths, so one temp root keeps
+    # verifiers out of the user's chat memory, beliefs, traces and usage counters.
+    child_env.setdefault("EVA_DATA_DIR", tempfile.mkdtemp(prefix="eva_verify_all_data_"))
+    live_before = _live_snapshot()
     nested_skipped = 0
     for script in verifiers:
         path = ROOT / "scripts" / script
@@ -674,6 +694,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Elapsed: {sum(item[2] for item in results):.1f}s")
     # Not passes: each skipped nested check is a script that also runs at top level here.
     print(f"Nested checks skipped (each runs at top level): {nested_skipped}")
+    live_changed = _live_changes(live_before)
+    if live_changed:
+        print(f"NOTE: live data changed during the run ({len(live_changed)} paths; is the NOVA server running?): " + ", ".join(live_changed[:8]))
     # A green run over code that changed mid-way did not test the final code either.
     note = _mid_run_note(suite_started)
     if note:

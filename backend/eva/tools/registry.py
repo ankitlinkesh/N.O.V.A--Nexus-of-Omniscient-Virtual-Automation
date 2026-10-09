@@ -78,6 +78,7 @@ from .share_bridge import share_from_box, share_to_box
 from .safe_file_tools import file_copy, file_delete, file_list_dir, file_move, file_read_text, file_write_text
 from ..browser_automation import playwright_driver
 from ..security import tool_gate
+from ..core.data_paths import data_path
 
 SafetyLevel = Literal["safe", "sensitive", "dangerous"]
 
@@ -371,7 +372,7 @@ def _guarded_power_action(action: str, confirmed: bool = False) -> str:
 
 def _capture_screen(region: CaptureRegion | None = None) -> dict[str, Any]:
     image, region = capture_screen_jpeg(region=region)
-    data_dir = Path(__file__).resolve().parents[3] / "data"
+    data_dir = data_path(Path(__file__).resolve().parents[3] / "data")
     data_dir.mkdir(parents=True, exist_ok=True)
     output_path = data_dir / "latest_screen.jpg"
     output_path.write_bytes(image)

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..privacy.redaction import redact_secrets
+from ..core.data_paths import data_path
 
 
 DEFAULT_TRACE_ROOT = Path(__file__).resolve().parents[1] / "data" / "traces"
@@ -26,7 +27,7 @@ def _sanitize(value: Any) -> Any:
 
 class LocalTraceStore:
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root or DEFAULT_TRACE_ROOT
+        self.root = root or data_path(DEFAULT_TRACE_ROOT)
         self.root.mkdir(parents=True, exist_ok=True)
 
     def path_for(self, trace_id: str) -> Path:

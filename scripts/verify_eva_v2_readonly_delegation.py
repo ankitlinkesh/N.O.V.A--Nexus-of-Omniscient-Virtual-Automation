@@ -13,6 +13,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+from backend.eva.core.data_paths import eva_data_dir  # noqa: E402  (traces live wherever the store wrote them)
+
 def emit(case: str, passed: bool, **payload: Any) -> int:
     ok = bool(passed)
     print(json.dumps({"case": case, "pass": ok, **payload}, indent=2, ensure_ascii=False))
@@ -229,7 +231,7 @@ def main() -> int:
     failures += emit("phase3_browser_open_still_allowed_or_clean", ("Eva v2 execution result" in phase3_browser or "Eva v2 execution refused" in phase3_browser) and _clean(phase3_browser), response=phase3_browser)
 
     trace_state = _execute_state("inspect my project structure")
-    trace_path = ROOT / "backend" / "eva" / "data" / "traces" / f"{trace_state.trace_id}.jsonl"
+    trace_path = eva_data_dir("traces") / f"{trace_state.trace_id}.jsonl"
     trace_text = trace_path.read_text(encoding="utf-8") if trace_state.trace_id and trace_path.exists() else ""
     failures += emit(
         "local_trace_redacted_and_readonly_marked",

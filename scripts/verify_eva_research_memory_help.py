@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -44,10 +43,12 @@ def _fast(command: str) -> str:
     return str(result[0])
 
 
+from _nested import run_nested as _shared_run_nested  # noqa: E402
+
+
 def _run_verifier(script_name: str) -> bool:
-    command = [sys.executable, str(ROOT / "scripts" / script_name)]
-    completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, timeout=120)
-    return completed.returncode == 0
+    # Shared runner: UTF-8 output, one level deep, one timeout (scripts/_nested.py).
+    return _shared_run_nested(script_name)[0]
 
 
 def main() -> int:
@@ -171,7 +172,11 @@ def main() -> int:
         "verify_eva_v2_readonly_delegation.py",
         "verify_eva_stabilization_v1.py",
     ):
-        failures += 0 if _case(f"nested_{script_name}", _run_verifier(script_name)) else 1
+        # Each runs at top level of verify_eva_all (test_verify_all_nested_coverage).
+        if os.environ.get("EVA_VERIFY_SKIP_NESTED") == "1":
+            failures += 0 if _case(f"nested_{script_name}", True, skipped=True, reason="Runs at top level of the master verifier.") else 1
+        else:
+            failures += 0 if _case(f"nested_{script_name}", _run_verifier(script_name)) else 1
 
     print(json.dumps({"overall_pass": failures == 0, "failures": failures}, indent=2))
     return 0 if failures == 0 else 1

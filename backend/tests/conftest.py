@@ -1,11 +1,37 @@
 from __future__ import annotations
 
+import os
 import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Every store NOVA writes (chat memory, beliefs, approval ledger, traces, usage
+# counters, checkpoints, research DBs ...) resolves through
+# backend.eva.core.data_paths, which honours EVA_DATA_DIR. Set here, at import,
+# before any test module imports backend.eva.main: the suite used to write test
+# chats into the real history and an "allergy: shellfish" belief about the user.
+os.environ["EVA_DATA_DIR"] = tempfile.mkdtemp(prefix="eva_pytest_data_")
+
+from backend.eva.core.data_paths import live_data_changes, live_data_snapshot  # noqa: E402
+
+_LIVE_BEFORE: dict = {}
+
+
+def pytest_sessionstart(session):
+    _LIVE_BEFORE.update(live_data_snapshot())
+
+
+def pytest_terminal_summary(terminalreporter):
+    changed = live_data_changes(_LIVE_BEFORE)
+    if changed:
+        terminalreporter.write_line(
+            f"LIVE DATA CHANGED during the tests ({len(changed)} paths; is the NOVA server running?): " + ", ".join(changed[:8]),
+            red=True,
+        )
 
 
 # Capability flags an operator may set in .env / .env.local for real day-to-day

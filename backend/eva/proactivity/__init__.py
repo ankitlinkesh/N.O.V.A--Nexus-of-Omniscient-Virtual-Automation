@@ -27,6 +27,7 @@ from .nl_rules import ParsedRule, parse_rule_request
 from .timers import ParsedOnce, parse_once_request
 from .store import ProactivityStore
 from .triggers import should_fire
+from ..core.data_paths import data_path
 
 _ABSENT = {"", "0", "false", "no", "off"}
 
@@ -46,7 +47,7 @@ def default_store_path(environ: dict[str, str] | None = None) -> Path:
     write into the real store (Phase 83)."""
     env = environ if environ is not None else os.environ
     override = env.get("EVA_PROACTIVITY_PATH", "").strip()
-    return Path(override) if override else _DEFAULT_STORE_PATH
+    return Path(override) if override else data_path(_DEFAULT_STORE_PATH)
 
 
 def open_default_store(environ: dict[str, str] | None = None) -> ProactivityStore | None:

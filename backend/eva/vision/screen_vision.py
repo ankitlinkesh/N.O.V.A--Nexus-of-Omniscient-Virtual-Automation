@@ -13,6 +13,7 @@ import httpx
 
 from ..llm.providers.gemini import gemini_api_keys
 from ..llm.types import retry_after_from_headers
+from ..core.data_paths import data_path
 
 
 GEMINI_GENERATE_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -74,20 +75,22 @@ def _soft_limits() -> dict[str, int]:
 
 
 def _load_state() -> dict[str, Any]:
-    if not VISION_STATE_PATH.exists():
+    state_path = data_path(VISION_STATE_PATH)
+    if not state_path.exists():
         return {}
     try:
-        payload = json.loads(VISION_STATE_PATH.read_text(encoding="utf-8"))
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
         return payload if isinstance(payload, dict) else {}
     except json.JSONDecodeError:
         return {}
 
 
 def _save_state(state: dict[str, Any]) -> None:
-    VISION_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = VISION_STATE_PATH.with_suffix(VISION_STATE_PATH.suffix + ".tmp")
+    state_path = data_path(VISION_STATE_PATH)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = state_path.with_suffix(state_path.suffix + ".tmp")
     tmp.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
-    tmp.replace(VISION_STATE_PATH)
+    tmp.replace(state_path)
 
 
 def _prepare_state(model: str) -> dict[str, Any]:
