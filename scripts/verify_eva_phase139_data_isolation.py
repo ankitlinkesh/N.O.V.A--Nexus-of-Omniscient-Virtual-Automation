@@ -86,7 +86,7 @@ try:
     failures += emit(
         "both suites run on a temp data root and report live changes",
         'child_env.setdefault("EVA_DATA_DIR"' in suite and "_live_changes(live_before)" in suite
-        and 'os.environ["EVA_DATA_DIR"] = tempfile.mkdtemp(' in conftest and "LIVE DATA CHANGED" in conftest,
+        and 'os.environ["EVA_DATA_DIR"] = os.path.join(_SESSION_ROOT' in conftest and "LIVE DATA CHANGED" in conftest,
     )
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")

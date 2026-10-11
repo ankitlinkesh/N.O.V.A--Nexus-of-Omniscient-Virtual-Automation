@@ -14,7 +14,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # backend.eva.core.data_paths, which honours EVA_DATA_DIR. Set here, at import,
 # before any test module imports backend.eva.main: the suite used to write test
 # chats into the real history and an "allergy: shellfish" belief about the user.
-os.environ["EVA_DATA_DIR"] = tempfile.mkdtemp(prefix="eva_pytest_data_")
+# Idempotent: two test modules also import this file as backend.tests.conftest.
+_SESSION_ROOT = os.environ.get("EVA_PYTEST_SESSION_ROOT") or tempfile.mkdtemp(prefix="eva_pytest_session_")
+os.environ["EVA_PYTEST_SESSION_ROOT"] = _SESSION_ROOT
+os.environ["EVA_DATA_DIR"] = os.path.join(_SESSION_ROOT, "data")
+# Tests that call tempfile.mkdtemp() directly land here too, and the whole folder is
+# removed at the end of the session: %TEMP% is on a C: with only a few GB free.
+tempfile.tempdir = _SESSION_ROOT
 
 from backend.eva.core.data_paths import live_data_changes, live_data_snapshot  # noqa: E402
 
@@ -23,6 +29,16 @@ _LIVE_BEFORE: dict = {}
 
 def pytest_sessionstart(session):
     _LIVE_BEFORE.update(live_data_snapshot())
+    from backend.eva.core.data_paths import purge_stale_temp_roots
+
+    purge_stale_temp_roots("eva_pytest_session_", temp_dir=os.path.dirname(_SESSION_ROOT))
+
+
+def pytest_sessionfinish(session, exitstatus):
+    # The temp data root is this session's own; nothing removed it before, and C:
+    # (where %TEMP% lives) has only a few GB free.
+    tempfile.tempdir = None
+    shutil.rmtree(_SESSION_ROOT, ignore_errors=True)
 
 
 def pytest_terminal_summary(terminalreporter):

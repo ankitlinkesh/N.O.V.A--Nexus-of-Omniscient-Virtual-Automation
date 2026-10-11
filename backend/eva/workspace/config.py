@@ -104,6 +104,15 @@ def relative_to_root(path: Path, config: WorkspaceConfig | None = None) -> str:
     # ``config`` lets a directory walk load (and resolve) the config once rather
     # than twice per file, which made listing the repo take ~6s.
     config = config or load_workspace_config()
+    # Lexical fast path: a path from walking the root, or one resolve_workspace_path
+    # already resolved, is under the root as written. Resolving it again cost 1.7s of
+    # a 4.6s search (11k calls). Anything else (a "..", a path outside) still resolves;
+    # a symlinked file is still resolved and contained when it is read.
+    if path.is_absolute() and ".." not in path.parts:
+        try:
+            return path.relative_to(config.root).as_posix()
+        except ValueError:
+            pass
     return path.resolve().relative_to(config.root).as_posix()
 
 

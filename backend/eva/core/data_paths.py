@@ -94,3 +94,24 @@ def backend_data_dir(*parts: str) -> Path:
 def eva_data_dir(*parts: str) -> Path:
     """``<repo>/backend/eva/data/<parts>``, honouring EVA_DATA_DIR."""
     return data_path(REPO_ROOT.joinpath("backend", "eva", "data", *parts))
+
+
+def purge_stale_temp_roots(prefix: str, *, older_than_seconds: float = 3600, temp_dir: str | None = None) -> int:
+    """Remove ``<TEMP>/<prefix>*`` folders left by earlier runs. On Windows a run cannot
+    always delete its own root at exit (SQLite files still open), so each run sweeps
+    its predecessors' instead. Only folders older than ``older_than_seconds``."""
+    import shutil
+    import tempfile
+    import time
+
+    base = Path(temp_dir or tempfile.gettempdir())
+    cutoff = time.time() - older_than_seconds
+    removed = 0
+    for folder in base.glob(prefix + "*"):
+        try:
+            if folder.is_dir() and folder.stat().st_mtime < cutoff:
+                shutil.rmtree(folder, ignore_errors=True)
+                removed += 0 if folder.exists() else 1
+        except OSError:
+            continue
+    return removed

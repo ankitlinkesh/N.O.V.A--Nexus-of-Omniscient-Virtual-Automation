@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import tempfile
 import sys
@@ -223,6 +224,7 @@ FULL_VERIFIERS = [
     "verify_visual_desktop_control.py",
     "verify_eva_v2_runtime_skeleton.py",
     "verify_eva_phase140_capability_off_wins.py",
+    "verify_eva_phase141_retention_and_speed.py",
     "verify_chrome_execution_skills.py",
     # Never-run verifiers brought into the suite (fixed or confirmed green).
     "verify_agent_runner.py",
@@ -414,6 +416,7 @@ QUICK_VERIFIERS = [
     "verify_visual_desktop_control.py",
     "verify_eva_v2_runtime_skeleton.py",
     "verify_eva_phase140_capability_off_wins.py",
+    "verify_eva_phase141_retention_and_speed.py",
     "verify_chrome_execution_skills.py",
     # Never-run verifiers brought into the suite (fixed or confirmed green).
     "verify_agent_runner.py",
@@ -577,6 +580,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase138_verifier_coverage.py": ("phase138", "verifiers", "coverage", "workspace", "secrets"),
     "verify_eva_phase139_data_isolation.py": ("phase139", "verifiers", "data", "isolation"),
     "verify_eva_phase140_capability_off_wins.py": ("phase140", "config", "capabilities", "safety"),
+    "verify_eva_phase141_retention_and_speed.py": ("phase141", "traces", "retention", "performance"),
     "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 
@@ -640,10 +644,20 @@ def main(argv: list[str] | None = None) -> int:
     child_env["EVA_VERIFY_SKIP_NESTED"] = "1"
     # A verifier that trips a gate creates a real pending action; keep those out of
     # the user's approval ledger unless the verifier chose its own path.
-    child_env.setdefault("EVA_PENDING_ACTION_LEDGER_PATH", str(Path(tempfile.mkdtemp(prefix="eva_verify_all_")) / "pending_actions.jsonl"))
+    # One folder per run holds every child's temp files (TEMP/TMP point into it) plus
+    # the temp ledger and data root, and is removed at the end: verifiers that called
+    # mkdtemp and never cleaned up had left 2,151 folders on a C: with ~5 GB free.
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from backend.eva.core.data_paths import purge_stale_temp_roots
+
+    purge_stale_temp_roots("eva_verify_all_run_")
+    run_root = tempfile.mkdtemp(prefix="eva_verify_all_run_")
+    child_env["TEMP"] = child_env["TMP"] = run_root
+    child_env.setdefault("EVA_PENDING_ACTION_LEDGER_PATH", str(Path(run_root) / "ledger" / "pending_actions.jsonl"))
     # Every store resolves through backend.eva.core.data_paths, so one temp root keeps
     # verifiers out of the user's chat memory, beliefs, traces and usage counters.
-    child_env.setdefault("EVA_DATA_DIR", tempfile.mkdtemp(prefix="eva_verify_all_data_"))
+    child_env.setdefault("EVA_DATA_DIR", str(Path(run_root) / "data"))
     # Run against the shipped defaults, not the operator's .env.local, which turns on
     # real input, pyautogui, MCP and voice: a refusal regression in any verifier could
     # otherwise act on the live desktop. An explicit "0" from the process beats
@@ -696,6 +710,7 @@ def main(argv: list[str] | None = None) -> int:
         if completed.returncode != 0 and not args.continue_on_fail:
             break
 
+    shutil.rmtree(run_root, ignore_errors=True)
     failures = [item for item in results if item[1] != 0]
     print("")
     print("Eva verifier summary")
