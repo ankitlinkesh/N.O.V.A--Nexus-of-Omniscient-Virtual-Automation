@@ -298,6 +298,33 @@ def _lock_laptop() -> str:
     return system_power("lock")
 
 
+_TYPING_PREVIEW_MAX = 80
+
+
+def _typing_preview(name: str, args: dict[str, Any], target_window: dict[str, Any] | None) -> str:
+    """What an approval to type will actually type, when it is safe to show.
+
+    The ledger masks screen.type_text's text (it may be a password), and the prompt
+    used the same masked args, so a derived string -- "14*3=" computed from a file --
+    was approved as `text='[HIDDEN]'`: blind. Show it when it is short and not
+    secret-shaped (looks_secret_like is deliberately over-inclusive, so a doubt
+    masks); otherwise say why it is hidden. The ledger stays masked either way.
+    """
+    if name != "screen.type_text":
+        return ""
+    text = str(args.get("text") or "")
+    where = f" into {target_window.get('title')}" if target_window and target_window.get("title") else ""
+    try:
+        from .clipboard_tools import looks_secret_like
+
+        secret = looks_secret_like(text)
+    except Exception:
+        secret = True
+    if secret or len(text) > _TYPING_PREVIEW_MAX or "`" in text or "\n" in text:
+        return f"\nIt will type text{where} that is hidden here because it looks like a secret or is long ({len(text)} characters)."
+    return f"\nIt will type exactly: `{text}`{where}."
+
+
 def _handler_accepts_confirmed(handler: Callable[..., Any]) -> bool:
     """True if `handler` declares a `confirmed` parameter (directly or via
     **kwargs). Used only by run_approved to re-inject the ledger-confirmed
@@ -2445,14 +2472,15 @@ class ToolRegistry:
             decision=decision,
             args=safe_args,
         )
+        explanation_text = explanation.as_text() + _typing_preview(name, args, target_window)
         return {
             "ok": False,
             "requires_confirmation": True,
             "pending_id": action.id,
             "risk_class": decision,
-            "explanation": explanation.as_text(),
+            "explanation": explanation_text,
             "message": (
-                f"{explanation.as_text()}\n\n"
+                f"{explanation_text}\n\n"
                 f"Say `{phrase}` to approve this exact action, or `explain {action.id}` for more."
             ),
         }

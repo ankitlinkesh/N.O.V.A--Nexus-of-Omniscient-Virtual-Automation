@@ -225,6 +225,7 @@ FULL_VERIFIERS = [
     "verify_eva_v2_runtime_skeleton.py",
     "verify_eva_phase140_capability_off_wins.py",
     "verify_eva_phase141_retention_and_speed.py",
+    "verify_eva_phase142_typing_preview.py",
     "verify_chrome_execution_skills.py",
     # Never-run verifiers brought into the suite (fixed or confirmed green).
     "verify_agent_runner.py",
@@ -417,6 +418,7 @@ QUICK_VERIFIERS = [
     "verify_eva_v2_runtime_skeleton.py",
     "verify_eva_phase140_capability_off_wins.py",
     "verify_eva_phase141_retention_and_speed.py",
+    "verify_eva_phase142_typing_preview.py",
     "verify_chrome_execution_skills.py",
     # Never-run verifiers brought into the suite (fixed or confirmed green).
     "verify_agent_runner.py",
@@ -581,6 +583,7 @@ _VERIFIER_TAG_OVERRIDES = {
     "verify_eva_phase139_data_isolation.py": ("phase139", "verifiers", "data", "isolation"),
     "verify_eva_phase140_capability_off_wins.py": ("phase140", "config", "capabilities", "safety"),
     "verify_eva_phase141_retention_and_speed.py": ("phase141", "traces", "retention", "performance"),
+    "verify_eva_phase142_typing_preview.py": ("phase142", "typing", "approval", "scorecard"),
     "verify_chrome_execution_skills.py": ("phase113", "browser", "chrome", "url"),
 }
 
