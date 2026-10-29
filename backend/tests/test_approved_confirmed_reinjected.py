@@ -99,7 +99,13 @@ class TestApprovedMessageActuallySends:
     handler re-gated with user_confirmed=False, and it answered
     requires_confirmation forever."""
 
-    def test_approved_message_reports_sent_not_reconfirm(self) -> None:
+    def test_approved_message_reports_sent_not_reconfirm(self, monkeypatch) -> None:
+        # The sender drives a real app, so the test swaps in a fake: what is under
+        # test is that approval re-injects confirmed=True, not WhatsApp itself.
+        monkeypatch.setattr(
+            "eva.media.whatsapp_desktop.send_whatsapp_desktop",
+            lambda recipient, message: {"ok": True, "sent": True, "verified": True, "message": "Sent."},
+        )
         r = ToolRegistry()
         res = r.run("message.send_via_ui", recipient="Alex", message="on my way")
         pid = res.get("pending_id")

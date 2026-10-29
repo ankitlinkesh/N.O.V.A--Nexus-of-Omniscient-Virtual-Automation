@@ -38,4 +38,27 @@ def message_send_via_ui(recipient: str, message: str, confirmed: bool = False) -
     decision = evaluate_action(action, PermissionContext(user_confirmed=bool(confirmed)))
     if decision.decision != "allow":
         return {"ok": False, "requires_confirmation": True, "decision": decision.as_dict(), "message": f"Confirm before sending this message to {recipient}: {message}"}
-    return {"ok": True, "recipient": recipient, "sent_likely": True, "message": "Message send action completed through visible UI. I could not fully verify delivery."}
+    # This used to return ok=True / "completed through visible UI" and do nothing at
+    # all. It now really drives WhatsApp Desktop, and says exactly what happened.
+    from ..media.whatsapp_desktop import send_whatsapp_desktop
+
+    result = send_whatsapp_desktop(recipient, message)
+    if result.get("sent"):
+        return {
+            "ok": True,
+            "recipient": recipient,
+            "sent": True,
+            "verified": bool(result.get("verified")),
+            "message": str(result.get("message") or "Sent."),
+            # The approval reply shows `summary`; without it the user saw a bare
+            # "Executed successfully." and could not tell if delivery was verified.
+            "summary": str(result.get("message") or "Sent."),
+        }
+    return {
+        "ok": False,
+        "recipient": recipient,
+        "sent": False,
+        "step": result.get("step"),
+        "error": result.get("error"),
+        "message": str(result.get("message") or f"I did not send the message to {recipient} ({result.get('error')})."),
+    }

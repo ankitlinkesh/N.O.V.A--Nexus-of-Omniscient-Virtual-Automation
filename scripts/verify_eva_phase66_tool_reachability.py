@@ -233,7 +233,7 @@ EXCLUDED_FILES = (REGISTRY_FILE, CATALOG_FILE)
 # all three are planner-visible.
 # Phase 130: +1 (sandbox_run): 110 -> 111, planner-visible.
 # Phase 134: +2 (share.to_box, share.from_box): 111 -> 113, planner-visible.
-EXPECTED_TOOL_COUNT = 113
+EXPECTED_TOOL_COUNT = 114
 # Phase 91 made `system_time` planner-visible (72 -> 73 default, 79 -> 80 with
 # Playwright). It had to be: registered + audited + referenced from production
 # source satisfied the reachability check above while the model still could not
@@ -254,8 +254,9 @@ EXPECTED_TOOL_COUNT = 113
 # 90 -> 93 with Playwright.
 # Phase 130: +1 (sandbox_run): 86 -> 87 default, 93 -> 94 with Playwright.
 # Phase 134: +2 (share.to_box, share.from_box): 87 -> 89 default, 94 -> 96 with Playwright.
-EXPECTED_DEFAULT_PLANNER_VISIBLE_COUNT = 89
-EXPECTED_PLAYWRIGHT_PLANNER_VISIBLE_COUNT = 96
+# email.draft_gmail (draft-only Gmail compose): +1 -> 90 default.
+EXPECTED_DEFAULT_PLANNER_VISIBLE_COUNT = 90
+EXPECTED_PLAYWRIGHT_PLANNER_VISIBLE_COUNT = 97
 
 # The reviewed set of intentionally-exempt tools: name -> justification.
 # Growing this list is a deliberate act with a real reason, not a place to

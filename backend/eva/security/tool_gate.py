@@ -66,6 +66,10 @@ def pop_pending_call(pending_id: str) -> dict[str, Any] | None:
     return _PENDING_CALLS.pop(pending_id, None)
 
 
+def has_pending_calls() -> bool:
+    return bool(_PENDING_CALLS)
+
+
 def reset_pending_calls() -> None:
     _PENDING_CALLS.clear()
 

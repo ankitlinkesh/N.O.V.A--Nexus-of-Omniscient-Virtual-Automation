@@ -18,6 +18,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _SESSION_ROOT = os.environ.get("EVA_PYTEST_SESSION_ROOT") or tempfile.mkdtemp(prefix="eva_pytest_session_")
 os.environ["EVA_PYTEST_SESSION_ROOT"] = _SESSION_ROOT
 os.environ["EVA_DATA_DIR"] = os.path.join(_SESSION_ROOT, "data")
+# The existing suite pins the rule layers' behaviour end to end; the LLM-first mode has its own
+# tests (test_routing_mode.py). Production default is llm_first.
+os.environ.setdefault("EVA_ROUTING", "rules_first")
 # Tests that call tempfile.mkdtemp() directly land here too, and the whole folder is
 # removed at the end of the session: %TEMP% is on a C: with only a few GB free.
 tempfile.tempdir = _SESSION_ROOT

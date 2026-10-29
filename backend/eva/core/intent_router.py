@@ -55,7 +55,7 @@ def _strip_spotify_query(value: str) -> str:
     cleaned = re.sub(r"\s+", " ", str(value or "").strip())
     cleaned = re.sub(r"^(please\s+)?(open\s+spotify\s+and\s+)?play\s+", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"^(please\s+)?search\s+spotify\s+for\s+", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s+on\s+spotify$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+(?:on|in|from|via|using|with)\s+(?:the\s+)?spotify(?:\s+app)?$", "", cleaned, flags=re.IGNORECASE)
     return cleaned.strip(" .?!")
 
 

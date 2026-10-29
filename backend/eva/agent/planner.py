@@ -70,6 +70,31 @@ def _freshness_rule() -> str:
     )
 
 
+# Per-tool metadata that is identical boilerplate on (nearly) every tool, or that
+# the planner prompt never needs. Left in, it was ~60% of an ~78k-char prompt that
+# a local model had to re-read on every message. Kept: name, description,
+# args_schema, plus risk/confirmation flags only when they are not the default.
+_REGISTRY_DROP_KEYS = frozenset({
+    "safe_by_default", "category", "verification_strategy", "failure_recovery",
+    "action_type", "risk_categories", "supports_rollback", "verification_method",
+    "requires_explicit_intent",
+})
+
+
+def _registry_json(registry: ToolRegistry) -> str:
+    compact = []
+    for spec in registry.planner_specs():
+        item = {k: v for k, v in spec.items() if k not in _REGISTRY_DROP_KEYS}
+        if item.get("safety_level") == "safe":
+            item.pop("safety_level", None)
+        if item.get("risk") == "low":
+            item.pop("risk", None)
+        if item.get("requires_confirmation") is False:
+            item.pop("requires_confirmation", None)
+        compact.append(item)
+    return json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+
+
 def _native_function_calling_enabled() -> bool:
     raw = os.environ.get("EVA_NATIVE_FUNCTION_CALLING")
     if raw is None:
@@ -761,16 +786,9 @@ class ToolCallPlanner:
         notes, recent = _split_history(history)
         return f"""
 You are Eva's tool-calling planner. Return strict JSON only. No markdown.
-{_freshness_rule()}
-
-User message:
-{message}
-{_memory_block(notes)}
-Recent chat context:
-{json.dumps(recent, ensure_ascii=False)}
 
 Available tool registry:
-{json.dumps(self.registry.planner_specs(), ensure_ascii=False)}
+{_registry_json(self.registry)}
 
 Required JSON shape:
 {{
@@ -813,6 +831,14 @@ Rules:
 - Use workspace_search, workspace_read_file, workspace_list_files, workspace_summarize_file, or workspace_project_summary for generic safe file inspection. Workspace tools are read-only.
 - Use research_start_topic, research_recall, research_web, research_save_note, or research_summary for local research knowledge commands and long-term topic knowledge.
 - No arbitrary shell commands. No camera. No always-on screen watching.
+
+{_freshness_rule()}
+
+User message:
+{message}
+{_memory_block(notes)}
+Recent chat context:
+{json.dumps(recent, ensure_ascii=False)}
 """.strip()
 
     def _agent_step_prompt(self, message: str, history: list[dict[str, str]], task_context: dict[str, Any]) -> str:
@@ -832,19 +858,9 @@ Rules:
             compact_context["situation"] = task_context.get("situation")
         return f"""
 You are Eva's bounded agent-step planner. Return strict JSON only. No markdown. Do not reveal hidden chain-of-thought.
-{_freshness_rule()}
-
-User goal:
-{message}
-{_memory_block(notes)}
-Recent chat context:
-{json.dumps(recent, ensure_ascii=False)}
-
-Current task state:
-{json.dumps(compact_context, ensure_ascii=False)}
 
 Available safe tool registry:
-{json.dumps(self.registry.planner_specs(), ensure_ascii=False)}
+{_registry_json(self.registry)}
 
 Required JSON shape:
 {{
@@ -885,6 +901,17 @@ Rules:
 - For shutdown, restart, sleep, sign out, or log out, return confirmation_required and do not call a power tool.
 - If observations are enough, return type "done" with a concise final_response.
 - No arbitrary shell commands. No camera. No hidden screen watching.
+
+{_freshness_rule()}
+
+User goal:
+{message}
+{_memory_block(notes)}
+Recent chat context:
+{json.dumps(recent, ensure_ascii=False)}
+
+Current task state:
+{json.dumps(compact_context, ensure_ascii=False)}
 """.strip()
 
     def _parse_json(self, raw: str) -> dict[str, Any]:

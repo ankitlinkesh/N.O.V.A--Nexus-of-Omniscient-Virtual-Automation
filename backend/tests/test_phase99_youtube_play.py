@@ -35,6 +35,17 @@ from backend.eva.agent.target_verifier import is_youtube_player_url
 from backend.eva.browser.skills import _is_youtube_watch_url, _resolve_youtube_watch_url
 
 
+
+
+@pytest.fixture(autouse=True)
+def _no_youtube_results_page(monkeypatch):
+    """The results-page fallback does a real HTTP request; these tests are about the
+    search-provider path, so keep them offline (its own tests stub httpx)."""
+    from backend.eva.browser import skills as _skills
+
+    monkeypatch.setattr(_skills, "_youtube_top_video_from_results", lambda query: None)
+
+
 # ------------------------------------------- the verification that could not fail
 
 
@@ -47,6 +58,7 @@ from backend.eva.browser.skills import _is_youtube_watch_url, _resolve_youtube_w
         "https://youtu.be/abc123",
     ],
 )
+
 def test_player_urls_are_recognised(url):
     assert is_youtube_player_url(url) is True
 
@@ -259,7 +271,9 @@ def test_activation_is_idempotent_when_something_is_already_playing(monkeypatch)
 
     opened: list[str] = []
     monkeypatch.setattr(
-        skills, "discover_current_url", lambda: {"ok": True, "url": "https://www.youtube.com/watch?v=already"}
+        skills,
+        "discover_current_url",
+        lambda: {"ok": True, "url": "https://www.youtube.com/watch?v=already", "title": "Pavazha Malli - YouTube"},
     )
     monkeypatch.setattr(skills, "open_url_in_chrome", lambda url: opened.append(url) or {"ok": True})
 

@@ -20,6 +20,8 @@ from ..agent.policies import is_agentic_intent
 from ..browser.skills import ask_chatgpt_in_chrome, verify_browser_target
 from ..core.fast_commands import maybe_handle_fast_command
 from ..core.fast_responses import maybe_handle_fast_response
+from ..core.routing_mode import use_rule_layers
+from ..core.triage import triage_request
 from ..core.intent_router import classify_capability_intent
 from ..core.operator_commands import handle_operator_command
 from ..core.persona import ASSISTANT_NAME, PERSONA_STYLE, STARTUP_GREETING, USER_NAME
@@ -909,6 +911,15 @@ def _handle_capability_route(
                     "This build still cannot automatically send WhatsApp until a later verified executor phase.",
                     "capability:message_workflow",
                 )
+            # WhatsApp Desktop has a real sender now: create the gated send, which asks the
+            # user to `confirm act_...` for this exact recipient and text.
+            gated = _run_capability_tool("message.send_via_ui", recipient=recipient, message=body)
+            if gated.get("pending_id"):
+                return (
+                    f"Ready to send \"{body}\" to {recipient} on WhatsApp Desktop. I have not sent anything yet.\n\n"
+                    f"Say `confirm {gated['pending_id']}` to send exactly this message.",
+                    "capability:message_workflow",
+                )
             return (
                 f"I prepared a WhatsApp draft for {recipient}: \"{body}\". I did not send anything. "
                 "WhatsApp Desktop is the first target, and Eva will not send it silently.\n\n"
@@ -1117,6 +1128,54 @@ async def run_tool(tool_name: str, body: dict | None = None) -> dict:
     return {"tool": tool_name, "result": result}
 
 
+def _run_command_step(text: str, session_context: dict, memory, session_id: str, settings) -> tuple[str, str] | None:
+    """Run one triaged `command` step through the existing rule handlers, or None if none claims it."""
+    with _one_shot_screen_grant(text):
+        fast = maybe_handle_fast_command(text, tools, session_context, memory, session_id)
+    if fast is not None:
+        return fast
+    classification = classify_capability_intent(text, session_context)
+    with _one_shot_screen_grant(text):
+        return _handle_capability_route(text, classification, session_context, memory, session_id, settings)
+
+
+async def _apply_triage(message: str, session_context: dict, memory, session_id: str, settings, started_at: float):
+    """LLM triage for a message the rule layers did not claim.
+
+    Returns (finished, force_agentic):
+      * finished = (reply, source) when every step was a command and has been run;
+      * force_agentic = True when any step is on-screen `work` (the whole message then goes
+        to the agent runner);
+      * otherwise (None, False): the normal planner flow continues unchanged. Mixed plans
+        deliberately run nothing early, so no step is executed twice or dropped.
+    Triage that fails or returns nothing is also (None, False): the old routing.
+    """
+    steps = await triage_request(message)
+    if not steps:
+        return None, False
+    _timing_log(session_id, "triage", started_at, kinds=",".join(step.kind for step in steps))
+    if any(step.kind == "work" for step in steps):
+        return None, True
+    if not all(step.kind == "command" for step in steps):
+        return None, False
+    replies: list[str] = []
+    source = "triage-commands"
+    for step in steps:
+        outcome = _run_command_step(step.text, session_context, memory, session_id, settings)
+        if outcome is None:
+            replies.append(f"I could not do: {step.text}")
+            break
+        replies.append(outcome[0])
+        source = outcome[1] if len(steps) == 1 else source
+    reply = "\n".join(replies)
+    _persist_and_log(
+        memory, session_id, session_context, started_at, message, reply, source,
+        log_kind="triage_commands", log_payload={"steps": [step.text for step in steps], "reply": reply},
+        matched_event="triage_commands_matched", matched_fields={"steps": len(steps)},
+    )
+    return (reply, source), False
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     started_at = time.perf_counter()
@@ -1126,8 +1185,14 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     session_context = _session_context(request, session_id)
     _timing_log(session_id, "route_received", started_at, chars=len(payload.message))
 
+    rules = use_rule_layers(payload.message)
+    force_agentic = False
+    if not rules:
+        triaged, force_agentic = await _apply_triage(payload.message, session_context, memory, session_id, settings, started_at)
+        if triaged is not None:
+            return ChatResponse(session_id=session_id, reply=triaged[0], source=triaged[1])
     with _one_shot_screen_grant(payload.message):
-        fast = maybe_handle_fast_command(payload.message, tools, session_context, memory, session_id)
+        fast = maybe_handle_fast_command(payload.message, tools, session_context, memory, session_id) if rules else None
     if fast is not None:
         reply, source = fast
         _persist_and_log(
@@ -1147,7 +1212,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
                 return ChatResponse(session_id=session_id, reply=reply, source=source, requires_confirmation=True, action=pending.group(1))
         return ChatResponse(session_id=session_id, reply=reply, source=source)
 
-    casual = maybe_handle_fast_response(payload.message)
+    casual = maybe_handle_fast_response(payload.message) if rules else None
     if casual is not None:
         reply, source = casual
         _persist_and_log(
@@ -1158,7 +1223,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         return ChatResponse(session_id=session_id, reply=reply, source=source)
 
     with _one_shot_screen_grant(payload.message):
-        operator = handle_operator_command(payload.message, _operator_context(session_context))
+        operator = handle_operator_command(payload.message, _operator_context(session_context)) if rules else None
     if operator is not None:
         reply = str(operator.get("response") or "Done.")
         memory.add_message(session_id, "user", payload.message)
@@ -1175,7 +1240,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
             action=operator.get("action"),
         )
 
-    capability = classify_capability_intent(payload.message, session_context)
+    capability = classify_capability_intent(payload.message, session_context) if rules else {"matched": False}
     with _one_shot_screen_grant(payload.message):
         capability_reply = _handle_capability_route(payload.message, capability, session_context, memory, session_id, settings)
     if capability_reply is not None:
@@ -1189,7 +1254,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         )
         return ChatResponse(session_id=session_id, reply=reply, source=source)
 
-    if is_agentic_intent(payload.message):
+    if force_agentic or is_agentic_intent(payload.message):
         history = memory.history_with_recall(session_id, payload.message)
         memory.add_message(session_id, "user", payload.message)
         result = await run_agentic_task(
@@ -1300,8 +1365,16 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         session_context = _session_context(request, session_id)
         _timing_log(session_id, "route_received", started_at, chars=len(payload.message), stream=True)
 
+        rules = use_rule_layers(payload.message)
+        force_agentic = False
+        if not rules:
+            triaged, force_agentic = await _apply_triage(payload.message, session_context, memory, session_id, settings, started_at)
+            if triaged is not None:
+                for line in _simple_stream_events(session_id, triaged[1], triaged[0]):
+                    yield line
+                return
         with _one_shot_screen_grant(payload.message):
-            fast = maybe_handle_fast_command(payload.message, tools, session_context, memory, session_id)
+            fast = maybe_handle_fast_command(payload.message, tools, session_context, memory, session_id) if rules else None
         if fast is not None:
             reply, source = fast
             _persist_and_log(
@@ -1313,7 +1386,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
                 yield line
             return
 
-        casual = maybe_handle_fast_response(payload.message)
+        casual = maybe_handle_fast_response(payload.message) if rules else None
         if casual is not None:
             reply, source = casual
             _persist_and_log(
@@ -1326,7 +1399,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
             return
 
         with _one_shot_screen_grant(payload.message):
-            operator = handle_operator_command(payload.message, _operator_context(session_context))
+            operator = handle_operator_command(payload.message, _operator_context(session_context)) if rules else None
         if operator is not None:
             reply = str(operator.get("response") or "Done.")
             memory.add_message(session_id, "user", payload.message)
@@ -1347,7 +1420,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
             yield _json_line({"type": "done", "reply": reply})
             return
 
-        capability = classify_capability_intent(payload.message, session_context)
+        capability = classify_capability_intent(payload.message, session_context) if rules else {"matched": False}
         with _one_shot_screen_grant(payload.message):
             capability_reply = _handle_capability_route(payload.message, capability, session_context, memory, session_id, settings)
         if capability_reply is not None:
@@ -1363,7 +1436,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
                 yield line
             return
 
-        if is_agentic_intent(payload.message):
+        if force_agentic or is_agentic_intent(payload.message):
             history = memory.history_with_recall(session_id, payload.message)
             memory.add_message(session_id, "user", payload.message)
             yield _json_line({"type": "meta", "session_id": session_id, "source": "agent-runner", "route": "agentic"})

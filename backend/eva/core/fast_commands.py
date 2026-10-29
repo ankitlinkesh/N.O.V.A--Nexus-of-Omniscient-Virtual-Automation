@@ -15,6 +15,7 @@ from .fast_command_instant import maybe_handle_instant_answer
 from .fast_command_settings import maybe_handle_setting_command
 from .fast_command_clipboard import maybe_handle_clipboard_command
 from .fast_command_sandbox import maybe_handle_sandbox_command
+from .request_normalizer import canonicalize_request
 from .fast_command_formatters import (
     _format_activation_status,
     _format_agent_status,
@@ -783,6 +784,9 @@ def maybe_handle_fast_command(
     memory: object | None = None,
     session_id: str | None = None,
 ) -> tuple[str, str] | None:
+    # Loose phrasing ("can you pause the music please") -> the canonical phrase the
+    # rules below know. Pure text rewrite: routing and the tool gate are unchanged.
+    message = canonicalize_request(message)
     normalized = " ".join(message.lower().strip().split())
     original = message.strip()
     if not normalized:
@@ -3565,6 +3569,14 @@ def maybe_handle_fast_command(
         return _run_tool(tools, "close_app", session_context, app_name=close_target)
 
     folder = _after_prefix(normalized, ("open folder ", "show folder ", "open my ", "show my "))
+    # "open my X" is only a folder when X is one. "open my gmail" was sent to
+    # open_folder("gmail") and answered "Folder not found: gmail".
+    if folder and not normalized.startswith(("open folder ", "show folder ")) and folder not in FOLDER_WORDS:
+        if folder in WEB_ALIASES:
+            return _run_tool(tools, "open_url", session_context, url=WEB_ALIASES[folder])
+        if folder in APP_WORDS:
+            return _run_tool(tools, "open_app", session_context, app_name=folder)
+        folder = ""
     if folder or normalized in {f"open {name}" for name in FOLDER_WORDS}:
         folder_name = folder or normalized.removeprefix("open ")
         return _run_tool(tools, "open_folder", session_context, folder_name=folder_name)
@@ -3576,7 +3588,14 @@ def maybe_handle_fast_command(
     # an errand, and goes to the agent.
     url = _after_prefix(original, ("open url ", "open website ", "go to ", "visit "))
     if url and not re.search(r"\s", url.strip()):
-        return _run_tool(tools, "open_url", session_context, url=url)
+        # "go to github" opened the URL "github" -- not an address. A bare word is a
+        # known site (WEB_ALIASES) or not a URL at all, so it falls through.
+        if not re.search(r"[./:]", url):
+            alias = WEB_ALIASES.get(url.strip().lower())
+            if alias:
+                return _run_tool(tools, "open_url", session_context, url=alias)
+        else:
+            return _run_tool(tools, "open_url", session_context, url=url)
 
     if re.match(r"^(open|visit)\s+([a-z0-9-]+\.)+[a-z]{2,}(/\S*)?$", normalized):
         target = original.split(maxsplit=1)[1]

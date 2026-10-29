@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import time
 
 from typing import Any
@@ -282,14 +284,43 @@ def _resolve_youtube_watch_url(query: str) -> str | None:
 
         result = tavily_search_sync(f"{query} site:youtube.com")
     except Exception:
+        result = None
+    if isinstance(result, dict) and result.get("ok"):
+        for item in result.get("results") or []:
+            url = str((item or {}).get("url") or "")
+            if _is_youtube_watch_url(url):
+                return url
+    # No search provider (Tavily needs a key): read YouTube's own results page.
+    return _youtube_top_video_from_results(query)
+
+
+_YOUTUBE_VIDEO_ID = re.compile(r'"videoRenderer":\{"videoId":"([A-Za-z0-9_-]{11})"')
+
+
+def _youtube_top_video_from_results(query: str) -> str | None:
+    """The first organic video on YouTube's results page for `query`, or None.
+
+    Reads the public results page the user would see; sends only the search words.
+    The first `videoRenderer` is a real video (ads, channels, playlists and Shorts
+    shelves use other renderers), so the URL it yields is a watch page.
+    """
+    import httpx
+
+    try:
+        response = httpx.get(
+            "https://www.youtube.com/results",
+            params={"search_query": query},
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36", "Accept-Language": "en-US,en;q=0.9"},
+            cookies={"CONSENT": "YES+1", "SOCS": "CAI"},
+            timeout=8.0,
+            follow_redirects=True,
+        )
+    except Exception:
         return None
-    if not isinstance(result, dict) or not result.get("ok"):
+    if response.status_code != 200:
         return None
-    for item in result.get("results") or []:
-        url = str((item or {}).get("url") or "")
-        if _is_youtube_watch_url(url):
-            return url
-    return None
+    match = _YOUTUBE_VIDEO_ID.search(response.text)
+    return f"https://www.youtube.com/watch?v={match.group(1)}" if match else None
 
 
 def _ok_dict(result: Any) -> bool:
@@ -354,6 +385,18 @@ def _confirm_youtube_playback(watch_url: str, query: str) -> dict[str, Any]:
     }
 
 
+_QUERY_STOPWORDS = frozenset({"the", "a", "an", "of", "on", "in", "to", "for", "video", "videos", "play", "watch", "official"})
+
+
+def _title_matches_query(title: str, query: str) -> bool:
+    """True when the page title contains the request's meaningful words."""
+    words = [w for w in re.findall(r"\w+", str(query or "").lower()) if w not in _QUERY_STOPWORDS]
+    haystack = str(title or "").lower()
+    # Also compare with spaces removed: "pavazhamalli" is titled "Pavazha Malli".
+    compact = re.sub(r"\W+", "", haystack)
+    return bool(words) and all(w in haystack or w in compact for w in words)
+
+
 def activate_top_youtube_result(query: str, task_id: str | None = None) -> dict[str, Any]:
     clean = " ".join(str(query or "").strip().split())
     if not clean:
@@ -372,7 +415,18 @@ def activate_top_youtube_result(query: str, task_id: str | None = None) -> dict[
 
     current = discover_current_url()
     current_url = str((current or {}).get("current_url") or (current or {}).get("url") or "")
-    if is_youtube_player_url(current_url):
+    # "A YouTube video is open" is not "THIS video is playing": measured live, an
+    # unrelated Valorant video in another browser, read from a stale cache after a
+    # failed live probe, made "play the interstellar trailer" answer "already
+    # playing" and open nothing. Require a fresh read AND a title that matches.
+    fresh = bool((current or {}).get("ok")) and not (current or {}).get("stale")
+    opened_by_us = str(getattr(get_current_task_context(), "target_url", "") or "")
+    same_video = bool(opened_by_us) and opened_by_us.split("&")[0] == current_url.split("&")[0]
+    if (
+        fresh
+        and is_youtube_player_url(current_url)
+        and (same_video or _title_matches_query(str((current or {}).get("title") or ""), clean))
+    ):
         return {
             "ok": True,
             "activated": True,

@@ -200,6 +200,74 @@ def _mime_type(path: Path) -> str:
     return "image/jpeg"
 
 
+# Local multimodal backend. Set VISION_PROVIDER=local to send the screenshot to an
+# OpenAI-compatible server on this machine (llama-server started with --mmproj)
+# instead of Google's Gemini API, so the image never leaves the computer.
+LOCAL_PROVIDER = "local_vision"
+
+
+def local_vision_enabled() -> bool:
+    return os.environ.get("VISION_PROVIDER", "").strip().lower() == "local"
+
+
+def _local_base_url() -> str:
+    return (os.environ.get("LOCAL_VISION_URL") or "http://127.0.0.1:8080/v1").strip().rstrip("/")
+
+
+def _local_model() -> str:
+    return os.environ.get("LOCAL_VISION_MODEL", "qwen3-vl-4b").strip() or "qwen3-vl-4b"
+
+
+def _local_prompt(user_question: str | None) -> str:
+    """A locator question (`"found": ...` JSON with coordinates) is sent as written.
+
+    Wrapping it in the screen-description prompt gave the model two conflicting
+    JSON shapes; it answered in the description shape and the click locator got
+    no coordinates (`unparseable_reply`).
+    """
+    question = str(user_question or "")
+    if '"found"' in question:
+        return question
+    return _prompt(user_question)
+
+
+def _local_payload(image_path: Path, user_question: str | None) -> dict[str, Any]:
+    encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
+    return {
+        "model": _local_model(),
+        "temperature": 0.2,
+        "max_tokens": 1200,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _local_prompt(user_question)},
+                    {"type": "image_url", "image_url": {"url": f"data:{_mime_type(image_path)};base64,{encoded}"}},
+                ],
+            }
+        ],
+    }
+
+
+def _local_result(model: str, response: httpx.Response) -> dict[str, Any]:
+    if response.status_code >= 400:
+        return {"ok": False, "provider": LOCAL_PROVIDER, "model": model, "error": f"local_vision_http_{response.status_code}"}
+    try:
+        text = str(response.json()["choices"][0]["message"].get("content") or "").strip()
+    except Exception:
+        text = ""
+    if not text:
+        return {"ok": False, "provider": LOCAL_PROVIDER, "model": model, "error": "empty_vision_response"}
+    result = _normalize_success(model, text)
+    result["provider"] = LOCAL_PROVIDER
+    result["raw"] = text
+    return result
+
+
+def _local_timeout() -> float:
+    return _env_float("LOCAL_VISION_TIMEOUT_SECONDS", 120.0)
+
+
 def _validate_image(path: str) -> tuple[Path | None, dict[str, Any] | None]:
     if not _env_bool("VISION_ENABLED", True):
         return None, {"ok": False, "provider": PROVIDER, "error": "vision_disabled"}
@@ -210,7 +278,7 @@ def _validate_image(path: str) -> tuple[Path | None, dict[str, Any] | None]:
     size_mb = image_path.stat().st_size / (1024 * 1024)
     if size_mb > max_mb:
         return None, {"ok": False, "provider": PROVIDER, "error": f"image_too_large:{size_mb:.2f}MB>{max_mb:.2f}MB"}
-    if not gemini_api_keys() and not os.environ.get("GEMINI_API_KEY"):
+    if not local_vision_enabled() and not gemini_api_keys() and not os.environ.get("GEMINI_API_KEY"):
         return None, {"ok": False, "provider": PROVIDER, "error": "missing_api_key"}
     return image_path, None
 
@@ -350,6 +418,13 @@ def analyze_screen_image_sync(image_path: str, user_question: str | None = None)
     if error is not None:
         return error
     assert path is not None
+    if local_vision_enabled():
+        model = _local_model()
+        try:
+            with httpx.Client(timeout=_local_timeout()) as client:
+                return _local_result(model, client.post(f"{_local_base_url()}/chat/completions", json=_local_payload(path, user_question)))
+        except Exception as exc:
+            return {"ok": False, "provider": LOCAL_PROVIDER, "model": model, "error": f"local_vision_request_error:{exc.__class__.__name__}"}
     model = _model_name()
     limited = _check_rate_limit(model)
     if limited is not None:
@@ -403,6 +478,13 @@ async def analyze_screen_image(image_path: str, user_question: str | None = None
     if error is not None:
         return error
     assert path is not None
+    if local_vision_enabled():
+        model = _local_model()
+        try:
+            async with httpx.AsyncClient(timeout=_local_timeout()) as client:
+                return _local_result(model, await client.post(f"{_local_base_url()}/chat/completions", json=_local_payload(path, user_question)))
+        except Exception as exc:
+            return {"ok": False, "provider": LOCAL_PROVIDER, "model": model, "error": f"local_vision_request_error:{exc.__class__.__name__}"}
     model = _model_name()
     limited = _check_rate_limit(model)
     if limited is not None:

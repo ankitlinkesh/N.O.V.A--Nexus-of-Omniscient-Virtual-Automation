@@ -73,6 +73,7 @@ from ..desktop import (
 from .app_control_tools import app_focus, browser_open_url_tool, browser_search_tool
 from . import clipboard_tools, system_settings
 from .desktop import close_app, media_key, open_app, open_folder, open_url, system_power, system_status, web_search
+from .email_tools import email_draft_gmail
 from .message_tools import message_confirm_send, message_prepare, message_send_via_ui
 from .share_bridge import share_from_box, share_to_box
 from .safe_file_tools import file_copy, file_delete, file_list_dir, file_move, file_read_text, file_write_text
@@ -901,6 +902,19 @@ class ToolRegistry:
                 # `recipient` is deliberately NOT declared -- it is the key the
                 # draft is filed under, i.e. an actual target.
                 content_args=("message",),
+            ),
+            "email.draft_gmail": ToolSpec(
+                name="email.draft_gmail",
+                description="Open a Gmail compose draft in Chrome with the recipient, subject and body filled in. Does NOT send; the user presses Send.",
+                args_schema=_schema({"to": {"type": "string"}, "subject": {"type": "string"}, "body": {"type": "string"}}, ["to", "subject", "body"]),
+                safety_level="safe",
+                handler=lambda to, subject="", body="": email_draft_gmail(str(to), str(subject), str(body)),
+                category="message",
+                risk="low",
+                action_type="SAFE_LOCAL_UI",
+                risk_categories=("SAFE_LOCAL_UI",),
+                verification_method="message_draft_prepared",
+                content_args=("subject", "body"),
             ),
             "message.confirm_send": ToolSpec(
                 name="message.confirm_send",
@@ -1845,6 +1859,7 @@ class ToolRegistry:
             "status",
             "system_time",
             "open_app",
+            "email.draft_gmail",
             "open_folder",
             "open_url",
             "web_search",

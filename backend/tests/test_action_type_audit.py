@@ -119,4 +119,6 @@ def test_relabelling_is_gate_preserving(registry):
     # the claim AUDITED_SAFE_LOCAL_READ's docstring says listing a tool makes.
     # Phase 130: +1 allow (sandbox_run, SANDBOX_COMMAND) -> allow 90.
     # Phase 134: +2 confirm (share.to_box, share.from_box, SANDBOX_TRANSFER) -> confirm 13.
-    assert counts == {"allow": 90, "override": 10, "confirm": 13}, f"gate class counts drifted: {counts}"
+    # `email.draft_gmail` (SAFE_LOCAL_UI): +1 allow -> allow 91. It only opens a
+    # Gmail compose window in Chrome; nothing is sent, the user presses Send.
+    assert counts == {"allow": 91, "override": 10, "confirm": 13}, f"gate class counts drifted: {counts}"
