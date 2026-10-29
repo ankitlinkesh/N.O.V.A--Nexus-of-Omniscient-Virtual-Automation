@@ -17,3 +17,11 @@ class ClodProvider(OpenAICompatibleProvider):
     default_model = "DeepSeek V3"
     base_url_env = "CLOD_BASE_URL"
     default_base_url = "https://api.clod.io/v1"
+
+    @property
+    def supports_response_format(self) -> bool:  # type: ignore[override]
+        # llama.cpp's server enforces json_schema; only trust that for a local endpoint.
+        from ...agent.planner_schema import local_endpoint
+
+        return local_endpoint()
+

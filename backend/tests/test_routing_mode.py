@@ -52,7 +52,6 @@ def test_exact_and_authority_commands_stay_deterministic(message, monkeypatch):
     [
         "open my gmail",
         "go to github",
-        "what's the weather in chennai",
         "remind me to call mom tomorrow",
         "shut down the laptop",
         "tell me a joke",

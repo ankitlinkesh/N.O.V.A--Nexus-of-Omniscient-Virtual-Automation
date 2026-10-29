@@ -621,8 +621,11 @@ def _window_lines(windows: list) -> list[str]:
 
 def is_unsupported_capability(message: str) -> bool:
     text = " ".join(message.lower().split())
+    # Writing, drafting or sending an email has a tool now (email.draft_gmail, then a confirm-gated send);
+    # reading, searching or replying to mail still has none, so those stay refused up front.
+    if re.search(r"\b(e-?mails?|inbox)\b", text) and not re.search(r"\b(write|draft|compose|create|send)\b", text):
+        return True
     unsupported_patterns = (
-        r"\bemail\b",
         r"\bsend (a )?message\b",
         r"\bbook\b.*\bcalendar\b",
         r"\bcall\b.*\bphone\b",

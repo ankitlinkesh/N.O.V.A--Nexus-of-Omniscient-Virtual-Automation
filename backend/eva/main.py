@@ -6,7 +6,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .api.routes import router
+from .core.config import load_project_env as _early_load_project_env
+
+# Load .env / .env.local BEFORE the imports below: several modules read settings at import
+# time (the LLM request timeouts, for one), and used to see only the launching shell's
+# environment, so `EVA_LLM_TIMEOUT_SECONDS` in .env.local was silently ignored.
+_early_load_project_env(Path(__file__).resolve().parents[2])
+
+from .api.routes import router  # noqa: E402
 from .control_center.routes import get_control_center_routes
 from .core.config import load_project_env, load_settings
 from .memory.store import MemoryStore

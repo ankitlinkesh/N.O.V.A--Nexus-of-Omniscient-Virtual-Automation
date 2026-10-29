@@ -256,3 +256,8 @@ def _no_real_sandbox_box(monkeypatch):
         monkeypatch.setattr(mod, "_default_runner", _blocked)
     yield
     assert not touched, f"real wsl.exe sandbox touched during a test: {touched}"
+
+# The keyless DuckDuckGo fallback is a live network call; tests must never make one.
+os.environ.setdefault("EVA_KEYLESS_SEARCH", "off")
+# MCP tool pinning keeps state on disk; tests that exercise it opt in with their own pin file.
+os.environ.setdefault("EVA_MCP_PIN_TOOLS", "0")

@@ -68,6 +68,11 @@ def must_stay_deterministic(message: str) -> bool:
     canonical = " ".join(canonicalize_request(message).lower().split()).rstrip(" .!?")
     if not canonical:
         return True
+    from ..tools.email_tools import is_send_draft_request
+    from ..tools.info_tools import parse_weather_request
+
+    if is_send_draft_request(canonical) or parse_weather_request(canonical) is not None:
+        return True
     if canonical.startswith(_DETERMINISTIC_PREFIXES) or _INSTANT.match(canonical) or _SITE_PLAYBACK.match(canonical) or _SEND_WHATSAPP.match(canonical):
         return True
     return tool_gate.has_pending_calls() and canonical in _CONFIRM_WORDS

@@ -63,7 +63,10 @@ def _ensure_session() -> dict[str, Any]:
     """Launch (or reuse) the single Chromium session. Caller holds _lock."""
     if _session["page"] is not None:
         return {"ok": True}
-    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", _DEFAULT_BROWSERS_PATH)
+    # Only pin the off-system-drive folder when it exists; otherwise let Playwright use its own
+    # default (%LOCALAPPDATA%\ms-playwright), where `playwright install chromium` puts it.
+    if os.path.isdir(_DEFAULT_BROWSERS_PATH):
+        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", _DEFAULT_BROWSERS_PATH)
     from playwright.sync_api import sync_playwright  # type: ignore
 
     pw = sync_playwright().start()

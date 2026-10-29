@@ -41,6 +41,53 @@ def _spotify_windows() -> list[dict[str, Any]]:
     return windows
 
 
+# OCR often drops the spaces ("PlayingonAnkit's Nothing Phone"), so the gaps are optional.
+_PLAYING_ON = re.compile(r"playing\s*on\s*(.{2,60})", re.I)
+
+
+def spotify_connect_device(*, grab=None, reader=None, rect=None) -> str:
+    """The other device Spotify says it is playing on ("Ankit's Phone"), or "" when it is not remote.
+
+    Spotify Connect can keep playback on a phone or speaker while the desktop app only controls it. The window
+    title then shows that device's song, never this PC's, so a play request cannot be verified here. Spotify's
+    window exposes no accessibility tree, so the \"Playing on ...\" banner is read with local OCR. Never raises.
+    """
+    try:
+        if rect is None:
+            from ..desktop.windows import find_window
+            import ctypes
+            from ctypes import wintypes
+
+            # Without this the rectangle and the grab are in scaled (virtualised) coordinates and cover only
+            # part of the window: a 2400x1350 window came back as 1600x900 and the player bar was cut off.
+            from ..screen.dpi import ensure_dpi_aware
+
+            ensure_dpi_aware()
+            # A screen grab reads whatever is on top, so bring Spotify forward first (best effort).
+            _focus_spotify()
+            time.sleep(0.5)
+            found = find_window("spotify", limit=1)
+            if not found:
+                return ""
+            box = wintypes.RECT()
+            if not ctypes.windll.user32.GetWindowRect(wintypes.HWND(found[0].hwnd), ctypes.byref(box)):
+                return ""
+            rect = (max(box.left, 0), max(box.top, 0), box.right, box.bottom)
+        if grab is None:
+            from PIL import ImageGrab
+
+            grab = lambda r: ImageGrab.grab(bbox=r, all_screens=True)  # noqa: E731
+        if reader is None:
+            from ..screen.ocr_locate import _engine_lines as reader  # noqa: N813
+        for text, _score, _box in reader(grab(rect)):
+            found_device = _PLAYING_ON.search(str(text))
+            if found_device:
+                return found_device.group(1).strip()
+    except Exception:
+        return ""
+    return ""
+
+
 def _clean_query(query: str) -> str:
     clean = " ".join(str(query or "").strip().split())
     if not clean:
@@ -78,7 +125,7 @@ Start-Sleep -Milliseconds {int(delay_ms)}
         completed = subprocess.run(
             ["powershell.exe", "-NoProfile", "-Command", ps],
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             timeout=4,
         )
     except Exception as exc:
@@ -273,8 +320,17 @@ def play_spotify_desktop(query: str) -> dict[str, Any]:
             now_playing["message"] = f"Spotify is playing, but the player bar shows \"{seen.get('now_playing_text')}\", not {clean}."
         elif seen.get("ok") and not seen.get("playing"):
             now_playing["message"] = f"Spotify looks paused. The player bar shows \"{seen.get('now_playing_text')}\"."
+    remote = "" if verified else spotify_connect_device()
+    if remote:
+        # Not a failure of the click: playback is on another device, so this PC's window cannot show it.
+        now_playing = {**now_playing, "remote_device": remote}
     if verified:
         message = str(now_playing.get("message") or f"Done, playing {clean} on Spotify.")
+    elif remote:
+        message = (
+            f"I searched Spotify for {clean} and pressed play, but Spotify is playing on {remote}, not on this PC, "
+            f"so I cannot confirm the track from here. Switch playback to this computer (the device icon in Spotify) and ask again."
+        )
     elif now_playing.get("message") and (now_playing.get("screenshot") or {}).get("ok"):
         message = str(now_playing["message"])
     elif activation.get("ok"):

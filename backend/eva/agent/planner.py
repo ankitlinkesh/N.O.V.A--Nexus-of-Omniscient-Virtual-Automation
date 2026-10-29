@@ -3,7 +3,7 @@
 import json
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from ..core.config import ModelSettings
@@ -81,9 +81,18 @@ _REGISTRY_DROP_KEYS = frozenset({
 })
 
 
-def _registry_json(registry: ToolRegistry) -> str:
+def _used_tool_names(task_context: dict[str, Any]) -> tuple[str, ...]:
+    steps = [item for item in (task_context.get("steps") or []) if isinstance(item, dict)]
+    return tuple(sorted({str(item["tool_name"]) for item in steps if item.get("tool_name")}))
+
+
+def _registry_json(registry: ToolRegistry, goal: str = "", used: tuple[str, ...] = ()) -> str:
+    from .tool_menu import select_specs
+
     compact = []
-    for spec in registry.planner_specs():
+    # Only the tools relevant to this goal are shown (see tool_menu.py); the reply is still
+    # validated against the whole registry and gated, so this only shortens the prompt.
+    for spec in select_specs(goal, registry.planner_specs(), used=used):
         item = {k: v for k, v in spec.items() if k not in _REGISTRY_DROP_KEYS}
         if item.get("safety_level") == "safe":
             item.pop("safety_level", None)
@@ -102,10 +111,42 @@ def _native_function_calling_enabled() -> bool:
     return raw.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
+def _honest_fallback(decision: "PlannerDecision", why: str, *, mode: str) -> "PlannerDecision":
+    """A local-heuristic `done` that replaced a failed LLM plan must not claim the task is finished.
+
+    When the model could not be reached, "observations exist, so done" only means one step ran. In
+    agent mode say that plainly instead of "I finished the task".
+    """
+    if mode != "agent_step" or decision.type != "done":
+        return decision
+    happened = decision.final_response.removeprefix("I finished the task.").strip()
+    text = f"I stopped early because my planner did not answer ({why}), so I cannot say the whole request is done."
+    if happened:
+        text += f" What did happen: {happened}"
+    return replace(decision, final_response=text)
+
+
 @dataclass(frozen=True)
 class PlannedToolCall:
     tool: str
     args: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # Smaller models often write a click as target={'label': 'Seven'} instead of label='Seven'.
+        # A target holding only a label IS the label request (grounding resolves it either way), and
+        # the one-call click grant recognises only the label form, so hoist it. A real verified
+        # target (with coordinates or ids) is left alone.
+        target = self.args.get("target") if isinstance(self.args, dict) else None
+        if (
+            self.tool == "screen.click"
+            and isinstance(target, dict)
+            and not self.args.get("label")
+            and set(target) == {"label"}
+            and str(target["label"]).strip()
+        ):
+            fixed = {key: value for key, value in self.args.items() if key != "target"}
+            fixed["label"] = str(target["label"]).strip()
+            object.__setattr__(self, "args", fixed)
 
 
 @dataclass(frozen=True)
@@ -263,27 +304,62 @@ class ToolCallPlanner:
                 return native
             # else: fall through to the existing JSON-prompt path
         prompt = self._prompt(message, history or [], mode=mode, task_context=task_context or {})
+        messages = [{"role": "system", "content": "Return strict JSON only for Eva planner decisions."}, {"role": "user", "content": prompt}]
+        response_format = self._response_format(message, mode=mode, task_context=task_context or {})
         routed = await complete_with_fallback(
-            [{"role": "system", "content": "Return strict JSON only for Eva planner decisions."}, {"role": "user", "content": prompt}],
+            messages,
             self.settings,
             purpose="planner",
             temperature=0.1,
             max_tokens=800,
+            response_format=response_format,
         )
         self.last_llm_attempts = attempts_as_dicts(routed.attempts)
         if routed.response.ok:
             try:
-                data = self._parse_json(routed.response.text)
-                return self._validate(data, mode=mode)
+                try:
+                    data = self._parse_json(routed.response.text)
+                    return self._validate(data, mode=mode)
+                except PlannerError as first_error:
+                    # One retry that shows the model what was wrong with its own reply.
+                    retry = await complete_with_fallback(
+                        messages + [
+                            {"role": "assistant", "content": routed.response.text[:1200]},
+                            {"role": "user", "content": f"That reply was rejected: {str(first_error)[:200]}. Reply again with ONE valid JSON object only, using only tools from the registry."},
+                        ],
+                        self.settings,
+                        purpose="planner",
+                        temperature=0.0,
+                        max_tokens=800,
+                        response_format=response_format,
+                    )
+                    self.last_llm_attempts = attempts_as_dicts(retry.attempts)
+                    if not retry.response.ok:
+                        raise first_error
+                    return self._validate(self._parse_json(retry.response.text), mode=mode)
             except PlannerError:
                 fallback = self._local_agent_step_decision(message, task_context or {}) if mode == "agent_step" else self._local_tool_decision(message)
                 if fallback is not None:
-                    return fallback
+                    return _honest_fallback(fallback, "its reply was not valid JSON", mode=mode)
                 raise
         fallback = self._local_agent_step_decision(message, task_context or {}) if mode == "agent_step" else self._local_tool_decision(message)
         if fallback is not None:
-            return fallback
+            return _honest_fallback(fallback, str(routed.response.error or "no response")[:80], mode=mode)
         raise PlannerError("I could not plan that safely. Try a simpler command.")
+
+    def _response_format(self, message: str, *, mode: PlannerMode, task_context: dict[str, Any]) -> dict[str, Any] | None:
+        """A JSON-schema constraint for the final decision, built from THIS step's tool menu."""
+        from .planner_schema import response_format, schema_enabled
+        from .tool_menu import select_specs
+
+        if not schema_enabled():
+            return None
+        goal = str(task_context.get("goal") or message) if mode == "agent_step" else message
+        used = _used_tool_names(task_context) if mode == "agent_step" else ()
+        try:
+            return response_format(select_specs(goal, self.registry.planner_specs(), used=used), mode=mode)
+        except Exception:
+            return None
 
     def _native_progress_messages(self, task_context: dict[str, Any]) -> list[dict[str, str]]:
         """Feed the steps already taken, and what they returned, back to the model.
@@ -788,7 +864,7 @@ class ToolCallPlanner:
 You are Eva's tool-calling planner. Return strict JSON only. No markdown.
 
 Available tool registry:
-{_registry_json(self.registry)}
+{_registry_json(self.registry, message)}
 
 Required JSON shape:
 {{
@@ -860,7 +936,7 @@ Recent chat context:
 You are Eva's bounded agent-step planner. Return strict JSON only. No markdown. Do not reveal hidden chain-of-thought.
 
 Available safe tool registry:
-{_registry_json(self.registry)}
+{_registry_json(self.registry, str(task_context.get('goal') or message), _used_tool_names(task_context))}
 
 Required JSON shape:
 {{
@@ -885,6 +961,7 @@ Rules:
 - Use open_app/open_folder/open_url only for explicit desktop/navigation goals. open_app opens any installed app by name, not just a fixed list.
 - Use analyze_screen when the user explicitly asks to inspect/look/check/analyze the screen or identify a visible error. Use capture_screen only for raw screenshot capture.
 - Use system_time for the current time, date, day of the week, or timezone. Never guess the time and never open a website to read a clock.
+- Use weather_forecast for weather, temperature or rain questions about a place; rss_headlines for news headlines from a feed; youtube_transcript to read a YouTube video's captions; ocr_image to read text in an image file. Never guess the weather.
 - Use system_volume for an exact volume level or mute/unmute, display_brightness for screen brightness, theme_mode for dark/light mode, radio_status to read Wi-Fi/Bluetooth on or off, and radio_set to turn Wi-Fi or Bluetooth on or off (it asks the user to confirm; turning Wi-Fi off cuts NOVA's own internet). Use media_control only for play/pause, next, previous and plain volume up/down nudges.
 - You cannot set timers, alarms or reminders yourself: there is no tool for it, and you must not pretend to. If the user asks for one, tell them to say it directly in the chat, for example "set a timer for 5 minutes", "remind me in 20 minutes to stretch" or "remind me at 6 pm to call mom", and the console sets it. Never say you "cannot set timers" without giving that phrasing.
 - Use file.list_dir to list a folder's contents (for the user's own Desktop, Documents or Downloads folder pass just that name, e.g. path="Downloads"; never invent a full path to a user's home folder), and system_status for the user's laptop status: battery percent, whether it is plugged in, memory use, and free disk space on each drive (not for NOVA's own sandbox box; for "your terminal/sandbox/box" use sandbox_run). Use window_focus (not app.focus, which does not exist in your tool list) to bring a visible window to the foreground when the goal requires switching to or focusing an app.
@@ -966,6 +1043,12 @@ Current task state:
             raise PlannerError("Planner selected tool_calls without tool calls.")
         if decision_type == "confirmation_required":
             action = self._extract_action(data, final_response)
+            # Live, a 4B model finished a clicking step, wrote a reason saying it "succeeded", and picked
+            # this type by mistake: the task then ended with "requires confirmation before I can
+            # dangerous_action". A request for approval that names no action and says nothing to the user is
+            # not one; reject it so the planner's one retry can ask again. (Single-turn keeps its old reply.)
+            if mode != "single_turn" and not str(data.get("action") or "").strip() and not final_response and action == "dangerous_action":
+                raise PlannerError("confirmation_required must name the `action` that needs approval and say what to approve. If the last step worked, return tool_calls for the next step, or done when the whole goal is finished.")
             return PlannerDecision(
                 type="confirmation_required",
                 reason=reason,

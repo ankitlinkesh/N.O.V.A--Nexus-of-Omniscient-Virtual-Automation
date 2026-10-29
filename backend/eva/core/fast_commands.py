@@ -792,6 +792,22 @@ def maybe_handle_fast_command(
     if not normalized:
         return None
 
+    # "weather in <place>": answered straight from the key-free weather tool, no model needed.
+    from ..tools.info_tools import parse_weather_request
+
+    weather = parse_weather_request(normalized)
+    if weather is not None:
+        result = tools.run("weather_forecast", place=weather[0], days=weather[1])
+        return str(result.get("summary") or result.get("message") or result.get("error") or "I couldn't get the weather."), "weather-tool"
+
+    # "send" right after NOVA opened a Gmail draft: ask the gate to press Send. The
+    # reply is the usual `confirm act_...` prompt; nothing is sent until it is approved.
+    from ..tools.email_tools import is_send_draft_request
+
+    if is_send_draft_request(normalized):
+        result = tools.run("email.send_drafted")
+        return str(result.get("message") or result.get("error") or "I could not send the draft."), "email-send"
+
     ask = _handle_eva_ask_command(normalized, original, tools, session_context, memory, session_id)
     if ask:
         return ask

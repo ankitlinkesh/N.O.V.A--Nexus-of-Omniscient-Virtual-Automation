@@ -242,9 +242,10 @@ def _uiautomation_elements() -> list[RawElement]:
     Bounded in depth and node count so it cannot hang. Returns ``[]`` if the
     library is unavailable or anything goes wrong — grounding then yields no
     targets, which is exactly the pre-Phase-56 behaviour (a safe no-op)."""
-    try:
-        import uiautomation as auto  # type: ignore
-    except Exception:
+    from .uia import get_uia
+
+    auto = get_uia()
+    if auto is None:
         return []
     try:
         root = auto.GetForegroundControl()

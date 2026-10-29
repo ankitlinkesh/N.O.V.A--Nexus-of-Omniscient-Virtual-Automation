@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import time
@@ -211,10 +212,22 @@ def _handle_status(response: httpx.Response, query: str) -> dict[str, Any] | Non
     return _error(query, f"http_error:{status}")
 
 
+def _keyless_fallback(error: dict[str, Any], query: str, max_results: int | None) -> dict[str, Any]:
+    """No Tavily key (or it was refused): use the keyless provider instead of failing."""
+    from .keyless_search import keyless_enabled, keyless_search_sync
+
+    if error.get("error") not in {"missing_api_key", "auth_error"} or not keyless_enabled():
+        return error
+    found = keyless_search_sync(query, max_results)
+    return found if found.get("ok") else error
+
+
 async def tavily_search(query: str, max_results: int | None = None) -> dict[str, Any]:
     clean, preflight_error = _preflight(query)
     if preflight_error is not None:
-        return preflight_error
+        import asyncio
+
+        return await asyncio.to_thread(_keyless_fallback, preflight_error, query, max_results)
     assert clean is not None
 
     headers = {"Authorization": f"Bearer {os.environ['TAVILY_API_KEY'].strip()}"}
@@ -242,7 +255,7 @@ async def tavily_search(query: str, max_results: int | None = None) -> dict[str,
 def tavily_search_sync(query: str, max_results: int | None = None) -> dict[str, Any]:
     clean, preflight_error = _preflight(query)
     if preflight_error is not None:
-        return preflight_error
+        return _keyless_fallback(preflight_error, query, max_results)
     assert clean is not None
 
     headers = {"Authorization": f"Bearer {os.environ['TAVILY_API_KEY'].strip()}"}
@@ -273,6 +286,7 @@ def tavily_status() -> dict[str, Any]:
     _save_state(state)
     return {
         "tavily_configured": bool(os.environ.get("TAVILY_API_KEY", "").strip()),
+        "keyless_fallback": "duckduckgo (ddgs)" if importlib.util.find_spec("ddgs") else "unavailable",
         "max_results": _max_results(),
         "search_depth": os.environ.get("TAVILY_SEARCH_DEPTH", "basic").strip() or "basic",
         "include_answer": _env_bool("TAVILY_INCLUDE_ANSWER", True),

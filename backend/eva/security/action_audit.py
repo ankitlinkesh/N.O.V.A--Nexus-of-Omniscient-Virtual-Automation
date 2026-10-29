@@ -103,7 +103,9 @@ _RADIO_READ_TOOLS = frozenset({"radio_status"})
 # and reaches no network. The injection risk lives in what the model does NEXT,
 # which is the runner's taint tracking (source_type_for_tool -> file_content), not
 # this gate: a tainted task cannot take a privileged step on the file's say-so. ---
-_USER_FILE_READ_TOOLS = frozenset({"file.read_text"})
+# `ocr_image` is the same read on an image file: same `_safe_path` bounds and secret-file refusals, the engine
+# runs locally (RapidOCR, no network), nothing is mutated, and its text is typed file_content (untrusted) by taint.
+_USER_FILE_READ_TOOLS = frozenset({"file.read_text", "ocr_image"})
 
 AUDITED_SAFE_LOCAL_READ: frozenset[str] = frozenset(
     _STATUS_TOOLS | _WINDOW_METADATA_TOOLS | _WORKSPACE_READ_TOOLS | _RESEARCH_LOCAL_TOOLS | _RADIO_READ_TOOLS | _USER_FILE_READ_TOOLS

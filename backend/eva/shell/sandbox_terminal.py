@@ -45,7 +45,17 @@ from typing import Any, Callable
 DISTRO = "nova"
 SANDBOX_USER = "nova"
 SANDBOX_CWD = "/home/nova/workspace"
-SHARE_HOST_PATH = "D:\\nova-share"
+def _default_share_path() -> str:
+    """EVA_SANDBOX_SHARE, else D:\\nova-share when a D: drive exists, else a folder in the user profile."""
+    configured = os.environ.get("EVA_SANDBOX_SHARE", "").strip()
+    if configured:
+        return configured
+    if os.path.isdir("D:\\"):
+        return "D:\\nova-share"
+    return os.path.join(os.path.expanduser("~"), "nova-share")
+
+
+SHARE_HOST_PATH = _default_share_path()
 SHARE_GUEST_PATH = "/mnt/share"
 
 MAX_COMMAND_CHARS = 4000
@@ -60,7 +70,7 @@ _TIMEOUT_MARK = "__NOVA_SANDBOX_TIMEOUT__"
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
 _WSL = "wsl.exe"
-_NOT_SET_UP = "My sandbox isn't set up yet. Run D:\\wsl\\setup_nova_box.ps1 and try again."
+_NOT_SET_UP = "My sandbox isn't set up yet. Run scripts\\setup_nova_box.ps1 from an administrator PowerShell and try again."
 
 Runner = Callable[[list[str], float, dict[str, str]], Any]
 

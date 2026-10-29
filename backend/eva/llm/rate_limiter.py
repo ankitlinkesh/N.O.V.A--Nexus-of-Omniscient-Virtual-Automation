@@ -110,8 +110,20 @@ def _gemini_defaults(model: str | None) -> dict[str, int]:
     return GEMINI_MODEL_LIMITS.get(_gemini_base_model(model), _GEMINI_DEFAULT_LIMIT)
 
 
+def _local_clod() -> bool:
+    """True when the generic \"clod\" provider points at a server on this machine (llama.cpp, LM Studio...).
+
+    Its soft limits (10 requests a minute, 100 a day) protect a cloud free tier. Applied to a local model they
+    cut an agent task off after ten planner calls and sent it to a fallback that is usually not installed.
+    """
+    from urllib.parse import urlparse
+
+    host = (urlparse(os.environ.get("CLOD_BASE_URL", "") or "").hostname or "").lower()
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
 def provider_limits(provider: str, model: str | None = None) -> tuple[int | None, int | None]:
-    if provider == "ollama":
+    if provider == "ollama" or (provider == "clod" and _local_clod()):
         return None, None
     if provider == "groq":
         defaults = _groq_defaults(model)

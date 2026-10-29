@@ -58,7 +58,7 @@ Start-Sleep -Milliseconds {CHROME_KEY_DELAY_MS}
         completed = subprocess.run(
             ["powershell.exe", "-NoProfile", "-Command", ps],
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             timeout=4,
         )
     except Exception as exc:
@@ -79,7 +79,7 @@ Set-Clipboard -Value $text
             ["powershell.exe", "-NoProfile", "-Command", ps],
             input=value,
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             timeout=4,
         )
     except Exception as exc:
@@ -136,7 +136,7 @@ Write-Output $url
         completed = subprocess.run(
             ["powershell.exe", "-NoProfile", "-Command", ps],
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             timeout=4,
         )
     except Exception as exc:

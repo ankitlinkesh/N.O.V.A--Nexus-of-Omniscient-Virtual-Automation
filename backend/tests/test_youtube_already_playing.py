@@ -57,3 +57,24 @@ def test_results_page_failure_resolves_nothing(monkeypatch):
 
     monkeypatch.setattr(httpx, "get", boom)
     assert skills._youtube_top_video_from_results("anything") is None
+
+
+# --- Spotify Connect: playback on another device -------------------------------------------
+
+def test_a_remote_spotify_device_is_read_from_the_playing_on_banner():
+    from backend.eva.media.spotify import spotify_connect_device
+
+    lines = [("Little Bit of Love", 0.99, (0, 0, 1, 1)), ("Playing on Ankit's Nothing Phone", 0.97, (0, 0, 1, 1))]
+    assert spotify_connect_device(grab=lambda r: object(), reader=lambda img: lines, rect=(0, 0, 10, 10)) == "Ankit's Nothing Phone"
+    assert spotify_connect_device(grab=lambda r: object(), reader=lambda img: lines[:1], rect=(0, 0, 10, 10)) == ""
+    squashed = [("PlayingonAnkit's Nothing Phone", 0.97, (0, 0, 1, 1))]  # what the OCR engine really returned
+    assert spotify_connect_device(grab=lambda r: object(), reader=lambda img: squashed, rect=(0, 0, 10, 10)) == "Ankit's Nothing Phone"
+
+
+def test_the_device_check_never_raises():
+    from backend.eva.media.spotify import spotify_connect_device
+
+    def boom(_):
+        raise RuntimeError("no display")
+
+    assert spotify_connect_device(grab=boom, reader=lambda i: [], rect=(0, 0, 1, 1)) == ""

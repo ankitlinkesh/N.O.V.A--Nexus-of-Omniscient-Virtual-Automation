@@ -121,4 +121,8 @@ def test_relabelling_is_gate_preserving(registry):
     # Phase 134: +2 confirm (share.to_box, share.from_box, SANDBOX_TRANSFER) -> confirm 13.
     # `email.draft_gmail` (SAFE_LOCAL_UI): +1 allow -> allow 91. It only opens a
     # Gmail compose window in Chrome; nothing is sent, the user presses Send.
-    assert counts == {"allow": 91, "override": 10, "confirm": 13}, f"gate class counts drifted: {counts}"
+    # `email.send_drafted` (EXTERNAL_MESSAGE_SEND): +1 confirm -> confirm 14. It presses Send
+    # on the Gmail draft only after `confirm act_...`; more friction, not less.
+    # `weather_forecast`, `rss_headlines`, `youtube_transcript` (NETWORK_ACTION) and `ocr_image` (SAFE_LOCAL_READ): +4 allow -> allow 95.
+    # All four read and mutate nothing; their text is untrusted by taint tracking, like web_search.
+    assert counts == {"allow": 95, "override": 10, "confirm": 14}, f"gate class counts drifted: {counts}"

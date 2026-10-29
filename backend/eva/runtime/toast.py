@@ -68,7 +68,7 @@ def send_toast(title: str, body: str, *, runner: Callable | None = None, platfor
             run = runner or subprocess.run
             proc = run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", _SCRIPT],
-                env=env, capture_output=True, text=True, timeout=TOAST_TIMEOUT_SECONDS,
+                env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TOAST_TIMEOUT_SECONDS,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             result["ok"] = proc.returncode == 0

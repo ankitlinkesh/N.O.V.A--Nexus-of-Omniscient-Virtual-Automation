@@ -220,7 +220,7 @@ def run_bounded(command: str, args: tuple[str, ...] = (), timeout: int | None = 
             shell=False,
             cwd=str(WORKSPACE_ROOT),
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             timeout=seconds,
             check=False,
         )

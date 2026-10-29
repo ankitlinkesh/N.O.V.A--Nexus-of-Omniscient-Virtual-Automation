@@ -428,6 +428,20 @@ def _finalize_success(task, state, contract, session_context, *, events, safety_
         task.status = "attempted"
         ok = False
         stops.append("critic_rejected")
+    else:
+        # No enforcing contract means the critic accepts anything. Still refuse to report a
+        # whole goal as finished when the run has no successful step for something it asked
+        # for (a click, typing, a send): say what is missing instead.
+        from .claim_check import unsupported_note
+
+        note = unsupported_note(task.user_goal, task.steps)
+        if note and "I have no record of" not in task.final_response:
+            task.final_response = f"{task.final_response}{note}"
+            task.status = "attempted"
+            ok = False
+            stops.append("unsupported_claim")
+            _safe_log(memory, session_id, "agent_unsupported_claim", {"task_id": task.id, "note": note})
+            trace_critic({"satisfied": False, "reasons": ["unsupported_claim"], "unmet_criteria": [note.strip()]})
     return _return_task(task, session_context, ok=ok, events=events, safety_stops=stops, critic=verdict.as_dict())
 
 
@@ -1164,7 +1178,21 @@ async def _run_step(
     # outer one (the console's pre-focus, done once before the loop started).
     inner_target_app = loop_vars["typing_target"]
     target_app_scope = open_target_app_scope(inner_target_app) if (call.tool in SCREEN_INPUT_TOOLS and inner_target_app is not None) else nullcontext()
-    with target_app_scope:
+    # Trusted-voice mode: only for the owner's own spoken goal, an untainted task, and (for screen input)
+    # the app this task opened and verified being in front. See security/voice_trust.py.
+    from ..security.voice_trust import voice_turn
+
+    voice_scope = (
+        voice_turn()
+        if (
+            context.get("voice_origin") is True
+            and context.get("goal_from_user") is True
+            and not state.injection_flagged
+            and (call.tool not in SCREEN_INPUT_TOOLS or (loop_vars["typing_target"] is not None and _target_in_front(loop_vars["typing_target"])))
+        )
+        else nullcontext()
+    )
+    with voice_scope, target_app_scope:
         if (
             call.tool in GRANTABLE_SCREEN_TOOLS
             and context.get("goal_from_user") is True

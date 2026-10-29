@@ -110,29 +110,70 @@ def _apply(monkeypatch, steps, handled):
 
 def test_all_command_plans_run_each_step_and_finish(monkeypatch):
     steps = [TriageStep("command", "pause the music"), TriageStep("command", "set volume to 20")]
-    (finished, force), ran = _apply(monkeypatch, steps, {"pause the music": ("Paused.", "desktop-tool"), "set volume to 20": ("Volume 20.", "desktop-tool")})
-    assert ran == ["pause the music", "set volume to 20"] and not force
+    (finished, force, goal, prefix), ran = _apply(monkeypatch, steps, {"pause the music": ("Paused.", "desktop-tool"), "set volume to 20": ("Volume 20.", "desktop-tool")})
+    assert ran == ["pause the music", "set volume to 20"] and not force and goal is None
     assert finished[0] == "Paused.\nVolume 20."
 
 
-def test_an_unclaimed_command_is_reported_honestly_and_stops(monkeypatch):
-    steps = [TriageStep("command", "pause the music"), TriageStep("command", "do a barrel roll"), TriageStep("command", "mute")]
-    (finished, _), ran = _apply(monkeypatch, steps, {"pause the music": ("Paused.", "desktop-tool")})
-    assert ran == ["pause the music", "do a barrel roll"]
-    assert finished[0] == "Paused.\nI could not do: do a barrel roll"
+def test_an_unclaimed_later_command_hands_the_rest_to_the_agent(monkeypatch):
+    steps = [TriageStep("command", "open calculator"), TriageStep("command", "click Seven"), TriageStep("command", "click Plus")]
+    (finished, force, goal, prefix), ran = _apply(monkeypatch, steps, {"open calculator": ("Done, calculator is open.", "desktop-tool")})
+    assert ran == ["open calculator", "click Seven"]
+    assert finished is None and force is True
+    assert goal == "click Seven then click Plus" and prefix == "Done, calculator is open."
+
+
+def test_an_unclaimed_first_command_sends_the_original_message_to_the_agent(monkeypatch):
+    steps = [TriageStep("command", "check the C drive space"), TriageStep("command", "mute")]
+    (finished, force, goal, prefix), ran = _apply(monkeypatch, steps, {})
+    assert ran == ["check the C drive space"]
+    assert finished is None and force is True and goal is None and prefix == ""
 
 
 def test_work_steps_force_the_agent_runner_and_run_nothing_early(monkeypatch):
     steps = [TriageStep("command", "open spotify"), TriageStep("work", "email rahul")]
-    (finished, force), ran = _apply(monkeypatch, steps, {})
-    assert finished is None and force is True and ran == []
+    (finished, force, goal, prefix), ran = _apply(monkeypatch, steps, {})
+    assert finished is None and force is True and ran == [] and goal is None
 
 
 def test_mixed_tool_and_chat_plans_fall_through_unchanged(monkeypatch):
-    (finished, force), ran = _apply(monkeypatch, [TriageStep("tool", "weather"), TriageStep("chat", "joke")], {})
+    (finished, force, goal, prefix), ran = _apply(monkeypatch, [TriageStep("tool", "weather"), TriageStep("chat", "joke")], {})
     assert finished is None and force is False and ran == []
 
 
 def test_no_plan_means_the_old_routing(monkeypatch):
-    (finished, force), ran = _apply(monkeypatch, None, {})
+    (finished, force, goal, prefix), ran = _apply(monkeypatch, None, {})
     assert finished is None and force is False
+
+
+def test_pending_marker_is_only_reported_for_a_real_pending_call(monkeypatch):
+    from backend.eva.security import tool_gate
+
+    reply = "Say `confirm act_0123456789ab` to approve."
+    monkeypatch.setattr(tool_gate, "get_pending_call", lambda pid: {"tool": "close_app"} if pid == "act_0123456789ab" else None)
+    assert routes._pending_action_in(reply) == "act_0123456789ab"
+    monkeypatch.setattr(tool_gate, "get_pending_call", lambda pid: None)
+    assert routes._pending_action_in(reply) is None
+    assert routes._pending_action_in("nothing to approve") is None
+
+
+def test_label_only_click_target_is_hoisted_to_a_label():
+    from backend.eva.agent.planner import PlannedToolCall
+
+    hoisted = PlannedToolCall("screen.click", {"target": {"label": " Seven "}, "reason": "r"})
+    assert hoisted.args == {"reason": "r", "label": "Seven"}
+    real = PlannedToolCall("screen.click", {"target": {"label": "Seven", "x": 1, "y": 2}})
+    assert real.args["target"]["x"] == 1 and "label" not in real.args
+    other = PlannedToolCall("open_app", {"target": {"label": "x"}})
+    assert other.args == {"target": {"label": "x"}}
+
+
+def test_fallback_done_after_a_planner_failure_does_not_claim_the_task_is_finished():
+    from backend.eva.agent.planner import PlannerDecision, _honest_fallback
+
+    done = PlannerDecision(type="done", reason="r", tool_calls=[], final_response="I finished the task. open_app returned Opening calculator.")
+    said = _honest_fallback(done, "ReadTimeout: no response within 12s", mode="agent_step").final_response
+    assert "I finished the task" not in said and "cannot say the whole request is done" in said and "Opening calculator" in said
+    assert _honest_fallback(done, "x", mode="single_turn") is done
+    answer = PlannerDecision(type="answer", reason="r", tool_calls=[], final_response="hi")
+    assert _honest_fallback(answer, "x", mode="agent_step") is answer

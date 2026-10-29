@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..tools.registry import ToolRegistry, ToolSpec, register_mcp_tool_specs
-from . import client, trust
+from . import client, pins, trust
 from .config import McpServerConfig, load_mcp_config, mcp_enabled
 
 
@@ -21,6 +21,10 @@ def _schema_or_default(schema: Any) -> dict[str, Any]:
     return {"type": "object", "properties": {}}
 
 
+# Tools left out of the last build because their definition changed or looked hostile, for the load report.
+LAST_WITHHELD: list[dict[str, str]] = []
+
+
 def build_mcp_tool_specs(servers: list[McpServerConfig]) -> dict[str, ToolSpec]:
     """Discover tools from each configured MCP server and build gated
     ToolSpecs for them. Every MCP tool is confirm-class: safety_level is
@@ -31,6 +35,7 @@ def build_mcp_tool_specs(servers: list[McpServerConfig]) -> dict[str, ToolSpec]:
     Phase 40c: only servers trusted under the MCP trust model are registered —
     an untrusted (unpinned) server's tools are never exposed to the agent."""
     specs: dict[str, ToolSpec] = {}
+    LAST_WITHHELD.clear()
     servers = trust.filter_trusted(list(servers))
     for server in servers:
         try:
@@ -42,6 +47,12 @@ def build_mcp_tool_specs(servers: list[McpServerConfig]) -> dict[str, ToolSpec]:
             try:
                 tool_name = tool["name"]
                 full_name = f"mcp.{server.name}.{tool_name}"
+                # A server that changes a tool after it was trusted, or ships one whose description reads
+                # like instructions, does not get that tool offered (see pins.py).
+                status, why = pins.review(server.name, tool)
+                if status in {"changed", "quarantined"}:
+                    LAST_WITHHELD.append({"tool": full_name, "status": status, "reason": why})
+                    continue
                 description = tool.get("description") or f"MCP tool {tool_name} from server {server.name}."
                 args_schema = _schema_or_default(tool.get("input_schema"))
                 spec = ToolSpec(
@@ -81,4 +92,5 @@ def load_mcp_tools(registry: ToolRegistry | None = None) -> dict[str, Any]:
         "servers": len(servers),
         "loaded": len(specs),
         "tools": sorted(specs),
+        "withheld": list(LAST_WITHHELD),
     }

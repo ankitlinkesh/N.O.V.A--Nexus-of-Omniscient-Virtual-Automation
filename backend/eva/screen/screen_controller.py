@@ -72,8 +72,11 @@ def _foreground_handle() -> int:
         from .dpi import ensure_dpi_aware
 
         ensure_dpi_aware()
-        import uiautomation as auto  # type: ignore
+        from .uia import get_uia
 
+        auto = get_uia()
+        if auto is None:
+            return 0
         foreground = auto.GetForegroundControl()
         return int(getattr(foreground, "NativeWindowHandle", 0) or 0)
     except Exception:
@@ -102,8 +105,11 @@ def _focused_value() -> str | None:
         from .dpi import ensure_dpi_aware
 
         ensure_dpi_aware()
-        import uiautomation as auto  # type: ignore
+        from .uia import get_uia
 
+        auto = get_uia()
+        if auto is None:
+            return None
         element = auto.GetFocusedControl()
         if element is None:
             return None
@@ -259,14 +265,15 @@ def click_target(target: UiTarget, reason: str, action_id: str = "screen.click")
         # afterwards -- a canvas has nothing to read back -- and vary between
         # runs on the identical screen. So the two are reported differently and
         # the guess says it is one, rather than the caller having to know.
-        by_vision = str(getattr(target, "method", "") or "") == "vision"
+        by_vision = str(getattr(target, "method", "") or "") in {"vision", "ocr"}
+        seen_how = "reading the text on the screen" if str(getattr(target, "method", "") or "") == "ocr" else "looking at the screen"
         raw = {"target": target.as_dict(), "x": click_x, "y": click_y, "verified_target": not by_vision}
         if by_vision:
             return _obs(
                 action_id,
                 True,
                 f"Clicked where {target.label} appeared to be, for reason: {reason}. "
-                "That location came from looking at the screen, not from the window's own "
+                f"That location came from {seen_how}, not from the window's own "
                 "controls, so I cannot confirm the click landed on it.",
                 raw,
             )

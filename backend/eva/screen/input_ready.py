@@ -73,9 +73,10 @@ def wait_for_input_ready(hwnd: int, *, timeout: float = DEFAULT_TIMEOUT_SECONDS)
     caller then declines to type rather than typing into a window that is not
     listening. Never raises.
     """
-    try:
-        import uiautomation as automation
-    except Exception:
+    from .uia import get_uia
+
+    automation = get_uia()
+    if automation is None:
         return False
 
     try:

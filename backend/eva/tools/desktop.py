@@ -243,7 +243,7 @@ def close_app(app_name: str) -> str:
         supported = ", ".join(close_app_allowlist()) or "none configured"
         raise ValueError(f"I can close that if it is in the safe close allowlist. Supported: {supported}.")
     for process_name in process_names:
-        subprocess.run(["taskkill", "/IM", process_name, "/T", "/F"], capture_output=True, text=True, timeout=8)
+        subprocess.run(["taskkill", "/IM", process_name, "/T", "/F"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=8)
     return f"Asked Windows to close {key}."
 
 
@@ -339,6 +339,6 @@ def media_key(action: str) -> str:
         f"$t::keybd_event({code},0,0,[UIntPtr]::Zero);"
         f"$t::keybd_event({code},0,2,[UIntPtr]::Zero);"
     )
-    subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=8)
+    subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=8)
     return f"Sent media command: {key.replace('_', ' ')}."
 

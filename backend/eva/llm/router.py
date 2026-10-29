@@ -384,6 +384,7 @@ async def complete_with_fallback(
     temperature: float = 0.2,
     max_tokens: int = 800,
     tools: list[dict[str, Any]] | None = None,
+    response_format: dict[str, Any] | None = None,
 ) -> RoutedLLMResponse:
     limiter = LLMRateLimiter()
     attempts: list[LLMAttempt] = []
@@ -409,6 +410,8 @@ async def complete_with_fallback(
         provider = build_provider(name, settings)
         if provider is None:
             continue
+        if response_format and getattr(provider, "supports_response_format", False):
+            provider.response_format = response_format
 
         if purpose == "planner" and name == "ollama" and llm_mode() not in {"qwen", "llama"} and os.environ.get("EVA_USE_OLLAMA_FOR_PLANNER", "false").strip().lower() not in {"1", "true", "yes", "on"}:
             response = LLMResponse(provider=name, model=getattr(provider, "model", ""), ok=False, error="skipped_for_planner")

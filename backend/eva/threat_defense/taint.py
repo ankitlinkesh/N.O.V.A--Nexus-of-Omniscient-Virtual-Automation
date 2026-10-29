@@ -52,7 +52,7 @@ UNTRUSTED_SOURCE_TYPES = frozenset(
 
 # Tool-name prefixes / names whose *results* are untrusted external content.
 _UNTRUSTED_TOOL_PREFIXES = ("web.", "web_", "browser_", "chrome_", "mcp.", "research_web")
-_UNTRUSTED_TOOL_NAMES = frozenset({"web_search", "browser_search", "research_web"})
+_UNTRUSTED_TOOL_NAMES = frozenset({"web_search", "browser_search", "research_web", "weather_forecast", "rss_headlines", "youtube_transcript"})
 
 # Phase 110. A description of the user's own screen is untrusted (a web page on
 # screen can carry an injection), but it is not a web page: it routinely and
@@ -127,7 +127,7 @@ def source_type_for_tool(tool_name: str) -> str:
             return "web_result" if ("web" in prefix or "research" in prefix) else "tool_output"
     if name in _CLIPBOARD_TOOL_NAMES:
         return "clipboard"
-    if name.startswith("file.read") or name in {"workspace_read_file", "file_read_text"}:
+    if name.startswith("file.read") or name in {"workspace_read_file", "file_read_text", "ocr_image"}:
         return "file_content"
     return "trusted_tool"
 

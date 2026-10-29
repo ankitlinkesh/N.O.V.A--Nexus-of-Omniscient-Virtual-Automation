@@ -59,7 +59,7 @@ def _run_powershell(script: str, timeout: int = PS_TIMEOUT_SECONDS) -> tuple[int
     proc = subprocess.run(
         ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
         capture_output=True,
-        text=True,
+        text=True, encoding="utf-8", errors="replace",
         timeout=timeout,
     )
     return proc.returncode, proc.stdout or "", proc.stderr or ""
@@ -506,6 +506,19 @@ def _radio_summary(states: list[str]) -> str:
     return "unknown"
 
 
+def _wired_connection() -> bool:
+    """True when a physical Ethernet adapter is up, i.e. the PC is online without Wi-Fi."""
+    script = "Get-NetAdapter -Physical | Where-Object Status -eq 'Up' | ForEach-Object { $_.PhysicalMediaType }"
+    try:
+        done = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", script],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=6,
+        )
+    except Exception:
+        return False
+    return done.returncode == 0 and any(line.strip() == "802.3" for line in done.stdout.splitlines())
+
+
 def radio_status(kind: Any) -> dict[str, Any]:
     k = _normalise_radio(kind)
     if k is None:
@@ -523,7 +536,12 @@ def radio_status(kind: Any) -> dict[str, Any]:
         "disabled": f"{label} is disabled by the system (a hardware switch or device setting), so Windows can't toggle it.",
         "unknown": f"Windows reports the {label} state as unknown.",
     }
-    return {"ok": True, "setting": k, "state": state, "method": "winrt_radios", "message": words[state]}
+    result = {"ok": True, "setting": k, "state": state, "method": "winrt_radios", "message": words[state]}
+    if k == "wifi" and state == "off" and _wired_connection():
+        # Off is not a fault when the PC is on a cable: say so instead of sounding broken.
+        result["network"] = "ethernet"
+        result["message"] = f"{label} is off, and that's fine: you're online through Ethernet."
+    return result
 
 
 def radio_set(kind: Any, state: Any) -> dict[str, Any]:
@@ -577,7 +595,9 @@ def _radio_set_raw(kind: str, on: bool) -> dict[str, Any]:
                 "message": f"Windows accepted the request to turn {label} {want}, but I couldn't read it back to confirm."}
     now = _radio_summary(after)
     if now == want:
-        note = " I'm offline until it's back on." if kind == "wifi" and not on else ""
+        note = ""
+        if kind == "wifi" and not on:
+            note = " You're still online through Ethernet." if _wired_connection() else " I'm offline until it's back on."
         return {"ok": True, "setting": kind, "requested": want, "state": now, "verified": True, "changed": True,
                 "method": "winrt_radios", "message": f"{label} is now {want}.{note}"}
     return {"ok": False, "setting": kind, "requested": want, "state": now, "verified": False,

@@ -15,6 +15,10 @@ from ..core.data_paths import data_path
 
 SAFE_CODE_EXTENSIONS = {".py", ".js", ".html", ".css", ".md", ".json", ".toml", ".yaml", ".yml"}
 INDEX_PATH = Path(__file__).resolve().parents[1] / "data" / "code_index.json"
+# The workspace's per-scan limit (300 files) is right for a file search but silently cut the code index: with the
+# whole project under the "" root, 110 of 687 Python files (everything past the 300th in walk order, such as
+# media/whatsapp_desktop.py) were never indexed and `code_find_symbol` simply said "no matches".
+CODE_INDEX_FILE_CAP = 6000
 SCAN_ROOTS = (
     "",
     "backend/eva/api",
@@ -177,8 +181,10 @@ def build_code_index() -> dict[str, Any]:
     listed_files: dict[str, dict[str, Any]] = {}
     list_errors: list[str] = []
     list_skipped = 0
+    list_truncated = False
     for root in SCAN_ROOTS:
-        listed = safe_list_files(root, limit=config.max_files_per_scan)
+        listed = safe_list_files(root, limit=CODE_INDEX_FILE_CAP, cap=CODE_INDEX_FILE_CAP)
+        list_truncated = list_truncated or bool(listed.get("truncated"))
         if not listed.get("ok"):
             if root:
                 list_errors.append(f"{root}: {listed.get('error')}")
@@ -235,6 +241,7 @@ def build_code_index() -> dict[str, Any]:
         "indexed_files": len(files),
         "skipped": skipped + list_skipped,
         "list_errors": list_errors,
+        "truncated": list_truncated,
         "safe_extensions": sorted(SAFE_CODE_EXTENSIONS),
         "files": files,
         "secrets_indexed": False,
@@ -276,6 +283,7 @@ def code_status() -> dict[str, Any]:
         "index_path": str(data_path(INDEX_PATH)),
         "indexed_files": int(index.get("indexed_files") or len(index.get("files") or [])),
         "last_indexed_at": index.get("indexed_at"),
+        "truncated": bool(index.get("truncated")),
         "safe_extensions": index.get("safe_extensions") or sorted(SAFE_CODE_EXTENSIONS),
         "secrets_indexed": False,
     }

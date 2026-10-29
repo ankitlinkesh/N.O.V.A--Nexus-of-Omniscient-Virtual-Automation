@@ -55,6 +55,23 @@ def _try_vision_fallback(label: str, required_confidence: float):
         return None, None
 
 
+def _try_ocr_fallback(label: str, required_confidence: float):
+    """Read the foreground window's text locally to find `label`. Never raises; (None, None) = not consulted.
+
+    Same two switches as the vision fallback (an operator flag and a console-opened `gui:` scope) so no new
+    path can photograph a window, even though nothing here leaves the machine.
+    """
+    try:
+        from .gui_scope import gui_scope_open
+        from .ocr_locate import ocr_grounding_enabled, locate_by_ocr
+
+        if not ocr_grounding_enabled() or not gui_scope_open():
+            return None, None
+        return locate_by_ocr(label, min_confidence=max(float(required_confidence), 0.80))
+    except Exception:
+        return None, None
+
+
 def screen_click(
     x: int | None = None,
     y: int | None = None,
@@ -92,14 +109,22 @@ def screen_click(
             # declined, and only with two independent switches on: the persistent
             # EVA_VISION_CLICK_ENABLED, and a console-opened GUI scope for this
             # one task. Untrusted content can flip neither.
-            vision_target, vision_report = _try_vision_fallback(str(label), float(required_confidence))
-            if vision_target is not None:
+            # Reading the window's text locally comes first: it is exact for a button with a
+            # visible word, costs no model call, and sends nothing anywhere.
+            ocr_target, ocr_report = _try_ocr_fallback(str(label), float(required_confidence))
+            vision_target, vision_report = (None, None) if ocr_target is not None else _try_vision_fallback(str(label), float(required_confidence))
+            if ocr_target is not None:
+                ui_target = ocr_target
+            elif vision_target is not None:
                 ui_target = vision_target
             else:
                 message = f"I couldn't confidently find '{label}' on the screen, so I did not click."
                 events: list[dict[str, Any]] = [
                     {"type": "ui_target_low_confidence", "reason": "grounding_no_match", "label": str(label)}
                 ]
+                if ocr_report is not None and not ocr_report.found:
+                    message += f" Reading the window's text did not find it either ({ocr_report.reason})."
+                    events.append({"type": "ocr_declined", **ocr_report.as_dict()})
                 if vision_report is not None:
                     message += f" Looking at the screen did not help either ({vision_report.reason or 'no match'})."
                     events.append({"type": "vision_declined", **vision_report.as_dict()})

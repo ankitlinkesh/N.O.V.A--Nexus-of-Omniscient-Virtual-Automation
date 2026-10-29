@@ -127,6 +127,7 @@ def machine(monkeypatch):
     monkeypatch.setattr(ss, "_theme_write", m.theme_write)
     monkeypatch.setattr(ss, "_broadcast_theme_change", lambda: None)
     monkeypatch.setattr(ss, "_sleep", lambda _s: None)
+    monkeypatch.setattr(ss, "_wired_connection", lambda: False)  # the real adapter check is machine-dependent
     return m
 
 

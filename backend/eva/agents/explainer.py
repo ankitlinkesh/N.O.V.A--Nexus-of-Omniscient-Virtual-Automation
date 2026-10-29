@@ -183,6 +183,14 @@ def explain_action(
             f" the same care as a download."
         )
 
+    # A string argument with invisible or look-alike characters gets a warning in the deterministic layer.
+    from ..security.visible_text import note
+
+    warnings = [note(value) for value in (args or {}).values() if isinstance(value, str)]
+    warning = " ".join(dict.fromkeys(item for item in warnings if item))
+    if warning:
+        what += " " + warning
+
     return ActionExplanation(
         tool=tool,
         command_line=_format_call(tool, args),

@@ -151,7 +151,10 @@ def assert_workspace_enabled() -> WorkspaceConfig:
     return config
 
 
-def assert_safe_file(path: Path) -> None:
+MAX_RANGED_READ_BYTES = 20_000_000
+
+
+def assert_safe_file(path: Path, *, allow_large: bool = False) -> None:
     config = assert_workspace_enabled()
     if not path.exists():
         raise WorkspaceSafetyError("File does not exist.")
@@ -159,5 +162,8 @@ def assert_safe_file(path: Path) -> None:
         raise WorkspaceSafetyError("Path is not a file.")
     if is_excluded_file(path):
         raise WorkspaceSafetyError("File is blocked by Eva workspace safety rules.")
-    if path.stat().st_size > config.max_file_bytes:
+    # A file over the normal cap can still be read in line-range windows (`allow_large`),
+    # up to a hard ceiling; every other check above (secrets, excluded files) still applies.
+    limit = MAX_RANGED_READ_BYTES if allow_large else config.max_file_bytes
+    if path.stat().st_size > limit:
         raise WorkspaceSafetyError("File is too large for safe reading.")

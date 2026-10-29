@@ -33,4 +33,8 @@ def find_symbol(symbol: str) -> dict[str, Any]:
         for tool in file.get("tool_names", []):
             if needle in str(tool).lower():
                 matches.append({"path": file.get("path"), "name": tool, "kind": "tool", "line": 1, "summary": file.get("summary")})
-    return {"ok": True, "symbol": symbol, "matches": matches[:25], "count": len(matches)}
+    result = {"ok": True, "symbol": symbol, "matches": matches[:25], "count": len(matches)}
+    if index.get("truncated"):
+        # Say so instead of letting "no matches" read as "does not exist".
+        result["warning"] = "The code index stopped at its file limit, so this search may be missing files."
+    return result

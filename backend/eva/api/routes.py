@@ -21,6 +21,7 @@ from ..browser.skills import ask_chatgpt_in_chrome, verify_browser_target
 from ..core.fast_commands import maybe_handle_fast_command
 from ..core.fast_responses import maybe_handle_fast_response
 from ..core.routing_mode import use_rule_layers
+from ..security.voice_trust import in_voice_turn
 from ..core.triage import triage_request
 from ..core.intent_router import classify_capability_intent
 from ..core.operator_commands import handle_operator_command
@@ -1100,7 +1101,12 @@ async def chat_voice(payload: VoiceListenRequest, request: Request) -> VoiceList
 
     # The heard text is handled EXACTLY like something typed — same pipeline, same
     # gate. A spoken "delete my files" is no more authorized than a typed one.
-    chat_response = await chat(ChatRequest(message=result.text, session_id=session_id), request)
+    # Trusted-voice mode (off unless EVA_VOICE_TRUST=1): these words came out of the owner's microphone, so
+    # this one turn may run reversible actions without a prompt. Sending and undoable actions still ask.
+    from ..security.voice_trust import voice_turn
+
+    with voice_turn():
+        chat_response = await chat(ChatRequest(message=result.text, session_id=session_id), request)
     return VoiceListenResponse(
         session_id=chat_response.session_id,
         woke=True,
@@ -1139,32 +1145,49 @@ def _run_command_step(text: str, session_context: dict, memory, session_id: str,
         return _handle_capability_route(text, classification, session_context, memory, session_id, settings)
 
 
+def _pending_action_in(reply: str) -> str | None:
+    """The `confirm act_...` id in a reply, when it names a real pending call (else None)."""
+    found = re.search(r"`confirm(?: override)? (act_[0-9a-f]{12})`", reply or "")
+    if found:
+        from ..security import tool_gate
+
+        if tool_gate.get_pending_call(found.group(1)) is not None:
+            return found.group(1)
+    return None
+
+
 async def _apply_triage(message: str, session_context: dict, memory, session_id: str, settings, started_at: float):
     """LLM triage for a message the rule layers did not claim.
 
-    Returns (finished, force_agentic):
+    Returns (finished, force_agentic, goal, prefix):
       * finished = (reply, source) when every step was a command and has been run;
-      * force_agentic = True when any step is on-screen `work` (the whole message then goes
-        to the agent runner);
-      * otherwise (None, False): the normal planner flow continues unchanged. Mixed plans
-        deliberately run nothing early, so no step is executed twice or dropped.
-    Triage that fails or returns nothing is also (None, False): the old routing.
+      * force_agentic = True when the message should go to the agent runner: any step is
+        on-screen `work`, or a `command` step turned out not to be a command any rule runs;
+      * goal = a replacement agent goal, set only when some command steps already ran and
+        the rest is handed to the agent; prefix is what those earlier steps replied. The
+        replacement text is model-written, so the caller must not treat it as the user's
+        own typed words;
+      * otherwise (None, False, None, ""): the normal planner flow continues unchanged.
+        Mixed plans deliberately run nothing early, so no step is executed twice or dropped.
+    Triage that fails or returns nothing is also (None, False, None, ""): the old routing.
     """
     steps = await triage_request(message)
     if not steps:
-        return None, False
+        return None, False, None, ""
     _timing_log(session_id, "triage", started_at, kinds=",".join(step.kind for step in steps))
     if any(step.kind == "work" for step in steps):
-        return None, True
+        return None, True, None, ""
     if not all(step.kind == "command" for step in steps):
-        return None, False
+        return None, False, None, ""
     replies: list[str] = []
     source = "triage-commands"
-    for step in steps:
+    for index, step in enumerate(steps):
         outcome = _run_command_step(step.text, session_context, memory, session_id, settings)
         if outcome is None:
-            replies.append(f"I could not do: {step.text}")
-            break
+            # Not a command any rule runs ("click Seven"): the agent does it instead of giving up.
+            if index == 0:
+                return None, True, None, ""
+            return None, True, " then ".join(rest.text for rest in steps[index:]), "\n".join(replies)
         replies.append(outcome[0])
         source = outcome[1] if len(steps) == 1 else source
     reply = "\n".join(replies)
@@ -1173,7 +1196,7 @@ async def _apply_triage(message: str, session_context: dict, memory, session_id:
         log_kind="triage_commands", log_payload={"steps": [step.text for step in steps], "reply": reply},
         matched_event="triage_commands_matched", matched_fields={"steps": len(steps)},
     )
-    return (reply, source), False
+    return (reply, source), False, None, ""
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -1187,9 +1210,13 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
 
     rules = use_rule_layers(payload.message)
     force_agentic = False
+    triage_goal, triage_prefix = None, ""
     if not rules:
-        triaged, force_agentic = await _apply_triage(payload.message, session_context, memory, session_id, settings, started_at)
+        triaged, force_agentic, triage_goal, triage_prefix = await _apply_triage(payload.message, session_context, memory, session_id, settings, started_at)
         if triaged is not None:
+            pending_id = _pending_action_in(triaged[0])
+            if pending_id:
+                return ChatResponse(session_id=session_id, reply=triaged[0], source=triaged[1], requires_confirmation=True, action=pending_id)
             return ChatResponse(session_id=session_id, reply=triaged[0], source=triaged[1])
     with _one_shot_screen_grant(payload.message):
         fast = maybe_handle_fast_command(payload.message, tools, session_context, memory, session_id) if rules else None
@@ -1258,7 +1285,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
         history = memory.history_with_recall(session_id, payload.message)
         memory.add_message(session_id, "user", payload.message)
         result = await run_agentic_task(
-            payload.message,
+            triage_goal or payload.message,
             {
                 "settings": settings,
                 "registry": tools,
@@ -1271,10 +1298,14 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
                 # Phase 109: this goal is the user's own message, so a screenshot
                 # it explicitly asks for may run without an override phrase.
                 # Only these chat routes set it; see screen/capture_grant.py.
-                "goal_from_user": True,
+                # A triage-rewritten remainder is model text, not the user's words: no grant.
+                "goal_from_user": triage_goal is None,
+                "voice_origin": in_voice_turn(),
             },
         )
         reply = result.get("final_response") or "I stopped the task without a final response."
+        if triage_prefix:
+            reply = f"{triage_prefix}\n{reply}"
         memory.add_message(session_id, "assistant", reply)
         _safe_log(memory, session_id, "agent_task_result", {"task_id": result.get("task_id"), "status": result.get("status"), "safety_stops": result.get("safety_stops")})
         _timing_log(session_id, "response_ready", started_at, source="agent-runner", total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
@@ -1367,8 +1398,9 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
 
         rules = use_rule_layers(payload.message)
         force_agentic = False
+        triage_goal, triage_prefix = None, ""
         if not rules:
-            triaged, force_agentic = await _apply_triage(payload.message, session_context, memory, session_id, settings, started_at)
+            triaged, force_agentic, triage_goal, triage_prefix = await _apply_triage(payload.message, session_context, memory, session_id, settings, started_at)
             if triaged is not None:
                 for line in _simple_stream_events(session_id, triaged[1], triaged[0]):
                     yield line
@@ -1442,7 +1474,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
             yield _json_line({"type": "meta", "session_id": session_id, "source": "agent-runner", "route": "agentic"})
             yield _json_line({"type": "agent_task", "message": "Agent task started"})
             result = await run_agentic_task(
-                payload.message,
+                triage_goal or payload.message,
                 {
                     "settings": settings,
                     "registry": tools,
@@ -1453,7 +1485,8 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
                     "history": history,
                     "execute_tools": True,
                     # Phase 109: see the matching comment in chat().
-                    "goal_from_user": True,
+                    "goal_from_user": triage_goal is None,
+                    "voice_origin": in_voice_turn(),
                 },
             )
             for event in result.get("events", []):

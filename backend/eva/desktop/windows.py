@@ -256,6 +256,43 @@ def _window_reached_state(hwnd: int, command: int) -> bool:
     return True
 
 
+GA_ROOT = 2
+
+
+def _class_name(hwnd: int) -> str:
+    try:
+        buffer = ctypes.create_unicode_buffer(256)
+        ctypes.windll.user32.GetClassNameW(wintypes.HWND(int(hwnd)), buffer, 256)
+        return buffer.value
+    except Exception:
+        return ""
+
+
+def _top_level(hwnd: int) -> int:
+    """The window that actually carries `hwnd`'s on-screen state, or `hwnd` itself.
+
+    A packaged (UWP) app such as Calculator has two top-level windows with the same title: the visible
+    ApplicationFrameWindow (process ApplicationFrameHost.exe) and the app's own inner CoreWindow. They are not
+    parent and child to Windows (GetAncestor returns each one itself), and while the app is minimized the
+    CoreWindow can be listed first. Minimize, restore and focus were applied to it: restore "succeeded" (it
+    was never minimized) while the visible frame stayed minimized, and the foreground check, which sees only
+    the frame, never matched. Pair a CoreWindow with the frame that hosts it, by title.
+    """
+    try:
+        if _class_name(hwnd) != "Windows.UI.Core.CoreWindow":
+            return int(hwnd)
+        info = _window_info(int(hwnd))
+        title = (info.title if info else "").strip()
+        if not title:
+            return int(hwnd)
+        for candidate in find_window(title, limit=10):
+            if candidate.hwnd != hwnd and candidate.title.strip() == title and _class_name(candidate.hwnd) == "ApplicationFrameWindow":
+                return int(candidate.hwnd)
+    except Exception:
+        pass
+    return int(hwnd)
+
+
 def _show_window(query: str, command: int) -> dict[str, object]:
     matches = find_window(query, limit=1)
     if not matches:
@@ -263,8 +300,9 @@ def _show_window(query: str, command: int) -> dict[str, object]:
     window = matches[0]
     if _unsupported():
         return {"ok": False, "error": "unsupported_platform", "query": query}
-    user32.ShowWindow(window.hwnd, command)
-    verified = _window_reached_state(window.hwnd, command)
+    target = _top_level(window.hwnd)
+    user32.ShowWindow(target, command)
+    verified = _window_reached_state(target, command)
     payload: dict[str, object] = {"ok": verified, "changed": verified, "window": window.as_dict()}
     if not verified:
         payload["error"] = "show_window_failed"
@@ -316,6 +354,14 @@ def _foreground_lock_explanation(timeout_ms: int) -> str:
     )
 
 
+def _is_iconic(hwnd: int) -> bool:
+    """Whether `hwnd` is minimized; False when that cannot be read (never raises)."""
+    try:
+        return bool(user32.IsIconic(hwnd))
+    except Exception:
+        return False
+
+
 def _try_set_foreground(hwnd: int) -> None:
     """Best-effort attempt to bring ``hwnd`` to the foreground.
 
@@ -333,7 +379,16 @@ def _try_set_foreground(hwnd: int) -> None:
     if _unsupported():
         return
     try:
+        was_minimized = _is_iconic(hwnd)
         user32.ShowWindow(hwnd, SW_RESTORE)
+        if was_minimized:
+            # Restoring is animated. Asking for the foreground while the window is still minimized fails
+            # (measured on a minimized UWP window: it ended up restored but never in front), so wait until
+            # it has really left the minimized state, for at most ~1 s.
+            deadline = time.monotonic() + 1.0
+            while _is_iconic(hwnd) and time.monotonic() < deadline:
+                time.sleep(0.03)
+            time.sleep(0.12)  # let the restore animation settle before taking the foreground
         fg = user32.GetForegroundWindow()
         t1 = user32.GetWindowThreadProcessId(fg, None) if fg else 0
         t2 = user32.GetWindowThreadProcessId(hwnd, None)
@@ -416,8 +471,9 @@ def focus_window(query: str, *, settle_timeout: float = 0.5, settle_interval: fl
     window = matches[0]
     if _unsupported():
         return {"ok": False, "error": "unsupported_platform", "query": query}
-    _try_set_foreground(window.hwnd)
-    active, verified = _wait_for_focus(window.hwnd, settle_timeout=settle_timeout, settle_interval=settle_interval)
+    target = _top_level(window.hwnd)
+    _try_set_foreground(target)
+    active, verified = _wait_for_focus(target, settle_timeout=settle_timeout, settle_interval=settle_interval)
     # `ok` must reflect reality, not just "the call was made": every caller in
     # this codebase treats result.get("ok") is True as proof the action
     # happened, so ok is tied to the INDEPENDENTLY verified outcome, not to
@@ -454,6 +510,7 @@ def focus_window_handle(hwnd: int, *, settle_timeout: float = 0.5, settle_interv
     info = _window_info(hwnd)
     if info is None:
         return {"ok": False, "error": "window_not_found"}
+    hwnd = _top_level(hwnd)
     _try_set_foreground(hwnd)
     active, verified = _wait_for_focus(hwnd, settle_timeout=settle_timeout, settle_interval=settle_interval)
     payload: dict[str, object] = {

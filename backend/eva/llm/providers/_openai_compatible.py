@@ -67,6 +67,10 @@ class OpenAICompatibleProvider:
     # An instance attribute rather than a `complete()` argument so every provider
     # inherits it without changing a signature five subclasses implement.
     request_timeout: float = DEFAULT_REQUEST_TIMEOUT
+    # A backend that can force the reply to a JSON schema sets this True; the router then
+    # hands it `response_format` for the planner. False (the default) means it is never sent.
+    supports_response_format: bool = False
+    response_format: dict[str, Any] | None = None
 
     def __init__(self, settings: ModelSettings) -> None:
         self.settings = settings
@@ -106,10 +110,16 @@ class OpenAICompatibleProvider:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
         payload.update(self.extra_payload(tools))
+        if self.response_format and self.supports_response_format and not tools:
+            payload["response_format"] = self.response_format
         timeout = float(getattr(self, "request_timeout", DEFAULT_REQUEST_TIMEOUT) or DEFAULT_REQUEST_TIMEOUT)
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=CONNECT_TIMEOUT)) as client:
                 response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
+                if response.status_code == 400 and "response_format" in payload:
+                    # The server rejected the schema (too big, unsupported keyword): plan without it.
+                    payload.pop("response_format")
+                    response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
         except httpx.HTTPError as exc:
             return LLMResponse(
                 provider=self.name,
