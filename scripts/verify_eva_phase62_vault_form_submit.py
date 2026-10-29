@@ -357,8 +357,8 @@ def _run() -> int:
     # close_app from allow to confirm (it can discard unsaved work);
     # screen.submit_form remains among the confirm-class tools.
     check(
-        phase51.EXPECTED_CLASS_COUNTS["confirm"] == 13,
-        "Phase 51's EXPECTED_CLASS_COUNTS['confirm'] must be 13 (Phase 82 added close_app as confirm-class, Phase 127 radio_set, Phase 128 clipboard.read, Phase 134 share.to_box and share.from_box); "
+        phase51.EXPECTED_CLASS_COUNTS["confirm"] == 14,
+        "Phase 51's EXPECTED_CLASS_COUNTS['confirm'] must be 14 (Phase 82 added close_app as confirm-class, Phase 127 radio_set, Phase 128 clipboard.read, Phase 134 share.to_box and share.from_box, Phase 147 email.send_drafted); "
         f"got {phase51.EXPECTED_CLASS_COUNTS.get('confirm')}. If this genuinely changed, update the count pins "
         "together and say why.",
     )

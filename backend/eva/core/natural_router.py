@@ -122,6 +122,8 @@ def route_natural_request(text: str) -> NaturalRouteResult:
         return _route(original, "coding_handoff", 0.995, "eva coding handoff", "read", planner=True)
     if _has_any(normalized, ("show coding readiness",)):
         return _route(original, "coding_readiness", 0.995, "eva coding readiness", "read", planner=True)
+    if _has_any(normalized, ("show live news", "show live news dashboard", "live news dashboard")):
+        return _route(original, "news_live", 0.995, "eva news live", "read", planner=True)
     if _has_any(normalized, ("show news dashboard",)):
         return _route(original, "news_dashboard", 0.995, "eva news dashboard", "read", planner=True)
     if _has_any(normalized, ("show web intelligence status",)):

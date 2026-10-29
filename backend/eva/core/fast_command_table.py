@@ -51,6 +51,7 @@ STATUS_COMMANDS: dict[str, tuple[str, str]] = {
     "eva news status": ("backend.eva.news_dashboard.formatter", "format_news_status"),
     "eva news policy": ("backend.eva.news_dashboard.formatter", "format_news_policy"),
     "eva news dashboard": ("backend.eva.news_dashboard.formatter", "format_news_dashboard"),
+    "eva news live": ("backend.eva.news_dashboard.live", "format_live_dashboard"),
     "eva news topics": ("backend.eva.news_dashboard.formatter", "format_news_topics"),
     "eva news sources": ("backend.eva.news_dashboard.formatter", "format_news_sources"),
     "eva news freshness": ("backend.eva.news_dashboard.formatter", "format_news_freshness"),

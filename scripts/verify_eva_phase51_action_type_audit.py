@@ -76,7 +76,7 @@ def check(value: object, message: str) -> None:
 # -> allow 89, confirm 11.
 # Phase 130: +1 allow (sandbox_run, SANDBOX_COMMAND) -> allow 90.
 # Phase 134: +2 confirm (share.to_box, share.from_box; SANDBOX_TRANSFER) -> confirm 13.
-EXPECTED_CLASS_COUNTS = {"allow": 90, "override": 10, "confirm": 13}
+EXPECTED_CLASS_COUNTS = {"allow": 95, "override": 10, "confirm": 14}  # Phases 147-154: +weather/rss/youtube/ocr, +email.draft_gmail (allow), +email.send_drafted (confirm)
 
 SCREEN_CAPTURE_TOOLS = ("capture_screen", "analyze_screen", "screen.observe")
 

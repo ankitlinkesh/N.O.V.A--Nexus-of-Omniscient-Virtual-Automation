@@ -917,7 +917,10 @@ def _handle_capability_route(
             gated = _run_capability_tool("message.send_via_ui", recipient=recipient, message=body)
             if gated.get("pending_id"):
                 return (
-                    f"Ready to send \"{body}\" to {recipient} on WhatsApp Desktop. I have not sent anything yet.\n\n"
+                    f"Ready to send \"{body}\" to {recipient} on WhatsApp Desktop. I did not send anything yet; sending requires confirmation.\n\n"
+                    "Pending action:\n"
+                    f"ID: {gated['pending_id']}\n"
+                    f"Summary: send WhatsApp message to {recipient}: \"{body}\"\n\n"
                     f"Say `confirm {gated['pending_id']}` to send exactly this message.",
                     "capability:message_workflow",
                 )

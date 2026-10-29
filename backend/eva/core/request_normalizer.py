@@ -58,6 +58,10 @@ def canonicalize_request(message: str) -> str:
     text = " ".join(original.split())
     if not text:
         return original
+    # `eva ask ...` hands its tail to the question router verbatim: dropping a trailing "now" turned
+    # "eva ask can Eva browse now" into a different question.
+    if text.lower().startswith("eva ask "):
+        return original
 
     stripped_lead = False
     for pattern in _LEADING:

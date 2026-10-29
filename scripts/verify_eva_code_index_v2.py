@@ -64,7 +64,7 @@ def main() -> int:
         "refresh_builds_local_metadata_index",
         refresh.get("ok") is True
         and int(refresh.get("indexed_files") or 0) > 20
-        and str(refresh.get("data_dir") or "").startswith(str(temp_root))
+        and Path(str(refresh.get("data_dir") or "")).resolve().is_relative_to(temp_root.resolve())  # resolve: TEMP may be an 8.3 short path
         and refresh.get("secrets_indexed") is False,
         result=refresh,
     )

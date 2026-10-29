@@ -6,7 +6,7 @@ from .status import get_news_dashboard_status
 from .topic_model import topic_model_text
 def _out(title: str, body: str) -> str: return "\n".join((title, body, "", *BOUNDARIES))
 def format_news_status() -> str:
-    s=get_news_dashboard_status(); return _out("News / Web Intelligence status", f"Backend: {s.backend_mode}; live backend unavailable\nReadiness: {s.readiness}\nNext phase: {s.next_phase}")
+    s=get_news_dashboard_status(); return _out("News / Web Intelligence status", f"Backend: {s.backend_mode}; a live public-RSS view is available with `eva news live`\nReadiness: {s.readiness}\nBuilt in Phase 27; live feeds added in Phase 155.")
 def format_news_policy() -> str: return _out("News policy", news_policy_text()+"\n"+source_policy_text())
 def format_news_dashboard(topic: str="world events") -> str:
     d=build_mock_dashboard(topic); body=f"Topic: {d.topic}\nSources: {len(d.source_cards)}\nEvents: {len(d.event_cards)}\nFreshness: {', '.join(d.freshness_labels)}\nUncertainty: {d.uncertainty_notes[0]}"; return _out("News / Web Intelligence Dashboard", body)

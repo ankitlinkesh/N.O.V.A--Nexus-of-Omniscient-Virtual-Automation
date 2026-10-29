@@ -61,6 +61,7 @@ SENSITIVE = "C:/Windows/System32/drivers/etc/hosts"
 # with an implementation-read justification -- not something that drifts in.
 # Compare EXPECTED_CLASS_COUNTS in verify_eva_phase51_action_type_audit.py.
 EXPECTED_CONTENT_ARGS = {
+    "email.draft_gmail": ("subject", "body"),  # Phase 147: text placed in a Gmail compose URL, never opened as a path
     "clipboard.write": ("text",),  # Phase 128: stored on the clipboard, never opened as a path
     "message.prepare": ("message",),
     "research_save_note": ("note", "tags"),

@@ -82,12 +82,24 @@ def main() -> int:
     check("confirmed=True" in str(out), "approved power run did not reflect the executed (confirmed) reply")
 
     # ------------------------------------------------------------------ approved message actually sends (real, harmless stub)
-    r2 = ToolRegistry()
-    mres = r2.run("message.send_via_ui", recipient="Alex", message="on my way")
-    mpid = mres.get("pending_id")
-    check(bool(mpid), "message.send_via_ui did not create a gated pending")
-    confirm_pending_action(mpid)  # confirm-class, not override
-    mout = r2.run_approved(mpid)
+    # Since Phase 146 the sender drives WhatsApp Desktop for real, so it is swapped for a stub: this verifier must
+    # never be able to message anyone, whatever EVA_ENABLE_REAL_INPUT says on the machine running it.
+    from eva.media import whatsapp_desktop
+
+    sent_to: list[tuple[str, str]] = []
+    real_sender = whatsapp_desktop.send_whatsapp_desktop
+    whatsapp_desktop.send_whatsapp_desktop = lambda recipient, message, **_: sent_to.append((recipient, message)) or {"ok": True, "sent": True}
+    try:
+        r2 = ToolRegistry()
+        mres = r2.run("message.send_via_ui", recipient="Alex", message="on my way")
+        mpid = mres.get("pending_id")
+        check(bool(mpid), "message.send_via_ui did not create a gated pending")
+        check(not sent_to, "the sender ran before the user approved")
+        confirm_pending_action(mpid)  # confirm-class, not override
+        mout = r2.run_approved(mpid)
+    finally:
+        whatsapp_desktop.send_whatsapp_desktop = real_sender
+    check(sent_to == [("Alex", "on my way")], f"approved message did not reach the sender once: {sent_to!r}")
     check(isinstance(mout, dict) and mout.get("ok") is True, f"approved message did not send: {mout!r}")
     check(mout.get("requires_confirmation") is not True, "approved message still asked to re-confirm")
 
