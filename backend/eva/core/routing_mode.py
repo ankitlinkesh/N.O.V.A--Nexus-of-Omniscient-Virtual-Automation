@@ -71,11 +71,18 @@ def must_stay_deterministic(message: str) -> bool:
     from ..tools.email_tools import is_send_draft_request
     from ..tools.info_tools import parse_weather_request
 
+    from .intent_router import _whatsapp_message_parts
+
+    # Any phrasing the WhatsApp parser understands ("text hi to kutty on whatsapp") goes to the gated send, not the agent.
+    if _whatsapp_message_parts(canonical) is not None:
+        return True
     if is_send_draft_request(canonical) or parse_weather_request(canonical) is not None:
         return True
     if canonical.startswith(_DETERMINISTIC_PREFIXES) or _INSTANT.match(canonical) or _SITE_PLAYBACK.match(canonical) or _SEND_WHATSAPP.match(canonical):
         return True
-    return tool_gate.has_pending_calls() and canonical in _CONFIRM_WORDS
+    from ..permissions.confirmation import BARE_CONFIRM_PHRASES
+
+    return tool_gate.has_pending_calls() and (canonical in _CONFIRM_WORDS or canonical in BARE_CONFIRM_PHRASES)
 
 
 def use_rule_layers(message: str) -> bool:

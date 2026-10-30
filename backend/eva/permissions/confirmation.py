@@ -10,6 +10,9 @@ from .status import format_pending_action_detail, format_pending_action_result, 
 
 ACTION_ID_RE = r"act_[a-zA-Z0-9_-]+"
 
+# Said alone, these confirm the one pending action that is waiting on this person (see `_sole_pending_to_confirm`).
+BARE_CONFIRM_PHRASES = frozenset({"yes", "yes send", "send it", "do it", "confirm", "approve", "confirm send", "open and send it", "open and send the message"})
+
 
 def is_confirmation_text(text: str) -> bool:
     clean = _norm(text)
@@ -54,9 +57,35 @@ def handle_confirmation_command(text: str, *, session_id: Any = None) -> str:
             return stale
         result = confirm_pending_action(confirm_id, override=False)
         return _with_execution(confirm_id, result, session_id)
-    if clean in {"yes", "yes send", "send it", "do it", "confirm", "approve", "confirm send", "open and send it", "open and send the message"}:
+    if clean in BARE_CONFIRM_PHRASES:
+        sole = _sole_pending_to_confirm()
+        if sole is not None:
+            result = confirm_pending_action(sole, override=False)
+            return _with_execution(sole, result, session_id)
         return "I need a specific pending action ID. Use `pending actions` to see active actions, then say `confirm <id>`. I did not send or execute anything."
     return ""
+
+
+def _sole_pending_to_confirm() -> str | None:
+    """The id a bare "confirm" means: the only ordinary pending action whose exact call NOVA is still holding.
+
+    Typed chat only. The override class (destructive actions) always needs its id and its own phrase, a spoken
+    "confirm" never approves anything (a video can say it), and with two or more candidates there is no safe guess.
+    """
+    from ..security import tool_gate
+    from ..security.voice_trust import in_voice_turn
+    from .ledger import list_pending_actions
+
+    if in_voice_turn():
+        return None
+    held = [
+        action.id
+        for action in list_pending_actions()
+        if getattr(action, "status", "") in {"pending", "pending_confirmation"}
+        and not getattr(action, "requires_override", False)
+        and tool_gate.get_pending_call(action.id) is not None
+    ]
+    return held[0] if len(held) == 1 else None
 
 
 def _stale_gate_action(action_id: str) -> str | None:

@@ -91,7 +91,9 @@ def _whatsapp_message_parts(value: str) -> tuple[str, str] | None:
         r"^send\s+whatsapp\s+to\s+(.+?)\s+saying\s+(.+)$",
         r"^send\s+(?:a\s+)?whatsapp\s+message\s+to\s+(.+?)\s+saying\s+(.+)$",
         r"^send\s+(?:a\s+)?whatsapp\s+message\s+saying\s+(.+?)\s+to\s+(.+)$",
-        r"^send\s+(.+?)\s+to\s+(.+?)\s+on\s+whatsapp$",
+        r"^send\s+(.+?)\s+to\s+(.+?)\s+(?:on|in|via|through)\s+whatsapp$",
+        # "text hi to kutty on whatsapp" (message first); the recipient-first form follows below.
+        r"^(?:text|texr|txt|message|msg)\s+(.+?)\s+to\s+(.+?)\s+(?:on|in|via|through)\s+whatsapp$",
         r"^whatsapp\s+(.+?)\s+(.+)$",
     )
     recipient_first = patterns[:2]
@@ -107,6 +109,12 @@ def _whatsapp_message_parts(value: str) -> tuple[str, str] | None:
             message, recipient = match.group(1).strip(" .?!'\""), match.group(2).strip(" .?!'\"")
             if message and recipient:
                 return recipient, message
+    # "text kutty hi in whatsapp": the recipient is one word, the rest is the message.
+    match = re.match(r"^(?:text|texr|txt|message|msg)\s+(\S+)\s+(.+?)\s+(?:on|in|via|through)\s+whatsapp$", text, flags=re.IGNORECASE)
+    if match:
+        recipient, message = match.group(1).strip(" .?!'\""), match.group(2).strip(" .?!'\"")
+        if message and recipient:
+            return recipient, message
     return None
 
 

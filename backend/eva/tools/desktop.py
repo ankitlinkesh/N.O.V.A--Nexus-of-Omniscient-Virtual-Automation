@@ -231,6 +231,13 @@ def open_app(app_name: str) -> str:
         os.startfile(shortcut)  # type: ignore[attr-defined]
         return f"Opening {shortcut.stem}."
 
+    # A Store (UWP) app such as WhatsApp has no .exe on PATH and no shortcut, but the installed-app index knows it.
+    from .app_index import open_installed_app
+
+    try:
+        return open_installed_app(app_name)
+    except ValueError:
+        pass
     supported = ", ".join(sorted(APP_ALIASES))
     raise ValueError(f"Could not find {key} on this laptop. Supported apps: {supported}.")
 
