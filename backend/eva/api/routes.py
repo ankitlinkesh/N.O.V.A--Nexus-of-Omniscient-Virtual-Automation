@@ -17,7 +17,8 @@ from ..agent.action_model import AgentAction
 from ..agent.planner import PlannerDecision, PlannerError, ToolCallPlanner
 from ..agent.runner import run_agentic_task
 from ..agent.policies import is_agentic_intent
-from ..agent.claim_check import NO_SEND_NOTE, unbacked_send_claim
+from ..agent.claim_check import replace_send_claims, unbacked_send_claim
+from ..core.last_action import NO_PREVIOUS_REQUEST, is_repeat_request, last_request, remember_request
 from ..browser.skills import ask_chatgpt_in_chrome, verify_browser_target
 from ..core.fast_commands import maybe_handle_fast_command
 from ..core.fast_responses import maybe_handle_fast_response
@@ -195,6 +196,7 @@ def _persist_and_log(
     memory writes, logging, and timing stay identical across the two endpoints."""
     memory.add_message(session_id, "user", message)
     memory.add_message(session_id, "assistant", reply)
+    remember_request(message)  # "do it again" re-runs this through the normal routing and gates
     _safe_log(memory, session_id, log_kind, log_payload)
     _timing_log(session_id, matched_event, started_at, **(matched_fields or {}))
     _timing_log(session_id, "response_ready", started_at, source=source, total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
@@ -1212,6 +1214,14 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     session_context = _session_context(request, session_id)
     _timing_log(session_id, "route_received", started_at, chars=len(payload.message))
 
+    if is_repeat_request(payload.message):
+        previous = last_request()
+        if not previous:
+            memory.add_message(session_id, "user", payload.message)
+            memory.add_message(session_id, "assistant", NO_PREVIOUS_REQUEST)
+            return ChatResponse(session_id=session_id, reply=NO_PREVIOUS_REQUEST, source="fast-command")
+        payload.message = previous  # routed again from scratch: a send builds a NEW pending action
+
     rules = use_rule_layers(payload.message)
     force_agentic = False
     triage_goal, triage_prefix = None, ""
@@ -1344,7 +1354,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     if decision.type in {"answer", "done"}:
         reply = decision.final_response
         if unbacked_send_claim(reply):
-            reply = NO_SEND_NOTE  # no tool ran in this plain answer, so it did not send anything
+            reply = replace_send_claims(reply)  # no tool ran in this plain answer, so it did not send anything
         memory.add_message(session_id, "assistant", reply)
         _timing_log(session_id, "response_ready", started_at, source="planner-answer", total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
         _remember_final_source(session_context, "planner-answer")
@@ -1401,6 +1411,16 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         settings = request.app.state.settings
         session_context = _session_context(request, session_id)
         _timing_log(session_id, "route_received", started_at, chars=len(payload.message), stream=True)
+
+        if is_repeat_request(payload.message):
+            previous = last_request()
+            if not previous:
+                memory.add_message(session_id, "user", payload.message)
+                memory.add_message(session_id, "assistant", NO_PREVIOUS_REQUEST)
+                for line in _simple_stream_events(session_id, "fast-command", NO_PREVIOUS_REQUEST):
+                    yield line
+                return
+            payload.message = previous  # routed again from scratch: a send builds a NEW pending action
 
         rules = use_rule_layers(payload.message)
         force_agentic = False
@@ -1564,7 +1584,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         if decision.type in {"answer", "done"}:
             reply = decision.final_response
             if unbacked_send_claim(reply):
-                reply = NO_SEND_NOTE  # no tool ran in this plain answer, so it did not send anything
+                reply = replace_send_claims(reply)  # no tool ran in this plain answer, so it did not send anything
             memory.add_message(session_id, "assistant", reply)
             _timing_log(session_id, "response_ready", started_at, source="planner-answer", total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
             _remember_final_source(session_context, "planner-answer")

@@ -54,7 +54,7 @@ _PUT_ON = re.compile(r"^(?:put on|throw on|blast)\s+(?:some\s+)?(?P<what>.+)$", 
 
 # Typos of the app names the deterministic rules key on. A missed rule costs a full agent run (and used to cost a wrong tool).
 _APP_TYPOS = re.compile(
-    r"\b(?:(?P<youtube>youtbe|youtub|yotube|utube|youtueb|youube|yputube|youtubr)|(?P<whatsapp>whatsap|whatsaap|whatapp|whtsapp|watsapp|whatsaapp)|(?P<spotify>spotfy|spotifiy|spotifly|sptify))\b",
+    r"\b(?:(?P<youtube>youtbe|youtub|yotube|utube|youtueb|youube|yputube|youtubr|youbte|yuotube|youtbue|yutube|youutbe)|(?P<whatsapp>whatsap|whatsaap|whatapp|whtsapp|watsapp|whatsaapp)|(?P<spotify>spotfy|spotifiy|spotifly|sptify))\b",
     re.IGNORECASE,
 )
 
@@ -63,10 +63,27 @@ def fix_app_typos(text: str) -> str:
     return _APP_TYPOS.sub(lambda m: "youtube" if m.group("youtube") else "whatsapp" if m.group("whatsapp") else "spotify", str(text or ""))
 
 
+def strip_stray_trailing(text: str) -> str:
+    """Drop typo junk after a request: a trailing backslash, backtick or slash, and an unpaired quote.
+
+    A quote that closes a pair (`saying "hi"`) and punctuation inside the body are left alone.
+    """
+    text = str(text or "").rstrip()
+    while text:
+        last = text[-1]
+        if last in ("\\", "`", "/"):
+            text = text[:-1].rstrip()
+        elif last in ("'", '"') and text.count(last) % 2 == 1:
+            text = text[:-1].rstrip()
+        else:
+            break
+    return text
+
+
 def canonicalize_request(message: str) -> str:
     """Return the message in canonical form, or the message unchanged."""
     original = str(message or "")
-    text = fix_app_typos(" ".join(original.split()))
+    text = strip_stray_trailing(fix_app_typos(" ".join(original.split())))
     if not text:
         return original
     # `eva ask ...` hands its tail to the question router verbatim: dropping a trailing "now" turned

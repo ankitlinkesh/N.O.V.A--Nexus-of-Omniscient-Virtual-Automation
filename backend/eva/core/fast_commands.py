@@ -2694,6 +2694,11 @@ def maybe_handle_fast_command(
     if pending_status:
         return pending_status, "fast-command"
 
+    from .last_action import is_status_question, last_action_status
+
+    if is_status_question(original):
+        return last_action_status(), "fast-command"
+
     pending_confirmation = handle_confirmation_command(original, session_id=session_id)
     if pending_confirmation:
         return pending_confirmation, "fast-command"

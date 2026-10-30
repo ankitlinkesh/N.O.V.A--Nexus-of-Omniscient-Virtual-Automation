@@ -23,6 +23,10 @@ DOMAIN_TOOLS: dict[str, tuple[str, ...]] = {
         "chrome_activate_top_youtube_result",
         "youtube_transcript",
     ),
+    "news": (
+        "rss_headlines",
+        "weather_forecast",
+    ),
     "gmail": (
         "email.draft_gmail",
         "email.send_drafted",

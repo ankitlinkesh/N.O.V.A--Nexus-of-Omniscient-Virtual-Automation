@@ -22,6 +22,16 @@
     "BRAVE_API_KEY": "set-your-key"
    },
    "enabled": false
+  },
+  {
+   "name": "eva-utils",
+   "transport": "stdio",
+   "command": ".venv/Scripts/python.exe",
+   "args": [
+    "-m",
+    "backend.eva.mcp.servers.utils"
+   ],
+   "enabled": false
   }
  ]
 }

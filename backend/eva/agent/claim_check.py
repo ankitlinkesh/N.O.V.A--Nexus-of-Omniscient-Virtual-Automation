@@ -40,7 +40,19 @@ _SCROLL_TOOLS = {"screen.scroll"}
 _SEND_TOOLS = {"message.send_via_ui", "email.send_drafted"}
 
 
-_SENT_CLAIM = re.compile(r"\b(?:has|have|had|was|were|is)\s+(?:been\s+)?(?:successfully\s+)?sent(?!\s+(?:from|by|with))\b|\bi(?:'ve|\s+have)?\s+(?:just\s+)?sent\b|\bsent\s+(?:the|your|a)\s+(?:message|email|text)\b", re.I)
+_SENT_CLAIM_OLD = re.compile(r"\b(?:has|have|had|was|were|is)\s+(?:been\s+)?(?:successfully\s+)?sent(?!\s+(?:from|by|with))\b|\bi(?:'ve|\s+have)?\s+(?:just\s+)?sent\b|\bsent\s+(?:the|your|a)\s+(?:message|email|text)\b", re.I)
+
+
+# "I've said hi to you on WhatsApp", "I messaged him", "message sent": the other ways a chat answer claims a send.
+_SEND_CLAIM_MORE = re.compile(
+    r"\bi(?:'ve|\s+have)?\s+(?:just\s+|already\s+|now\s+)?(?:messaged|texted|pinged|whatsapped)\b"
+    r"|\bi(?:'ve|\s+have)?\s+(?:just\s+|already\s+|now\s+)?(?:said|told)\b[^.!?\n]{0,60}?\b(?:on|via|in|through|over)\s+(?:whatsapp|sms)\b"
+    r"|\b(?:message|text|email|whatsapp)\s+(?:was\s+)?sent\b(?!\s+(?:from|by|with|to you))",
+    re.I,
+)
+_SENT_CLAIM = re.compile(_SENT_CLAIM_OLD.pattern + "|" + _SEND_CLAIM_MORE.pattern, re.I)
+_QUOTED_SPAN = re.compile(r"[\"“][^\"“”]{0,300}[\"”]")
+_SENTENCES = re.compile(r"(?<=[.!?])\s+|\n+")
 
 
 NO_SEND_NOTE = (
@@ -49,9 +61,28 @@ NO_SEND_NOTE = (
 )
 
 
+def _claims_send(sentence: str) -> bool:
+    # Words inside double quotes are someone else's (or a quoted) message, not NOVA claiming a send.
+    return bool(_SENT_CLAIM.search(_QUOTED_SPAN.sub(" ", sentence)))
+
+
 def unbacked_send_claim(reply: str) -> bool:
     """True when a plain chat answer (no tool ran) says a message was sent: it cannot be true."""
-    return bool(_SENT_CLAIM.search(str(reply or "")))
+    return any(_claims_send(sentence) for sentence in _SENTENCES.split(str(reply or "")))
+
+
+def replace_send_claims(reply: str) -> str:
+    """Swap each sentence that claims a send for the honest note (once), keeping the rest of the answer."""
+    kept: list[str] = []
+    noted = False
+    for sentence in _SENTENCES.split(str(reply or "")):
+        if _claims_send(sentence):
+            if not noted:
+                kept.append(NO_SEND_NOTE)
+                noted = True
+        elif sentence.strip():
+            kept.append(sentence.strip())
+    return " ".join(kept)
 
 
 def _ok_tools(steps: Iterable[Any]) -> list[str]:

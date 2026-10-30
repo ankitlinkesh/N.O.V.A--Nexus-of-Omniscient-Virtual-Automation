@@ -14,6 +14,24 @@ ACTION_ID_RE = r"act_[a-zA-Z0-9_-]+"
 BARE_CONFIRM_PHRASES = frozenset({"yes", "yes send", "send it", "do it", "confirm", "approve", "confirm send", "open and send it", "open and send the message"})
 
 
+# Natural variants of the bare words above: "yes confirm", "ok confirm", "please confirm", "confirm it",
+# "go ahead", "sure send it", "yes please". Same rules apply (see `_sole_pending_to_confirm`); "confirm override"
+# and "confirm act_..." never match because the whole phrase must be one of these.
+# Only phrases that name confirming or sending count: "yes please" or "go ahead" answer whatever
+# was asked last, which may not be the pending send.
+_BARE_CONFIRM_VARIANT = re.compile(
+    r"^(?:(?:yes|yep|yeah|ok|okay|sure|alright|please)[, ]+)*"
+    r"(?:confirm(?: (?:it|that|send|the send|the message))?|go ahead and send(?: it)?|send it|do it|approve(?: it)?)"
+    r"(?: please)?$"
+)
+
+
+def is_bare_confirm(text: str) -> bool:
+    """True for a bare confirmation phrase (said with no action id)."""
+    clean = _norm(text)
+    return clean in BARE_CONFIRM_PHRASES or bool(_BARE_CONFIRM_VARIANT.match(clean))
+
+
 def is_confirmation_text(text: str) -> bool:
     clean = _norm(text)
     return bool(re.match(rf"^(?:confirm|confirm action|approve)\s+{ACTION_ID_RE}$", clean))
@@ -57,7 +75,7 @@ def handle_confirmation_command(text: str, *, session_id: Any = None) -> str:
             return stale
         result = confirm_pending_action(confirm_id, override=False)
         return _with_execution(confirm_id, result, session_id)
-    if clean in BARE_CONFIRM_PHRASES:
+    if is_bare_confirm(clean):
         sole = _sole_pending_to_confirm()
         if sole is not None:
             result = confirm_pending_action(sole, override=False)
@@ -134,8 +152,23 @@ def _with_execution(action_id: str, result: Any, session_id: Any = None) -> str:
     from ..tools.registry import ToolRegistry
 
     executed = ToolRegistry().run_approved(action_id)
+    _record_execution(action_id, executed)
     rendered = _render_executed(action_id, base, executed)
     return _maybe_resume_task(action_id, session_id, executed, rendered)
+
+
+def _record_execution(action_id: str, executed: Any) -> None:
+    """Remember what the approved call returned, so "did it send?" can be answered from the record."""
+    from ..core.last_action import note_execution
+
+    try:
+        if isinstance(executed, dict):
+            ok = bool(executed.get("ok"))
+            note_execution(action_id, ok, _success_output(executed) if ok else _failure_reason(executed))
+        else:
+            note_execution(action_id, True, str(executed or ""))
+    except Exception:
+        pass
 
 
 def _maybe_resume_task(action_id: str, session_id: Any, executed: Any, rendered: str) -> str:
