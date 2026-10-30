@@ -64,3 +64,14 @@ def test_writing_an_email_is_supported_but_reading_mail_is_still_refused():
         assert not is_unsupported_capability(ok), ok
     for refused in ("read my emails", "check my inbox", "reply to the last email", "book a meeting on my calendar", "call mom on the phone"):
         assert is_unsupported_capability(refused), refused
+
+
+def test_a_stop_message_shows_the_tools_sentence_not_dict_text():
+    from backend.eva.agent.task import readable_observation
+
+    raw = "chrome_open_web_app_and_verify returned {'ok': True, 'opened': True, 'message': 'Done, YouTube is open in Chrome.', 'verified': False} (self-reported)"
+    assert readable_observation(raw)[0] == "Done, YouTube is open in Chrome. (not independently verified)"
+    plain = "workspace search found 3 files"
+    assert readable_observation(plain)[0] == plain
+    odd = "tool returned {'ok': True, 'rows': [1, 2]}"
+    assert readable_observation(odd)[0] == odd

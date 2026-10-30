@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -119,6 +121,31 @@ _UNTRUSTED_CLOSE = "[END UNTRUSTED "
 _MAX_REPORTED_CHARS = 400
 
 
+_RETURNED_DICT = re.compile(r"^[A-Za-z0-9_.]+ returned (?P<body>[{].*[}])", re.S)
+
+
+def _plain_message(text: str) -> str:
+    """`tool returned {'ok': True, ..., 'message': 'Done.'}` -> `Done.` (dict text means nothing to a person).
+
+    Only when the payload parses as a Python literal that carries a `message` or `summary`; anything else is
+    left exactly as it was, so nothing is dropped from output that has no human sentence in it.
+    """
+    match = _RETURNED_DICT.match(text)
+    if not match:
+        return text
+    try:
+        payload = ast.literal_eval(match.group("body"))
+    except (ValueError, SyntaxError):
+        return text
+    if not isinstance(payload, dict):
+        return text
+    sentence = payload.get("message") or payload.get("summary")
+    if not sentence:
+        return text
+    note = " (not independently verified)" if payload.get("verified") is False else ""
+    return f"{str(sentence).strip()}{note}"
+
+
 def readable_observation(observation: str) -> tuple[str, bool]:
     """An observation as a person should read it, plus whether it was wrapped.
 
@@ -139,7 +166,7 @@ def readable_observation(observation: str) -> tuple[str, bool]:
         cut = text.find(_UNTRUSTED_CLOSE)
         if cut != -1:
             text = text[:cut]
-    text = " ".join(text.split())
+    text = _plain_message(" ".join(text.split()))
     if len(text) > _MAX_REPORTED_CHARS:
         text = text[:_MAX_REPORTED_CHARS].rstrip() + "..."
     return text, untrusted
