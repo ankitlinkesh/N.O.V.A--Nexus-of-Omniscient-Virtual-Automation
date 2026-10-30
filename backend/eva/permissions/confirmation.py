@@ -403,7 +403,8 @@ def create_pending_action_from_state(state: Any, reason: str | None = None) -> E
 
 
 def _norm(text: str) -> str:
-    return " ".join(str(text or "").strip().lower().split())
+    # A pasted prompt drags its markdown along (`confirm act_...` with a stray backtick, quotes, a full stop).
+    return " ".join(str(text or "").strip().strip("`'\"*_ .!").lower().split())
 
 
 def _first_action(state: Any) -> dict[str, Any] | None:

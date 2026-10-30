@@ -123,3 +123,17 @@ def test_a_bare_confirm_approves_the_one_pending_send_and_never_on_voice(monkeyp
     ToolRegistry().run("message.send_via_ui", recipient="b", message="2")
     assert "specific pending action" in handle_confirmation_command("confirm")  # two waiting: no guessing
     assert not sent
+
+
+def test_confirm_survives_pasted_markdown_and_chat_cannot_claim_a_send():
+    from backend.eva.agent.claim_check import unbacked_send_claim
+    from backend.eva.core.routing_mode import must_stay_deterministic
+    from backend.eva.permissions.confirmation import parse_confirmation_action_id
+
+    for pasted in ("`confirm act_88b4622a45b2", "confirm act_88b4622a45b2`", '"confirm act_88b4622a45b2".'):
+        assert parse_confirmation_action_id(pasted) == "act_88b4622a45b2"
+        assert must_stay_deterministic(pasted)
+    assert unbacked_send_claim("The message 'hi' has been sent to your family on WhatsApp.")
+    assert unbacked_send_claim("I sent it.")
+    assert not unbacked_send_claim("I can send that once you confirm.")
+    assert not unbacked_send_claim("The file was sent from the other PC.")

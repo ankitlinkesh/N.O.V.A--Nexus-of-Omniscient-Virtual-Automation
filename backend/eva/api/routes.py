@@ -17,6 +17,7 @@ from ..agent.action_model import AgentAction
 from ..agent.planner import PlannerDecision, PlannerError, ToolCallPlanner
 from ..agent.runner import run_agentic_task
 from ..agent.policies import is_agentic_intent
+from ..agent.claim_check import NO_SEND_NOTE, unbacked_send_claim
 from ..browser.skills import ask_chatgpt_in_chrome, verify_browser_target
 from ..core.fast_commands import maybe_handle_fast_command
 from ..core.fast_responses import maybe_handle_fast_response
@@ -1342,6 +1343,8 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
 
     if decision.type in {"answer", "done"}:
         reply = decision.final_response
+        if unbacked_send_claim(reply):
+            reply = NO_SEND_NOTE  # no tool ran in this plain answer, so it did not send anything
         memory.add_message(session_id, "assistant", reply)
         _timing_log(session_id, "response_ready", started_at, source="planner-answer", total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
         _remember_final_source(session_context, "planner-answer")
@@ -1560,6 +1563,8 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
 
         if decision.type in {"answer", "done"}:
             reply = decision.final_response
+            if unbacked_send_claim(reply):
+                reply = NO_SEND_NOTE  # no tool ran in this plain answer, so it did not send anything
             memory.add_message(session_id, "assistant", reply)
             _timing_log(session_id, "response_ready", started_at, source="planner-answer", total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
             _remember_final_source(session_context, "planner-answer")

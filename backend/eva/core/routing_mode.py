@@ -71,7 +71,11 @@ def must_stay_deterministic(message: str) -> bool:
     from ..tools.email_tools import is_send_draft_request
     from ..tools.info_tools import parse_weather_request
 
+    from ..permissions.confirmation import is_confirmation_text, is_override_confirmation_text
     from .intent_router import _whatsapp_message_parts
+
+    if is_confirmation_text(message) or is_override_confirmation_text(message):  # `confirm act_...`, however it was pasted
+        return True
 
     # Any phrasing the WhatsApp parser understands ("text hi to kutty on whatsapp") goes to the gated send, not the agent.
     if _whatsapp_message_parts(canonical) is not None:

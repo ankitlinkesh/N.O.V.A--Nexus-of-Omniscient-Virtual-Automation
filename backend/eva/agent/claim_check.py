@@ -40,6 +40,20 @@ _SCROLL_TOOLS = {"screen.scroll"}
 _SEND_TOOLS = {"message.send_via_ui", "email.send_drafted"}
 
 
+_SENT_CLAIM = re.compile(r"\b(?:has|have|had|was|were|is)\s+(?:been\s+)?(?:successfully\s+)?sent(?!\s+(?:from|by|with))\b|\bi(?:'ve|\s+have)?\s+(?:just\s+)?sent\b|\bsent\s+(?:the|your|a)\s+(?:message|email|text)\b", re.I)
+
+
+NO_SEND_NOTE = (
+    "I have not sent anything. A message only goes out through the send step, which asks you to confirm first "
+    "(for example: \"text hi to kutty on whatsapp\", then \"confirm\")."
+)
+
+
+def unbacked_send_claim(reply: str) -> bool:
+    """True when a plain chat answer (no tool ran) says a message was sent: it cannot be true."""
+    return bool(_SENT_CLAIM.search(str(reply or "")))
+
+
 def _ok_tools(steps: Iterable[Any]) -> list[str]:
     return [str(getattr(step, "tool_name", "") or "") for step in steps if getattr(step, "status", "") == "done" and getattr(step, "tool_name", None)]
 
