@@ -226,6 +226,9 @@ def classify_capability_intent(message: str, context: dict | None = None) -> dic
     broad educational questions to the usual planner/LLM path.
     """
 
+    from .request_normalizer import fix_app_typos
+
+    message = fix_app_typos(message)
     text = _norm(message)
     if not text:
         return _base_result(False, reason="empty_message")

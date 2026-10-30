@@ -137,3 +137,15 @@ def test_confirm_survives_pasted_markdown_and_chat_cannot_claim_a_send():
     assert unbacked_send_claim("I sent it.")
     assert not unbacked_send_claim("I can send that once you confirm.")
     assert not unbacked_send_claim("The file was sent from the other PC.")
+
+
+def test_app_name_typos_still_reach_the_deterministic_rules():
+    from backend.eva.core.intent_router import classify_capability_intent
+    from backend.eva.core.request_normalizer import canonicalize_request
+    from backend.eva.core.routing_mode import must_stay_deterministic
+
+    assert canonicalize_request("open youtbe and play music") == "open youtube and play music"
+    assert must_stay_deterministic("open youtbe and play music")
+    assert classify_capability_intent("open youtbe and play music")["suggested_route"] == "chrome_search_site"
+    assert classify_capability_intent("text hi to kutty on whatsap")["suggested_route"] == "whatsapp_message_prepare"
+    assert canonicalize_request("my youtube video") == "my youtube video"

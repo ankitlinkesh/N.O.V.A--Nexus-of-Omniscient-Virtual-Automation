@@ -52,10 +52,21 @@ _SYNONYMS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
 _PUT_ON = re.compile(r"^(?:put on|throw on|blast)\s+(?:some\s+)?(?P<what>.+)$", re.IGNORECASE)
 
 
+# Typos of the app names the deterministic rules key on. A missed rule costs a full agent run (and used to cost a wrong tool).
+_APP_TYPOS = re.compile(
+    r"\b(?:(?P<youtube>youtbe|youtub|yotube|utube|youtueb|youube|yputube|youtubr)|(?P<whatsapp>whatsap|whatsaap|whatapp|whtsapp|watsapp|whatsaapp)|(?P<spotify>spotfy|spotifiy|spotifly|sptify))\b",
+    re.IGNORECASE,
+)
+
+
+def fix_app_typos(text: str) -> str:
+    return _APP_TYPOS.sub(lambda m: "youtube" if m.group("youtube") else "whatsapp" if m.group("whatsapp") else "spotify", str(text or ""))
+
+
 def canonicalize_request(message: str) -> str:
     """Return the message in canonical form, or the message unchanged."""
     original = str(message or "")
-    text = " ".join(original.split())
+    text = fix_app_typos(" ".join(original.split()))
     if not text:
         return original
     # `eva ask ...` hands its tail to the question router verbatim: dropping a trailing "now" turned
