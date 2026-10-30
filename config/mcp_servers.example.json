@@ -1,3 +1,27 @@
-{"servers": [
-  {"name": "example", "transport": "stdio", "command": ".venv/Scripts/python.exe", "args": ["-m", "backend.eva.mcp.example_server"], "enabled": false}
-]}
+{
+ "servers": [
+  {
+   "name": "example",
+   "transport": "stdio",
+   "command": ".venv/Scripts/python.exe",
+   "args": [
+    "-m",
+    "backend.eva.mcp.example_server"
+   ],
+   "enabled": false
+  },
+  {
+   "name": "brave",
+   "transport": "stdio",
+   "command": ".venv/Scripts/python.exe",
+   "args": [
+    "-m",
+    "backend.eva.mcp.servers.brave"
+   ],
+   "env": {
+    "BRAVE_API_KEY": "set-your-key"
+   },
+   "enabled": false
+  }
+ ]
+}

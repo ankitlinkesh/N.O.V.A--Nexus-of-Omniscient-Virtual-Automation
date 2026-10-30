@@ -1889,6 +1889,10 @@ class ToolRegistry:
         # register_mcp_tool_specs(). Empty by default, so this is a no-op
         # unless the MCP subsystem has been explicitly enabled/configured.
         self._tools.update(_MCP_TOOL_SPECS)
+        # EVA_FIRST_PARTY_MCP: run a domain's tools in NOVA's own MCP server. Off by default.
+        from ..mcp.first_party import apply_first_party
+
+        apply_first_party(self._tools)
 
     def _normalize_action_types(self) -> None:
         """Correct action_type metadata so it honestly reflects what each tool

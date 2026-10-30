@@ -8,9 +8,12 @@ shortcut in that window.
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import time
 import urllib.parse
+from pathlib import Path
 from typing import Any, Callable
 
 from ..agent.action_model import AgentAction
@@ -42,8 +45,7 @@ def email_draft_gmail(to: str, subject: str = "", body: str = "") -> dict[str, A
     result = open_url_in_chrome(gmail_compose_url(", ".join(addresses), subject, body))
     if not result.get("ok"):
         return {"ok": False, "drafted": False, "sent": False, "error": "open_failed", "message": "I could not open Gmail in Chrome."}
-    _LAST_DRAFT.clear()
-    _LAST_DRAFT.update({"to": addresses, "subject": subject, "at": time.time()})
+    _remember_draft({"to": addresses, "subject": subject, "at": time.time()})
     summary = f"Opened a Gmail draft to {', '.join(addresses)} in Chrome. I have not sent it; review it, then say `send` and I will press Send after you confirm."
     return {"ok": True, "drafted": True, "sent": False, "to": addresses, "subject": subject, "message": summary, "summary": summary}
 
@@ -63,10 +65,43 @@ SEND_DRAFT_PHRASE = re.compile(
 _LAST_DRAFT: dict[str, Any] = {}
 
 
+_shared_path: Path | None = None
+
+
+def share_draft_state(path: Path | None) -> None:
+    """Keep the draft in a file so NOVA and the Gmail MCP server process see the same one."""
+    global _shared_path
+    _shared_path = path
+
+
+def _state_file() -> Path | None:
+    raw = os.environ.get("EVA_DRAFT_STATE_PATH", "").strip()
+    return Path(raw) if raw else _shared_path
+
+
+def _remember_draft(draft: dict[str, Any]) -> None:
+    _LAST_DRAFT.clear()
+    _LAST_DRAFT.update(draft)
+    path = _state_file()
+    if path is not None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(draft), encoding="utf-8")
+        except OSError:
+            pass
+
+
 def pending_draft() -> dict[str, Any] | None:
     """The draft NOVA opened in Gmail, while it is still recent; else None."""
-    if _LAST_DRAFT and time.time() - float(_LAST_DRAFT.get("at", 0)) <= DRAFT_TTL_SECONDS:
-        return dict(_LAST_DRAFT)
+    draft: dict[str, Any] = _LAST_DRAFT
+    path = _state_file()
+    if path is not None:
+        try:
+            draft = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            draft = _LAST_DRAFT
+    if draft and time.time() - float(draft.get("at", 0)) <= DRAFT_TTL_SECONDS:
+        return dict(draft)
     return None
 
 
