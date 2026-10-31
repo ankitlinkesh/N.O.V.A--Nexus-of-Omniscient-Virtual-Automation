@@ -56,7 +56,7 @@ GROUPS: tuple[tuple[frozenset[str], tuple[str, ...]], ...] = (
      ("research_", "browser_summarize_page", "browser_save_page_to_research")),
     (frozenset({"terminal", "linux", "command", "shell", "script", "bash", "python", "run", "execute", "sandbox"}), ("sandbox_run", "shell.")),
     (frozenset({"clipboard", "paste", "copied"}), ("clipboard.",)),
-    (frozenset({"tab", "tabs", "paste", "fill", "notepad"}), ("browser_switch_tab", "copy_window_text_to_browser_tab")),
+    (frozenset({"tab", "tabs", "paste", "fill", "notepad"}), ("browser_switch_tab", "type_window_text_into_browser_tab")),
     (frozenset({"lock", "power", "shutdown", "sleep", "restart", "reboot", "hibernate"}), ("lock_laptop", "system_power", "guarded_power_action")),
     (frozenset({"page", "browser", "tab", "tabs", "chrome", "website", "site", "url", "link", "links", "web"}), ("browser_", "chrome_", "web.")),
     (frozenset({"open", "launch", "start"}), ("open_app", "open_folder", "open_url", "chrome_open_web_app")),

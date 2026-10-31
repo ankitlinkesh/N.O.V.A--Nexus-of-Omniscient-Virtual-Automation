@@ -220,9 +220,9 @@ SEED_CASES: tuple[Case, ...] = (
     Case(
         "tab_paste_from_notepad",
         ("go to the iEEE xtreme tab in chrome and fill the solution using playwright the solution is already open in a notepad tab",),
-        Expect(tools_allowed=("copy_window_text_to_browser_tab",), tools_required_any=("copy_window_text_to_browser_tab",), pending="must", must_not_execute=True, forbidden_claims=_NO_SEND),
+        Expect(tools_allowed=("type_window_text_into_browser_tab",), tools_required_any=("type_window_text_into_browser_tab",), pending="must", must_not_execute=True, forbidden_claims=_NO_SEND),
         Setup(),
-        "Real failure: the model focused Notepad, opened empty tabs and invented text. It must become one gated paste.",
+        "Real failure: the model focused Notepad, opened empty tabs and invented text. It must become one gated read-and-type.",
         tags=("browser", "real-failure"),
     ),
     Case(

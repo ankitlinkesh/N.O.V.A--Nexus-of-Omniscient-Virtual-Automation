@@ -358,7 +358,7 @@ def _run() -> int:
     # screen.submit_form remains among the confirm-class tools.
     check(
         phase51.EXPECTED_CLASS_COUNTS["confirm"] == 15,
-        "Phase 51's EXPECTED_CLASS_COUNTS['confirm'] must be 15 (Phase 164 added copy_window_text_to_browser_tab, Phase 82 added close_app as confirm-class, Phase 127 radio_set, Phase 128 clipboard.read, Phase 134 share.to_box and share.from_box, Phase 147 email.send_drafted); "
+        "Phase 51's EXPECTED_CLASS_COUNTS['confirm'] must be 15 (Phase 164 added type_window_text_into_browser_tab, Phase 82 added close_app as confirm-class, Phase 127 radio_set, Phase 128 clipboard.read, Phase 134 share.to_box and share.from_box, Phase 147 email.send_drafted); "
         f"got {phase51.EXPECTED_CLASS_COUNTS.get('confirm')}. If this genuinely changed, update the count pins "
         "together and say why.",
     )

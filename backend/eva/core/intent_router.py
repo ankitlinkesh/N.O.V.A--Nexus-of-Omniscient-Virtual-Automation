@@ -335,7 +335,7 @@ def classify_capability_intent(message: str, context: dict | None = None) -> dic
             True,
             capability="browser_tab",
             confidence=0.9,
-            reason="Paste text from an editor window into a browser tab.",
+            reason="Type text from an editor window into a browser tab.",
             suggested_route="browser_tab_paste",
             window=tab_paste[0],
             tab=tab_paste[1],

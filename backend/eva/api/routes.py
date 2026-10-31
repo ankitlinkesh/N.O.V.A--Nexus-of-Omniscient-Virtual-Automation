@@ -883,19 +883,19 @@ def _handle_capability_route(
             switched = _run_capability_tool("browser_switch_tab", title=tab)
             return str(switched.get("message") or switched.get("error") or "I could not switch tabs."), "capability:browser_tab"
         window = str(classification.get("window") or "").strip()
-        gated = _run_capability_tool("copy_window_text_to_browser_tab", window=window, tab=tab)
+        gated = _run_capability_tool("type_window_text_into_browser_tab", window=window, tab=tab)
         if gated.get("pending_id"):
             return (
-                f"Ready to copy all the text from your {window} window and paste it into the \"{tab}\" tab. Nothing has been copied yet, and I will not submit anything.\n\n"
+                f"Ready to read all the text in your {window} window and type it into the \"{tab}\" tab. Nothing has been read or typed yet, and I will not submit anything.\n\n"
                 "This uses your real browser window. Playwright runs its own separate browser and cannot see your open tabs.\n\n"
-                "First click inside the box on that tab where the text should go, so the cursor is there.\n\n"
+                "First click inside the box on that tab, so the cursor is there. Anything after the cursor gets removed, so use an empty box. While it types, leave the keyboard alone; moving the mouse into a screen corner stops it.\n\n"
                 "Pending action:\n"
                 f"ID: {gated['pending_id']}\n"
-                f"Summary: paste the {window} text into the \"{tab}\" tab\n\n"
+                f"Summary: type the {window} text into the \"{tab}\" tab\n\n"
                 f"Say `confirm {gated['pending_id']}` to do it.",
                 "capability:browser_tab",
             )
-        return str(gated.get("message") or gated.get("error") or "I could not prepare that paste. Nothing was copied."), "capability:browser_tab"
+        return str(gated.get("message") or gated.get("error") or "I could not prepare that. Nothing was read or typed."), "capability:browser_tab"
 
     if capability == "message_workflow":
         recipient = str(classification.get("recipient") or "").strip()
