@@ -327,6 +327,31 @@ def classify_capability_intent(message: str, context: dict | None = None) -> dic
             requires_confirmation=True,
         )
 
+    from .tab_requests import parse_tab_paste, parse_tab_switch
+
+    tab_paste = parse_tab_paste(message)
+    if tab_paste:
+        return _base_result(
+            True,
+            capability="browser_tab",
+            confidence=0.9,
+            reason="Paste text from an editor window into a browser tab.",
+            suggested_route="browser_tab_paste",
+            window=tab_paste[0],
+            tab=tab_paste[1],
+            requires_confirmation=True,
+        )
+    tab_switch = parse_tab_switch(message)
+    if tab_switch:
+        return _base_result(
+            True,
+            capability="browser_tab",
+            confidence=0.9,
+            reason="Switch to an open browser tab.",
+            suggested_route="browser_tab_switch",
+            tab=tab_switch,
+        )
+
     whatsapp_parts = _whatsapp_message_parts(message)
     if whatsapp_parts:
         recipient, body = whatsapp_parts

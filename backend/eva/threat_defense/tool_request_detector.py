@@ -57,6 +57,7 @@ _NON_CAPABILITY_SUFFIXES = frozenset(
     {
         # file extensions
         "exe", "dll", "sys", "msi", "py", "pyc", "js", "ts", "css", "html", "htm",
+        "rs", "c", "h", "cpp", "hpp", "cs", "java", "go", "rb", "kt", "sh", "tsx", "jsx", "ipynb",
         "md", "txt", "log", "json", "xml", "yml", "yaml", "toml", "ini", "cfg",
         "csv", "tsv", "pdf", "docx", "xlsx", "pptx", "zip", "tar", "gz",
         "png", "jpg", "jpeg", "gif", "svg", "ico", "mp3", "mp4", "wav",
@@ -71,7 +72,9 @@ _CAPABILITY_CLAIM_RE = re.compile(r"\b[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*\b")
 def _capability_claims(raw: str) -> list[str]:
     """Dotted identifiers that are actually claims about a capability."""
     claims = []
-    for claim in sorted(set(_CAPABILITY_CLAIM_RE.findall(raw))):
+    # A dotted name inside a path is a folder, e.g. WindowsApps/microsoft.windowsnotepad_11.2607.
+    found = {m.group(0) for m in _CAPABILITY_CLAIM_RE.finditer(raw) if m.start() == 0 or raw[m.start() - 1] not in ("/", chr(92))}
+    for claim in sorted(found):
         if claim.split(".", 1)[1] in _NON_CAPABILITY_SUFFIXES:
             continue
         claims.append(claim)

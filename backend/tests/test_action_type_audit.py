@@ -125,4 +125,4 @@ def test_relabelling_is_gate_preserving(registry):
     # on the Gmail draft only after `confirm act_...`; more friction, not less.
     # `weather_forecast`, `rss_headlines`, `youtube_transcript` (NETWORK_ACTION) and `ocr_image` (SAFE_LOCAL_READ): +4 allow -> allow 95.
     # All four read and mutate nothing; their text is untrusted by taint tracking, like web_search.
-    assert counts == {"allow": 95, "override": 10, "confirm": 14}, f"gate class counts drifted: {counts}"
+    assert counts == {"allow": 96, "override": 10, "confirm": 15}, f"gate class counts drifted: {counts}"

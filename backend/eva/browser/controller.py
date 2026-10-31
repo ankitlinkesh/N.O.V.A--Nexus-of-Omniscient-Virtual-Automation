@@ -18,6 +18,7 @@ from .state import current_state, invalidate_current_page, remember_live_probe, 
 
 BROWSER_PROCESSES = {"chrome.exe", "msedge.exe", "brave.exe", "firefox.exe", "opera.exe"}
 CHROME_PROCESS = "chrome.exe"
+CHROMIUM_FALLBACKS = ("brave.exe", "msedge.exe", "opera.exe")
 CHROME_KEY_DELAY_MS = 80
 
 
@@ -34,7 +35,12 @@ def _chrome_executable() -> str | None:
 
 
 def _focus_chrome() -> dict[str, Any]:
-    window = next((item for item in browser_windows(limit=20) if str(item.get("process_name") or "").lower() == CHROME_PROCESS), None)
+    windows = browser_windows(limit=20)
+    # Chrome if it is open, else the Chromium browser the user does have: the shortcuts are the same.
+    window = next(
+        (item for process in (CHROME_PROCESS, *CHROMIUM_FALLBACKS) for item in windows if str(item.get("process_name") or "").lower() == process),
+        None,
+    )
     if not window:
         return {"ok": False, "error": "chrome_window_not_found"}
     focus_window(str(window.get("process_name") or window.get("title") or "chrome"))

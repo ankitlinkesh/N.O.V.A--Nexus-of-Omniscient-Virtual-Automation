@@ -877,6 +877,26 @@ def _handle_capability_route(
             )
         return decision.reason, "capability:permission_gate"
 
+    if capability == "browser_tab":
+        tab = str(classification.get("tab") or "").strip()
+        if route == "browser_tab_switch":
+            switched = _run_capability_tool("browser_switch_tab", title=tab)
+            return str(switched.get("message") or switched.get("error") or "I could not switch tabs."), "capability:browser_tab"
+        window = str(classification.get("window") or "").strip()
+        gated = _run_capability_tool("copy_window_text_to_browser_tab", window=window, tab=tab)
+        if gated.get("pending_id"):
+            return (
+                f"Ready to copy all the text from your {window} window and paste it into the \"{tab}\" tab. Nothing has been copied yet, and I will not submit anything.\n\n"
+                "This uses your real browser window. Playwright runs its own separate browser and cannot see your open tabs.\n\n"
+                "First click inside the box on that tab where the text should go, so the cursor is there.\n\n"
+                "Pending action:\n"
+                f"ID: {gated['pending_id']}\n"
+                f"Summary: paste the {window} text into the \"{tab}\" tab\n\n"
+                f"Say `confirm {gated['pending_id']}` to do it.",
+                "capability:browser_tab",
+            )
+        return str(gated.get("message") or gated.get("error") or "I could not prepare that paste. Nothing was copied."), "capability:browser_tab"
+
     if capability == "message_workflow":
         recipient = str(classification.get("recipient") or "").strip()
         body = str(classification.get("message") or "").strip()

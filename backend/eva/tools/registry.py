@@ -73,6 +73,7 @@ from ..desktop import (
 from .app_control_tools import app_focus, browser_open_url_tool, browser_search_tool
 from . import clipboard_tools, system_settings
 from .desktop import close_app, media_key, open_app, open_folder, open_url, system_power, system_status, web_search
+from ..browser import tab_tools
 from .email_tools import email_draft_gmail, email_send_drafted
 from .info_tools import ocr_image, rss_headlines, weather_forecast, youtube_transcript
 from .message_tools import message_confirm_send, message_prepare, message_send_via_ui
@@ -1192,6 +1193,33 @@ class ToolRegistry:
                 category="browser",
                 risk="low",
             ),
+            "browser_switch_tab": ToolSpec(
+                name="browser_switch_tab",
+                description="Bring an already open tab to the front in the user's real browser (Chrome, Brave or Edge), found by words in its title.",
+                args_schema=_schema({"title": {"type": "string"}}, ["title"]),
+                safety_level="safe",
+                handler=lambda title: tab_tools.switch_browser_tab(str(title)),
+                category="browser",
+                risk="low",
+                action_type="SAFE_LOCAL_UI",
+                risk_categories=("SAFE_LOCAL_UI",),
+                verification_strategy="Reads the foreground window title after each Ctrl+Tab and only reports success when it matches.",
+                failure_recovery="If no tab matches, say so and ask whether the tab is open.",
+            ),
+            "copy_window_text_to_browser_tab": ToolSpec(
+                name="copy_window_text_to_browser_tab",
+                description="Copy all the text from an editor window (Notepad, VS Code) and paste it at the cursor in an open browser tab, after confirmation. Never submits anything.",
+                args_schema=_schema({"window": {"type": "string"}, "tab": {"type": "string"}}, ["window", "tab"]),
+                safety_level="sensitive",
+                handler=lambda window, tab: tab_tools.copy_window_text_to_browser_tab(str(window), str(tab)),
+                category="browser",
+                risk="medium",
+                action_type="SAFE_LOCAL_UI",
+                risk_categories=("SAFE_LOCAL_UI",),
+                requires_confirmation=True,
+                verification_strategy="Checks the copy with a clipboard marker and the tab by its title. It cannot see the page, so the paste itself is reported as unverified.",
+                failure_recovery="Say what happened; the text stays on the clipboard for a manual paste.",
+            ),
             "chrome_close_tab": ToolSpec(
                 name="chrome_close_tab",
                 description="Close the current visible Chrome tab using a bounded keyboard shortcut.",
@@ -1951,6 +1979,8 @@ class ToolRegistry:
             "chrome_search_site_and_verify",
             "chrome_activate_top_youtube_result",
             "chrome_copy_current_url",
+            "browser_switch_tab",
+            "copy_window_text_to_browser_tab",
             "chrome_new_tab",
             "chrome_close_tab",
             "chrome_reload",

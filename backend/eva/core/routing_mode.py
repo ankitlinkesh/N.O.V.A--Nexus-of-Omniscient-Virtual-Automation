@@ -82,6 +82,10 @@ def must_stay_deterministic(message: str) -> bool:
         return True
     if is_send_draft_request(canonical) or parse_weather_request(canonical) is not None:
         return True
+    from .tab_requests import parse_tab_paste, parse_tab_switch
+
+    if parse_tab_paste(canonical) is not None or parse_tab_switch(canonical) is not None:
+        return True
     if canonical.startswith(_DETERMINISTIC_PREFIXES) or _INSTANT.match(canonical) or _SITE_PLAYBACK.match(canonical) or _SEND_WHATSAPP.match(canonical):
         return True
     from ..permissions.confirmation import is_bare_confirm
