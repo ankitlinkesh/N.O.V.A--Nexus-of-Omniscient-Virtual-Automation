@@ -34,6 +34,7 @@ class FakeDesktop:
         self.steal_focus_after = None
         self.change_tab_after_lines = None
         self.lines_typed = 0
+        self.selection, self.select_after, self.home_works = 0, False, True
         for name, fake in {
             "_open_windows": lambda: self.windows,
             "_focus": self.focus,
@@ -76,9 +77,16 @@ class FakeDesktop:
     def press(self, key, reason):
         self.keys.append(key)
         if self.front is self.browser and key == "enter":
-            self.box += "\n" + ("    " if self.auto_indent else "")
+            line = self.box.rsplit("\n", 1)[-1]
+            indent = line[: len(line) - len(line.lstrip())] + ("    " if line.endswith("{") else "")
+            self.box += "\n" + (indent if self.auto_indent else "")
         if key == "delete":
-            self.after_cursor = ""
+            if self.select_after:
+                self.after_cursor, self.select_after = "", False
+            elif self.selection:
+                self.box, self.selection = self.box[: -self.selection], 0
+            else:
+                self.after_cursor = self.after_cursor[1:]
         return True
 
     def hotkey(self, keys, reason):
@@ -88,6 +96,11 @@ class FakeDesktop:
             self.index = (self.index + 1) % len(self.tabs)
             if self.steal_focus_after is not None and self.keys.count("ctrl+tab") >= self.steal_focus_after:
                 self.front = self.editor
+        if combo == "shift+home":
+            line = self.box.rsplit("\n", 1)[-1]
+            self.selection = len(line) if self.home_works and not line.strip() else 0
+        if combo == "ctrl+shift+end":
+            self.select_after = True
         if combo == "ctrl+c":
             if self.front is self.editor and self.copy_works:
                 self.clipboard = self.document
@@ -175,9 +188,25 @@ def test_brackets_the_editor_closed_by_itself_are_removed(monkeypatch):
     assert out["ok"] and out["match"] == "exact" and desk.after_cursor == ""
 
 
-def test_auto_indent_is_reported_not_hidden(monkeypatch):
+def test_the_editors_auto_indent_is_removed_so_indentation_stays_as_written(monkeypatch):
     desk = FakeDesktop(monkeypatch)
     desk.auto_indent = True
+    desk.document = "fn main() {\n    if x {\n        run();\n    }\n\n}\n"
+    out = run_typing()
+    assert out["ok"] and out["match"] == "exact"
+    assert desk.box == "fn main() {\n    if x {\n        run();\n    }\n\n}"
+
+
+def test_auto_indent_with_auto_closed_brackets_also_comes_out_exact(monkeypatch):
+    desk = FakeDesktop(monkeypatch)
+    desk.auto_indent, desk.auto_close = True, True
+    out = run_typing()
+    assert out["ok"] and out["match"] == "exact" and desk.after_cursor == ""
+
+
+def test_an_indent_that_could_not_be_removed_is_reported_not_hidden(monkeypatch):
+    desk = FakeDesktop(monkeypatch)
+    desk.auto_indent, desk.home_works = True, False
     out = run_typing()
     assert out["ok"] and out["match"] == "ignoring_whitespace" and "spacing differs" in out["message"]
 

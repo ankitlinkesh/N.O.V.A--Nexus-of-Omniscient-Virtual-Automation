@@ -238,6 +238,11 @@ def type_window_text_into_browser_tab(window: str, tab: str) -> dict[str, Any]:
         # Checked before every line: keys must never land in another window or another tab.
         if not _in_front(browser) or wanted not in _normalize(getattr(active, "title", "")):
             return _fail("focus_lost", f"The window or tab changed, so I stopped after {index} of {len(lines)} lines. Check the box; I did not submit anything.", lines_typed=index)
+        if index:
+            # Enter made the editor auto-indent, and the line brings its own spaces: remove the
+            # editor's, or the indentation grows on every line. Home goes to column 0 on a blank line.
+            _hotkey(["shift", "home"], "select the indentation the editor added")
+            _press("delete", "remove the indentation the editor added")
         if not _type(line):
             return _fail("typing_stopped", f"Typing stopped after {index} of {len(lines)} lines (moving the mouse into a screen corner does this). Check the box; I did not submit anything.", lines_typed=index)
         if index < len(lines) - 1:
