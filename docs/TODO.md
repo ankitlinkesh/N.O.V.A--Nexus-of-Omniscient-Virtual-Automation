@@ -30,8 +30,9 @@ anything or touching the real apps (stubbed tools).
 
 Borrowed ideas, not code: CowAgent is a full competing agent and has no confirm-before-send gate.
 
-- **Scheduler tool:** timed tasks ("remind me at 6", "check news every morning"). NOVA has no scheduler.
-  It would be gated like anything else.
+- **Scheduler tool:** NOVA already has one (`backend/eva/proactivity/`: recurring rules and file watchers,
+  Phase 46; rules from a typed sentence, Phase 54; timers and one-off reminders, Phase 126). Rules propose
+  work and never authorize it. What is left is checking it end to end, and whether the planner can use it.
 - **Memory tiers:** context, daily and core memory with a nightly summary pass. It would help with things
   like "do it again" having no memory of the last request.
 - **Skills as manifests:** reusable multi-tool workflows (for example "morning briefing" = news + weather +
