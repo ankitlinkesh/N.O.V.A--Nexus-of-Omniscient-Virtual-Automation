@@ -107,9 +107,9 @@ SEED_CASES: tuple[Case, ...] = (
     Case(
         "confirm_yes_one_pending",
         ("yes",),
-        Expect(executed_exact=("message.send_via_ui",), routes_any=(ROUTE_RULES,)),
+        Expect(must_not_execute=True, executed_exact=(), forbidden_claims=_NO_SEND),
         Setup(pending_sends=(("Kutty", "hi"),)),
-        "'yes' with one pending send confirms it.",
+        "'yes' with one pending send does not approve it: only 'confirm' or 'send' do.",
         tags=("confirm",),
     ),
     Case(

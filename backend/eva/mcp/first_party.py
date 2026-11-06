@@ -41,7 +41,8 @@ def enabled_domains() -> list[str]:
 
 def draft_state_path() -> Path:
     raw = os.environ.get("EVA_DRAFT_STATE_PATH", "").strip()
-    return Path(raw) if raw else data_path(Path("mcp_gmail_draft.json"))
+    # Absolute, so NOVA and the server child agree whatever folder each was started from.
+    return Path(raw) if raw else data_path(REPO_ROOT / "data" / "mcp_gmail_draft.json")
 
 
 def server_config(domain: str) -> McpServerConfig:

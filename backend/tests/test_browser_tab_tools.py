@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ctypes
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -268,11 +270,89 @@ def test_missing_tab_types_nothing(monkeypatch):
     assert not out["ok"] and desk.box == "" and desk.typed_elsewhere == ""
 
 
-def test_non_keyboard_characters_are_refused_before_typing(monkeypatch):
+def test_non_keyboard_characters_are_typed_and_mentioned(monkeypatch):
     desk = FakeDesktop(monkeypatch)
-    desk.document = "// caf" + chr(233) + "\nfn main() {}\n"
+    desk.document = "// caf" + chr(233) + " n " + chr(0x2264) + " 10\nfn main() {}\n"
+    out = run_typing()
+    assert out["ok"] and out["match"] == "exact"
+    assert desk.box == "// caf" + chr(233) + " n " + chr(0x2264) + " 10\nfn main() {}"
+    assert "2 of the characters are not on the keyboard" in out["message"]
+
+
+def test_plain_code_does_not_mention_special_characters(monkeypatch):
+    FakeDesktop(monkeypatch)
+    assert "not on the keyboard" not in run_typing()["message"]
+
+
+def test_control_characters_are_refused_before_typing(monkeypatch):
+    desk = FakeDesktop(monkeypatch)
+    desk.document = "fn main() {}" + chr(1) + "\n"
     out = run_typing()
     assert not out["ok"] and out["error"] == "unsupported_characters" and desk.box == ""
+
+
+def test_a_byte_order_mark_is_not_typed(monkeypatch):
+    desk = FakeDesktop(monkeypatch)
+    desk.document = chr(0xFEFF) + "fn main() {}\n"
+    out = run_typing()
+    assert out["ok"] and desk.box == "fn main() {}" and "not on the keyboard" not in out["message"]
+
+
+class FakeGui:
+    def __init__(self, calls, failsafe=False):
+        self.calls, self.failsafe = calls, failsafe
+
+    def write(self, text, interval=0):
+        self.calls.append(("keys", text))
+
+    def failSafeCheck(self):
+        if self.failsafe:
+            raise RuntimeError("mouse in the corner")
+
+
+def use_gui(monkeypatch, gui, calls):
+    monkeypatch.setattr("backend.eva.screen.screen_controller._pyautogui", lambda: (gui, None))
+    monkeypatch.setattr(tab_tools, "_send_unicode", lambda text: calls.append(("unicode", text)) or True)
+
+
+def test_a_line_goes_out_in_order_through_the_right_route(monkeypatch):
+    calls = []
+    use_gui(monkeypatch, FakeGui(calls), calls)
+    assert tab_tools._type("let a = " + chr(233) + chr(0x2264) + " b;") is True
+    assert calls == [("keys", "let a = "), ("unicode", chr(233) + chr(0x2264)), ("keys", " b;")]
+
+
+def test_the_failsafe_stops_special_characters_too(monkeypatch):
+    calls = []
+    use_gui(monkeypatch, FakeGui(calls, failsafe=True), calls)
+    assert tab_tools._type(chr(233)) is False and calls == []
+
+
+def test_unicode_key_events_press_and_release_each_character(monkeypatch):
+    sent = []
+    monkeypatch.setattr(tab_tools, "_sleep", lambda seconds: None)
+    monkeypatch.setattr(tab_tools, "_send_input", lambda events: sent.append(events) or len(events))
+    assert tab_tools._send_unicode(chr(233)) is True
+    assert sent == [[(233, 0x0004), (233, 0x0006)]]
+
+
+def test_a_character_outside_the_basic_plane_goes_as_one_surrogate_pair(monkeypatch):
+    sent = []
+    monkeypatch.setattr(tab_tools, "_sleep", lambda seconds: None)
+    monkeypatch.setattr(tab_tools, "_send_input", lambda events: sent.append(events) or len(events))
+    assert tab_tools._send_unicode(chr(0x1F600)) is True
+    assert sent == [[(0xD83D, 0x0004), (0xD83D, 0x0006), (0xDE00, 0x0004), (0xDE00, 0x0006)]]
+
+
+def test_keys_windows_refused_are_reported_as_a_stop(monkeypatch):
+    monkeypatch.setattr(tab_tools, "_sleep", lambda seconds: None)
+    monkeypatch.setattr(tab_tools, "_send_input", lambda events: 0)
+    assert tab_tools._send_unicode(chr(233)) is False
+
+
+def test_the_input_structure_is_the_size_windows_expects():
+    expected = 40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28
+    assert sys.platform != "win32" or ctypes.sizeof(tab_tools._Input) == expected
 
 
 def test_very_long_text_is_refused(monkeypatch):

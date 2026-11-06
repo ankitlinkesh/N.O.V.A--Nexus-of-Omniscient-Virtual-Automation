@@ -18,7 +18,7 @@ from ..agent.planner import PlannerDecision, PlannerError, ToolCallPlanner
 from ..agent.runner import run_agentic_task
 from ..agent.policies import is_agentic_intent
 from ..agent.claim_check import replace_send_claims, unbacked_send_claim
-from ..core.last_action import NO_PREVIOUS_REQUEST, is_repeat_request, last_request, remember_request
+from ..core.last_action import forget_request, is_repeat_request, remember_request, repeat_target
 from ..browser.skills import ask_chatgpt_in_chrome, verify_browser_target
 from ..core.fast_commands import maybe_handle_fast_command
 from ..core.fast_responses import maybe_handle_fast_response
@@ -196,7 +196,7 @@ def _persist_and_log(
     memory writes, logging, and timing stay identical across the two endpoints."""
     memory.add_message(session_id, "user", message)
     memory.add_message(session_id, "assistant", reply)
-    remember_request(message)  # "do it again" re-runs this through the normal routing and gates
+    remember_request(message, session_id)  # "do it again" re-runs this through the normal routing and gates
     _safe_log(memory, session_id, log_kind, log_payload)
     _timing_log(session_id, matched_event, started_at, **(matched_fields or {}))
     _timing_log(session_id, "response_ready", started_at, source=source, total_ms=f"{(time.perf_counter() - started_at) * 1000:.1f}")
@@ -1235,11 +1235,11 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     _timing_log(session_id, "route_received", started_at, chars=len(payload.message))
 
     if is_repeat_request(payload.message):
-        previous = last_request()
-        if not previous:
+        previous, refusal = repeat_target(session_id)
+        if previous is None:
             memory.add_message(session_id, "user", payload.message)
-            memory.add_message(session_id, "assistant", NO_PREVIOUS_REQUEST)
-            return ChatResponse(session_id=session_id, reply=NO_PREVIOUS_REQUEST, source="fast-command")
+            memory.add_message(session_id, "assistant", refusal)
+            return ChatResponse(session_id=session_id, reply=refusal, source="fast-command")
         payload.message = previous  # routed again from scratch: a send builds a NEW pending action
 
     rules = use_rule_layers(payload.message)
@@ -1318,6 +1318,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     if force_agentic or is_agentic_intent(payload.message):
         history = memory.history_with_recall(session_id, payload.message)
         memory.add_message(session_id, "user", payload.message)
+        forget_request(session_id)
         result = await run_agentic_task(
             triage_goal or payload.message,
             {
@@ -1355,6 +1356,7 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
 
     history = memory.history_with_recall(session_id, payload.message)
     memory.add_message(session_id, "user", payload.message)
+    forget_request(session_id)
 
     try:
         _timing_log(session_id, "planner_started", started_at)
@@ -1433,11 +1435,11 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         _timing_log(session_id, "route_received", started_at, chars=len(payload.message), stream=True)
 
         if is_repeat_request(payload.message):
-            previous = last_request()
-            if not previous:
+            previous, refusal = repeat_target(session_id)
+            if previous is None:
                 memory.add_message(session_id, "user", payload.message)
-                memory.add_message(session_id, "assistant", NO_PREVIOUS_REQUEST)
-                for line in _simple_stream_events(session_id, "fast-command", NO_PREVIOUS_REQUEST):
+                memory.add_message(session_id, "assistant", refusal)
+                for line in _simple_stream_events(session_id, "fast-command", refusal):
                     yield line
                 return
             payload.message = previous  # routed again from scratch: a send builds a NEW pending action
@@ -1517,6 +1519,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
         if force_agentic or is_agentic_intent(payload.message):
             history = memory.history_with_recall(session_id, payload.message)
             memory.add_message(session_id, "user", payload.message)
+            forget_request(session_id)
             yield _json_line({"type": "meta", "session_id": session_id, "source": "agent-runner", "route": "agentic"})
             yield _json_line({"type": "agent_task", "message": "Agent task started"})
             result = await run_agentic_task(
@@ -1553,6 +1556,7 @@ async def chat_stream(payload: ChatRequest, request: Request) -> StreamingRespon
 
         history = memory.history_with_recall(session_id, payload.message)
         memory.add_message(session_id, "user", payload.message)
+        forget_request(session_id)
         yield _json_line({"type": "planning", "message": "Planning..."})
 
         try:

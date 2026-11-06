@@ -91,15 +91,28 @@ def _remember_draft(draft: dict[str, Any]) -> None:
             pass
 
 
+def _forget_draft() -> None:
+    """Send was pressed: the draft is gone, in this process and in the shared file."""
+    _LAST_DRAFT.clear()
+    path = _state_file()
+    if path is not None:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def pending_draft() -> dict[str, Any] | None:
     """The draft NOVA opened in Gmail, while it is still recent; else None."""
     draft: dict[str, Any] = _LAST_DRAFT
     path = _state_file()
     if path is not None:
+        # The file is the only record when it is shared: once the other process sent the draft and
+        # removed it, this process's memory of it must not bring it back for a second send.
         try:
             draft = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            draft = _LAST_DRAFT
+            return None
     if draft and time.time() - float(draft.get("at", 0)) <= DRAFT_TTL_SECONDS:
         return dict(draft)
     return None
@@ -148,7 +161,7 @@ def email_send_drafted(confirmed: bool = False, *, sleep: Callable[[float], None
     sleep(SEND_WAIT_SECONDS)
     after = _gmail_title()
     verified = bool(before) and after != before and "gmail" in after.lower()
-    _LAST_DRAFT.clear()
+    _forget_draft()
     summary = (
         f"Pressed Send on the Gmail draft to {to}; the Gmail window changed afterwards, so it very likely went."
         if verified

@@ -239,7 +239,34 @@ def test_repeat_phrases_do_not_overlap_confirms():
 
 def test_nothing_to_repeat_is_said_honestly():
     assert last_action.last_request() == ""
-    assert "no earlier request" in last_action.NO_PREVIOUS_REQUEST
+    assert last_action.repeat_target() == (None, last_action.NO_PREVIOUS_REQUEST)
+
+
+def test_a_spoken_again_never_repeats(isolated):
+    last_action.remember_request("send hi to kutty on whatsapp")
+    with voice_turn():
+        assert last_action.repeat_target() == (None, last_action.VOICE_REPEAT_REFUSED)
+    assert last_action.repeat_target() == ("send hi to kutty on whatsapp", "")
+
+
+def test_each_chat_has_its_own_last_request():
+    last_action.remember_request("open spotify", "a")
+    last_action.remember_request("send hi to kutty on whatsapp", "b")
+    assert last_action.last_request("a") == "open spotify" and last_action.last_request("b").startswith("send hi")
+    assert last_action.last_request("c") == ""
+
+
+def test_a_turn_handled_by_the_model_is_not_replaced_by_an_older_request():
+    last_action.remember_request("send hi to kutty on whatsapp", "s")
+    last_action.forget_request("s")  # the next turn went to the model
+    assert last_action.repeat_target("s")[0] is None
+
+
+def test_an_old_request_is_not_repeated(monkeypatch):
+    last_action.remember_request("send hi to kutty on whatsapp", "s")
+    later = __import__("time").time() + last_action.REPEAT_WINDOW_SECONDS + 1
+    monkeypatch.setattr(last_action.time, "time", lambda: later)
+    assert last_action.last_request("s") == ""
 
 
 def test_control_messages_are_not_remembered():
@@ -266,9 +293,20 @@ def test_repeat_of_a_send_makes_a_new_pending_action_and_sends_nothing(monkeypat
     assert tool_gate.get_pending_call(ids[1]) is not None
 
 
-@pytest.mark.parametrize("phrase", ["yes please", "go ahead", "sure", "ok please", "yeah please"])
+@pytest.mark.parametrize("phrase", ["yes please", "go ahead", "sure", "ok please", "yeah please", "yes", "do it", "ok do it",
+                                    "yes do it", "sure, do it", "approve", "approve it", "okay"])
 def test_ambiguous_agreement_never_confirms_a_send(phrase, isolated):
     # "yes please" answers whatever was asked last, which may not be the pending send.
     make_pending()
-    confirmation.handle_confirmation_command(phrase)
-    assert isolated == []
+    reply = confirmation.handle_confirmation_command(phrase)
+    assert isolated == [] and "say `confirm`" in reply
+
+
+def test_agreement_with_nothing_pending_is_left_to_the_chat(isolated):
+    assert confirmation.handle_confirmation_command("yes") == ""
+
+
+@pytest.mark.parametrize("phrase", ["sure, do it", "ok do it", "yes do it", "yeah go ahead"])
+def test_agreement_with_a_pending_send_stays_with_the_rules(phrase, isolated):
+    make_pending()
+    assert must_stay_deterministic(phrase)

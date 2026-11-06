@@ -88,7 +88,7 @@ def must_stay_deterministic(message: str) -> bool:
         return True
     if canonical.startswith(_DETERMINISTIC_PREFIXES) or _INSTANT.match(canonical) or _SITE_PLAYBACK.match(canonical) or _SEND_WHATSAPP.match(canonical):
         return True
-    from ..permissions.confirmation import is_bare_confirm
+    from ..permissions.confirmation import is_bare_confirm, is_soft_yes
     from .last_action import is_repeat_request, is_status_question
 
     # "did it send?" / "do it again" are answered from the record, never by the model.
@@ -97,7 +97,8 @@ def must_stay_deterministic(message: str) -> bool:
     # "yes confirm" with nothing pending gets the honest "no pending action" reply, not a model's "Confirmed: sending...".
     if is_bare_confirm(canonical) and "confirm" in canonical:
         return True
-    return tool_gate.has_pending_calls() and (canonical in _CONFIRM_WORDS or is_bare_confirm(canonical))
+    # Agreement with something pending gets the "say confirm" hint from the rules, never a model's "Sent!".
+    return tool_gate.has_pending_calls() and (canonical in _CONFIRM_WORDS or is_bare_confirm(canonical) or is_soft_yes(canonical))
 
 
 def use_rule_layers(message: str) -> bool:

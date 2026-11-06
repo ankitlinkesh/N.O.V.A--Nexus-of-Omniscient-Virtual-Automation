@@ -11,7 +11,14 @@ from .status import format_pending_action_detail, format_pending_action_result, 
 ACTION_ID_RE = r"act_[a-zA-Z0-9_-]+"
 
 # Said alone, these confirm the one pending action that is waiting on this person (see `_sole_pending_to_confirm`).
-BARE_CONFIRM_PHRASES = frozenset({"yes", "yes send", "send it", "do it", "confirm", "approve", "confirm send", "open and send it", "open and send the message"})
+# Only words that say "confirm" or "send" count: "yes", "do it" or "approve" can answer some other question.
+BARE_CONFIRM_PHRASES = frozenset({"yes send", "send it", "confirm", "confirm send", "open and send it", "open and send the message"})
+
+# Agreement that names neither confirming nor sending. With something pending it gets a hint, never a send.
+_SOFT_YES = re.compile(
+    r"^(?:(?:yes|yep|yeah|ya|ok|okay|sure|alright|fine|please)[, ]*)+(?:do it|go ahead|go|approve(?: it)?)?(?: please)?$"
+    r"|^(?:do it|go ahead|approve(?: it)?|go for it)(?: please)?$"
+)
 
 
 # Natural variants of the bare words above: "yes confirm", "ok confirm", "please confirm", "confirm it",
@@ -21,7 +28,7 @@ BARE_CONFIRM_PHRASES = frozenset({"yes", "yes send", "send it", "do it", "confir
 # was asked last, which may not be the pending send.
 _BARE_CONFIRM_VARIANT = re.compile(
     r"^(?:(?:yes|yep|yeah|ok|okay|sure|alright|please)[, ]+)*"
-    r"(?:confirm(?: (?:it|that|send|the send|the message))?|go ahead and send(?: it)?|send it|do it|approve(?: it)?)"
+    r"(?:confirm(?: (?:it|that|send|the send|the message))?|go ahead and send(?: it)?|send it)"
     r"(?: please)?$"
 )
 
@@ -81,7 +88,23 @@ def handle_confirmation_command(text: str, *, session_id: Any = None) -> str:
             result = confirm_pending_action(sole, override=False)
             return _with_execution(sole, result, session_id)
         return "I need a specific pending action ID. Use `pending actions` to see active actions, then say `confirm <id>`. I did not send or execute anything."
+    if _SOFT_YES.match(clean) and _has_pending():
+        return "To approve the pending action, say `confirm` (or `confirm <id>`). Words like \"yes\" or \"do it\" do not approve a send. I did not send or execute anything."
     return ""
+
+
+def is_soft_yes(text: str) -> bool:
+    """True for agreement that does not approve anything ("yes", "do it", "sure go ahead")."""
+    return bool(_SOFT_YES.match(_norm(text)))
+
+
+def _has_pending() -> bool:
+    from .ledger import list_pending_actions
+
+    try:
+        return bool(list_pending_actions())
+    except Exception:  # noqa: BLE001 - a hint is optional; never fail the reply over it
+        return False
 
 
 def _sole_pending_to_confirm() -> str | None:

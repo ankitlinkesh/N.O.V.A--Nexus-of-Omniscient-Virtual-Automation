@@ -184,6 +184,42 @@ def test_gmail_draft_is_shared_through_the_state_file(monkeypatch, tmp_path):
     email_tools._LAST_DRAFT.clear()
 
 
+def test_a_draft_sent_by_the_other_process_cannot_be_sent_again(monkeypatch, tmp_path):
+    # Regression: NOVA drafted (memory + file), the Gmail server sent it and cleared only its own memory,
+    # so NOVA still had the draft in memory and a second "send" pressed Send again.
+    from backend.eva.tools import email_tools
+
+    state = tmp_path / "draft.json"
+    monkeypatch.setenv("EVA_DRAFT_STATE_PATH", str(state))
+    email_tools._remember_draft({"to": ["a@b.co"], "subject": "hi", "at": __import__("time").time()})
+    state.unlink()  # what the server process does after pressing Send
+    assert email_tools.pending_draft() is None
+    email_tools._LAST_DRAFT.clear()
+
+
+def test_pressing_send_removes_the_shared_draft(monkeypatch, tmp_path):
+    from backend.eva.screen import screen_controller
+    from backend.eva.tools import email_tools
+
+    state = tmp_path / "draft.json"
+    monkeypatch.setenv("EVA_DRAFT_STATE_PATH", str(state))
+    email_tools._remember_draft({"to": ["a@b.co"], "subject": "hi", "at": __import__("time").time()})
+    titles = iter(["Draft - Gmail", "Inbox - Gmail"])
+    monkeypatch.setattr(email_tools, "_gmail_title", lambda: next(titles, "Inbox - Gmail"))
+    monkeypatch.setattr(screen_controller, "real_input_enabled", lambda: True)
+    monkeypatch.setattr(screen_controller, "hotkey", lambda keys, reason: __import__("types").SimpleNamespace(success=True))
+    monkeypatch.setattr("backend.eva.desktop.focus_window_safe", lambda query: {"ok": True})
+    out = email_tools.email_send_drafted(confirmed=True, sleep=lambda seconds: None)
+    assert out["sent"] is True and not state.exists() and email_tools.pending_draft() is None
+
+
+def test_the_draft_file_path_does_not_depend_on_the_working_folder(monkeypatch):
+    from backend.eva.mcp.first_party import draft_state_path
+
+    monkeypatch.delenv("EVA_DRAFT_STATE_PATH", raising=False)
+    assert draft_state_path().is_absolute()
+
+
 @pytest.mark.parametrize("domain", sorted(DOMAIN_TOOLS))
 def test_server_builds_for_every_domain(domain):
     server = domain_server.build_server(domain)

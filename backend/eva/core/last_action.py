@@ -15,6 +15,7 @@ Everything here is in memory and small. No new database.
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
 
 _SUBJECT = r"(?:that|it|this|the (?:last |previous )?(?:action|message|send|task|whatsapp message))(?: (?:action|message|send|task))?"
@@ -30,7 +31,9 @@ _REPEAT = re.compile(
     r"|(?:run|try) (?:it|that) again|one more time|once more|do (?:it|that) one more time)$"
 )
 
-_LAST_REQUEST: str = ""
+# Per chat session: (request text, when). A request older than this is not "it" any more.
+_LAST_REQUESTS: dict[str, tuple[str, float]] = {}
+REPEAT_WINDOW_SECONDS = 15 * 60
 _LAST_RESULTS: dict[str, tuple[bool, str]] = {}
 _MAX_RESULTS = 20
 
@@ -64,25 +67,43 @@ def _is_control_message(text: str) -> bool:
     return clean.startswith(("confirm", "approve", "cancel", "deny", "reject", "override", "pending ", "yes ", "no ")) or clean in {"yes", "no", "y", "n"}
 
 
-def remember_request(message: str) -> None:
+def remember_request(message: str, session_id: Any = None) -> None:
     """Keep the last request a deterministic action route handled, so "do it again" can re-run it."""
-    global _LAST_REQUEST
     text = " ".join(str(message or "").split())
     if text and not _is_control_message(text):
-        _LAST_REQUEST = text[:1000]
+        _LAST_REQUESTS[str(session_id or "")] = (text[:1000], time.time())
 
 
-def last_request() -> str:
-    return _LAST_REQUEST
+def forget_request(session_id: Any = None) -> None:
+    """The latest turn went to the model: "again" now means that, which cannot be replayed safely."""
+    _LAST_REQUESTS.pop(str(session_id or ""), None)
+
+
+def last_request(session_id: Any = None) -> str:
+    entry = _LAST_REQUESTS.get(str(session_id or ""))
+    if entry is None or time.time() - entry[1] > REPEAT_WINDOW_SECONDS:
+        return ""
+    return entry[0]
+
+
+def repeat_target(session_id: Any = None) -> tuple[str | None, str]:
+    """(request to re-run, "") or (None, the reply that says why nothing runs)."""
+    from ..security.voice_trust import in_voice_turn
+
+    # A video, a call or someone nearby can say "again"; repeating needs a typed request.
+    if in_voice_turn():
+        return None, VOICE_REPEAT_REFUSED
+    previous = last_request(session_id)
+    return (previous, "") if previous else (None, NO_PREVIOUS_REQUEST)
 
 
 def reset() -> None:
-    global _LAST_REQUEST
-    _LAST_REQUEST = ""
+    _LAST_REQUESTS.clear()
     _LAST_RESULTS.clear()
 
 
-NO_PREVIOUS_REQUEST = "I have no earlier request to repeat. Nothing was run."
+NO_PREVIOUS_REQUEST = "I have no recent request I can repeat in this chat, so nothing was run. Say the request again in full."
+VOICE_REPEAT_REFUSED = "I do not repeat requests from voice, because anything nearby can say \"again\". Type `do it again`, or say the full request. Nothing was run."
 
 
 def last_action_status() -> str:

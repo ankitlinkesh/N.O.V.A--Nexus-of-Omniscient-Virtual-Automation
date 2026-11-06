@@ -10,7 +10,10 @@ The text read from the editor never reaches the model: replies carry only counts
 
 from __future__ import annotations
 
+import ctypes
+import re
 import time
+import unicodedata
 from typing import Any
 
 # Chromium browsers share these shortcuts, and show the active tab in the window title.
@@ -21,6 +24,40 @@ MAX_TABS = 40
 MAX_TYPE_CHARS = 20_000
 TYPE_INTERVAL_SECONDS = 0.01
 KEY_SETTLE_SECONDS = 0.2
+# Runs of keys the keyboard has, and of characters it does not.
+_KEY_RUNS = re.compile(r"[ -~]+|[^ -~]+")
+_INPUT_KEYBOARD = 1
+_KEYEVENTF_KEYUP = 0x0002
+_KEYEVENTF_UNICODE = 0x0004
+
+
+class _KeyboardInput(ctypes.Structure):
+    _fields_ = [
+        ("wVk", ctypes.c_ushort),
+        ("wScan", ctypes.c_ushort),
+        ("dwFlags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("dwExtraInfo", ctypes.c_size_t),
+    ]
+
+
+class _MouseInput(ctypes.Structure):  # only here because it sets the size of the union
+    _fields_ = [
+        ("dx", ctypes.c_long),
+        ("dy", ctypes.c_long),
+        ("mouseData", ctypes.c_ulong),
+        ("dwFlags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("dwExtraInfo", ctypes.c_size_t),
+    ]
+
+
+class _InputUnion(ctypes.Union):
+    _fields_ = [("ki", _KeyboardInput), ("mi", _MouseInput)]
+
+
+class _Input(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_ulong), ("u", _InputUnion)]
 
 
 def _sleep(seconds: float) -> None:  # seam: tests do not wait
@@ -63,6 +100,30 @@ def _press(key: str, reason: str) -> bool:
     return bool(screen_controller.press(key, reason).success)
 
 
+def _send_input(events: list[tuple[int, int]]) -> int:
+    """Hand (UTF-16 code unit, flags) key events to Windows. Returns how many it accepted."""
+    array = (_Input * len(events))()
+    for slot, (code, flags) in zip(array, events):
+        slot.type = _INPUT_KEYBOARD
+        slot.u.ki.wScan = code
+        slot.u.ki.dwFlags = flags
+    return int(ctypes.WinDLL("user32").SendInput(len(events), array, ctypes.sizeof(_Input)))
+
+
+def _send_unicode(text: str) -> bool:
+    """Press characters the keyboard does not have. These are still key presses, not a paste."""
+    for ch in text:
+        encoded = ch.encode("utf-16-le")
+        events: list[tuple[int, int]] = []
+        for start in range(0, len(encoded), 2):
+            code = int.from_bytes(encoded[start : start + 2], "little")
+            events += [(code, _KEYEVENTF_UNICODE), (code, _KEYEVENTF_UNICODE | _KEYEVENTF_KEYUP)]
+        if _send_input(events) != len(events):
+            return False
+        _sleep(TYPE_INTERVAL_SECONDS)
+    return True
+
+
 def _type(text: str) -> bool:
     """Type one line. Moving the mouse into a screen corner aborts it (pyautogui's failsafe)."""
     from ..screen import screen_controller
@@ -71,7 +132,13 @@ def _type(text: str) -> bool:
     if gui is None:
         return False
     try:
-        gui.write(text, interval=TYPE_INTERVAL_SECONDS)
+        for run in _KEY_RUNS.findall(text):
+            if run.isascii():
+                gui.write(run, interval=TYPE_INTERVAL_SECONDS)
+            else:
+                gui.failSafeCheck()
+                if not _send_unicode(run):
+                    return False
     except Exception:  # noqa: BLE001 - the failsafe, or a dead input queue: stop and report it
         return False
     return True
@@ -216,16 +283,17 @@ def type_window_text_into_browser_tab(window: str, tab: str) -> dict[str, Any]:
     text, error = _read_editor_text(source)
     if text is None:
         return _fail(error, f"I could not read the text in \"{source.title}\" (is it empty?). Nothing was typed.")
-    lines = [line.expandtabs(4) for line in text.splitlines()]
+    # A byte order mark is not part of the code, and would stop it compiling.
+    lines = [line.expandtabs(4) for line in text.lstrip(chr(0xFEFF)).splitlines()]
     while lines and not lines[-1].strip():
         lines.pop()
     chars = sum(len(line) + 1 for line in lines)
     if chars > MAX_TYPE_CHARS:
         return _fail("text_too_long", f"\"{source.title}\" has {chars} characters, more than the {MAX_TYPE_CHARS} I will type. Nothing was typed.")
-    # The keyboard route silently drops anything else, which would change the code without a word.
-    unusual = sum(1 for line in lines for ch in line if not 32 <= ord(ch) < 127)
-    if unusual:
-        return _fail("unsupported_characters", f"\"{source.title}\" has {unusual} non-keyboard character(s), such as accents or symbols, that I cannot type reliably. Replace them and try again. Nothing was typed.")
+    controls = sum(1 for line in lines for ch in line if unicodedata.category(ch) == "Cc")
+    if controls:
+        return _fail("unsupported_characters", f"\"{source.title}\" has {controls} control character(s), which cannot be typed. Remove them and try again. Nothing was typed.")
+    special = sum(1 for line in lines for ch in line if ord(ch) > 126)
 
     switched = switch_browser_tab(tab)
     if not switched.get("ok"):
@@ -257,4 +325,8 @@ def type_window_text_into_browser_tab(window: str, tab: str) -> dict[str, Any]:
     read_back, _ = _copy_selection("read the box back to check the typing")
     _hotkey(["ctrl", "end"], "clear the selection so a stray key cannot replace the text")
     typed = chr(10).join(lines)
-    return _report_typed(read_back, typed, f"Typed {len(lines)} lines from \"{source.title}\" into \"{switched.get('title')}\".", chars)
+    summary = f"Typed {len(lines)} lines from \"{source.title}\" into \"{switched.get('title')}\"."
+    if special:
+        # Often a curly quote or a non-breaking space from a web page, which looks right but will not compile.
+        summary += f" {special} of the characters are not on the keyboard, and I typed them as they are."
+    return _report_typed(read_back, typed, summary, chars)
