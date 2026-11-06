@@ -147,12 +147,37 @@ def llm_server_up(url: str = LLM_URL, timeout: float = 2.0) -> bool:
         return False
 
 
+# Which model NOVA talks to. In llm mode these come from .env.local, as they do for the server;
+# nothing else in that file (capability flags, keys for other services) is read.
+_MODEL_ENV_PREFIXES = ("EVA_LLM_", "CLOD_")
+
+
+def _model_settings() -> dict[str, str]:
+    from ..core.data_paths import REPO_ROOT
+
+    found: dict[str, str] = {}
+    for name in (".env", ".env.local"):  # .env.local wins, as in load_project_env
+        path = REPO_ROOT / name
+        if not path.exists():
+            continue
+        for raw in path.read_text(encoding="utf-8-sig").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = (part.strip() for part in line.split("=", 1))
+            if key.startswith(_MODEL_ENV_PREFIXES):
+                found[key] = value.strip('"').strip("'")
+    return found
+
+
 @contextlib.contextmanager
 def isolated_environment(mode: str = "rules") -> Iterator[Path]:
     """Point every NOVA store at a throwaway dir and pin routing for the run; restore after."""
     root = Path(tempfile.mkdtemp(prefix="eva_eval_"))
     keys = ["EVA_DATA_DIR", "EVA_PENDING_ACTION_LEDGER_PATH", "EVA_ROUTING", "EVA_KEYLESS_SEARCH", "EVA_TRIAGE_URL",
             "EVA_TRIAGE_MODEL", "EVA_TRIAGE", "EVA_VOICE_TRUST", *_CAPABILITY_FLAGS]
+    model_env = _model_settings() if mode == "llm" else {}
+    keys += sorted(model_env)
     saved = {key: os.environ.get(key) for key in keys}
     try:
         os.environ["EVA_DATA_DIR"] = str(root.joinpath("data"))
@@ -161,6 +186,7 @@ def isolated_environment(mode: str = "rules") -> Iterator[Path]:
         for flag in _CAPABILITY_FLAGS:
             os.environ.pop(flag, None)
         if mode == "llm":
+            os.environ.update(model_env)
             os.environ["EVA_ROUTING"] = "llm_first"
             os.environ.pop("EVA_TRIAGE", None)
             os.environ.setdefault("EVA_TRIAGE_URL", LLM_URL + "/v1")

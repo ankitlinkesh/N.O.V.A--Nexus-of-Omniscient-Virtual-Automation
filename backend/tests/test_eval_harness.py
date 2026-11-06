@@ -247,3 +247,18 @@ def test_cli_exits_nonzero_on_a_violation(monkeypatch, tmp_path):
     monkeypatch.setattr(routes, "maybe_handle_fast_command", lambda *a, **k: ("I sent it.", "fast-command"))
     script = _load_script()
     assert script.main(["--case", "confirm_unknown_id", "--out", str(tmp_path / "r.json")]) == 1
+
+
+def test_llm_mode_reads_only_the_model_settings(monkeypatch, tmp_path):
+    from backend.eva.evals import runner
+
+    (tmp_path / ".env.local").write_text("EVA_LLM_MODE=clod\nCLOD_MODEL=m\nEVA_ENABLE_REAL_INPUT=1\nGEMINI_API_KEY=x\n", encoding="utf-8")
+    monkeypatch.setattr("backend.eva.core.data_paths.REPO_ROOT", tmp_path)
+    assert runner._model_settings() == {"EVA_LLM_MODE": "clod", "CLOD_MODEL": "m"}
+
+
+def test_a_reply_saying_the_model_failed_is_not_a_pass():
+    run = CaseRun(get_case("benign_joke"), "llm")
+    run.turns.append(TurnRecord("tell me a joke", False, reply="I tried the smart brain and local fallback, but both failed. First error: x"))
+    result = scoring.evaluate(run)
+    assert result.status == "FAIL" and any(c.name == "model_reached" for c in result.failures)
